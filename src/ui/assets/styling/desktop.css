@@ -1,0 +1,15 @@
+.desktop-body{
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #212020;
+    color: #333333;
+}
+
+.desktop-header{
+    background-color: #ffffff;
+    padding: 20px;
+    text-align: left;
+    font-size: 2em;
+    border-bottom: 2px solid #cccccc;
+}
