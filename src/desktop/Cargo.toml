@@ -6,9 +6,8 @@ edition = "2021"
 [dependencies]
 dioxus = { workspace = true, features = [] }
 ui = { workspace = true, features = ["desktop-web"] }
-image = "0.25.8"
+image = {workspace = true }
 
 [features]
 default = ["desktop"]
 desktop = ["dioxus/desktop"]
-

@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 dioxus = { workspace = true, features = [] }
-ui = { workspace = true, features = ["desktop-web"] }
+ui = { workspace = true, features = ["desktop-web", "mobile"] }
 web-sys = {version = "0.3.82", features = ["Navigator", "Window"]}
 
 [features]

@@ -5,10 +5,12 @@ members = [
     "src/web",
     "src/desktop",
     "src/mobile",
+    "src/p2p",
 ]
 
 [workspace.dependencies]
 dioxus = { version = "0.7.1" }
+image = "0.25.8"
 
 # workspace
 ui = { path = "src/ui" }
