@@ -1,22 +1,24 @@
-use futures::StreamExt;
-use libp2p::gossipsub::ValidationMode::Strict;
-use libp2p::gossipsub::{IdentTopic, MessageId};
-use libp2p::swarm::NetworkBehaviour;
-use libp2p::{gossipsub, mdns, noise, tcp, yamux, PeerId, Swarm, SwarmBuilder};
+use futures_lite::StreamExt;
+use iroh::protocol::Router;
+use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
+use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
+use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
 use serde::{Deserialize, Serialize};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::time::sleep;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
-    pub sender: String,
+    pub sender: EndpointId,
     pub content: String,
     pub timestamp: u64,
 }
 
 impl ChatMessage {
-    pub fn new(sender: String, content: String, timestamp: u64) -> Self {
+    pub fn new(sender: EndpointId, content: String, timestamp: u64) -> Self {
         ChatMessage {
             sender,
             content,
@@ -25,210 +27,182 @@ impl ChatMessage {
     }
 }
 
-#[derive(Debug)]
-pub enum ChatEvent {
-    MessageReceived(ChatMessage),
-    PeerDiscovered(PeerId),
-    PeerExpired(PeerId),
+impl Display for ChatMessage {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "[{}] {}: {}\n",
+            self.timestamp, self.sender, self.content
+        )
+    }
 }
 
-#[derive(NetworkBehaviour)]
-pub struct ChatBehaviour {
-    gossipsub: gossipsub::Behaviour,
-    mdns: mdns::tokio::Behaviour,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Ticket {
+    pub topic: TopicId,
+    pub endpoints: Vec<EndpointAddr>,
+}
+
+impl Ticket {
+    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
+        serde_json::from_slice(bytes).map_err(Into::into)
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
+    }
+}
+
+impl Display for Ticket {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let mut text = data_encoding::BASE32_NOPAD.encode(&self.to_bytes()[..]);
+        text.make_ascii_lowercase();
+        write!(f, "{}", text)
+    }
+}
+
+impl FromStr for Ticket {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = data_encoding::BASE32_NOPAD.decode(s.to_ascii_uppercase().as_bytes())?;
+        Self::from_bytes(&bytes)
+    }
 }
 
 pub struct ChatClient {
-    swarm: Swarm<ChatBehaviour>,
-    peer_id: PeerId,
-    topic: IdentTopic,
-    event_sender: UnboundedSender<ChatEvent>,
-    event_receiver: Option<UnboundedReceiver<ChatEvent>>,
-    message_receiver: Option<UnboundedReceiver<String>>,
-    message_sender: UnboundedSender<String>,
+    id: EndpointId,
+    endpoint: Endpoint,
+    gossip: Gossip,
+    _router: Router,
+    gossip_sender: Option<GossipSender>,
+    gossip_receiver: Option<GossipReceiver>,
 }
 
 impl ChatClient {
-    pub async fn new(topic_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let (event_sender, event_receiver) = tokio::sync::mpsc::unbounded_channel();
-        let (message_sender, message_receiver) = tokio::sync::mpsc::unbounded_channel();
+    pub async fn new() -> anyhow::Result<Self> {
+        let secret = SecretKey::generate(&mut rand::rng());
 
-        let mut swarm = SwarmBuilder::with_new_identity()
-            .with_tokio()
-            .with_tcp(
-                tcp::Config::default(),
-                noise::Config::new,
-                yamux::Config::default,
-            )?
-            .with_behaviour(|key| {
-                let peer_id = key.public().to_peer_id();
+        let endpoint = Endpoint::builder().secret_key(secret).bind().await?;
 
-                let message_id_fn = |message: &gossipsub::Message| {
-                    let mut hasher = DefaultHasher::new();
-                    message.data.hash(&mut hasher);
-                    MessageId::from(hasher.finish().to_string())
-                };
+        let gossip = Gossip::builder().spawn(endpoint.clone());
 
-                let gossipsub_config = gossipsub::ConfigBuilder::default()
-                    .heartbeat_interval(Duration::from_secs(1))
-                    .validation_mode(Strict)
-                    .message_id_fn(message_id_fn)
-                    .build()
-                    .map_err(|e| format!("Failed to create gossipsub config: {}", e))?;
-
-                let mut gossipsub = gossipsub::Behaviour::new(
-                    gossipsub::MessageAuthenticity::Signed(key.clone()),
-                    gossipsub_config,
-                )
-                .expect("Failed to create gossipsub behaviour");
-
-                let topic = IdentTopic::new(topic_name);
-
-                gossipsub
-                    .subscribe(&topic)
-                    .map_err(|e| format!("Failed to subscribe to topic: {}", e))?;
-
-                let mdns = mdns::tokio::Behaviour::new(mdns::Config::default(), peer_id)
-                    .expect("Failed to create mDNS behaviour");
-
-                Ok(ChatBehaviour { gossipsub, mdns })
-            })?
-            .build();
-
-        swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
-        let local_peer_id = *swarm.local_peer_id();
+        let router = Router::builder(endpoint.clone())
+            .accept(ALPN, gossip.clone())
+            .spawn();
 
         Ok(ChatClient {
-            swarm,
-            peer_id: local_peer_id,
-            topic: IdentTopic::new(topic_name),
-            event_sender,
-            event_receiver: Some(event_receiver),
-            message_receiver: Some(message_receiver),
-            message_sender,
+            id: endpoint.id(),
+            endpoint,
+            gossip,
+            _router: router,
+            gossip_sender: None,
+            gossip_receiver: None,
         })
     }
-    pub fn event_sender(&self) -> UnboundedSender<ChatEvent> {
-        self.event_sender.clone()
-    }
-    pub fn event_receiver(&mut self) -> UnboundedReceiver<ChatEvent> {
-        self.event_receiver.take().unwrap()
-    }
-    pub fn message_receiver(&mut self) -> UnboundedReceiver<String> {
-        self.message_receiver.take().unwrap()
-    }
-    pub fn message_sender(&self) -> UnboundedSender<String> {
-        self.message_sender.clone()
-    }
 
-    pub fn peer_id(&self) -> PeerId {
-        self.peer_id
-    }
-    pub fn listen_on(&mut self, addr: libp2p::Multiaddr) -> Result<(), Box<dyn std::error::Error>> {
-        self.swarm.listen_on(addr)?;
-        Ok(())
-    }
-    fn send_message(&mut self, content: String) -> Result<(), Box<dyn std::error::Error>> {
-        let chat_message = ChatMessage::new(
-            self.peer_id.to_string(),
-            content,
-            chrono::Utc::now().timestamp_millis() as u64,
-        );
-
-        let message_data = serde_json::to_vec(&chat_message)?;
-
-        self.swarm
-            .behaviour_mut()
-            .gossipsub
-            .publish(self.topic.clone(), message_data)?;
-        Ok(())
-    }
-
-    pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut message_receiver = self.message_receiver();
-        loop {
-            tokio::select! {
-                Some(content) = message_receiver.recv() => {
-                    if let Err(e) = self.send_message(content) {
-                        eprintln!("Error sending message: {}", e);
-                    }
-                }
-                event = self.swarm.select_next_some() => {
-                    match event {
-                        libp2p::swarm::SwarmEvent::Behaviour(ChatBehaviourEvent::Gossipsub(gossipsub::Event::Message { message, .. })) => {
-                            if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&message.data) {
-                                self.event_sender.send(ChatEvent::MessageReceived(chat_message))?;
-                            }
-                        }
-                        libp2p::swarm::SwarmEvent::Behaviour(ChatBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
-                            for (peer_id, _) in list {
-                                self.swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                                self.event_sender.send(ChatEvent::PeerDiscovered(peer_id))?;
-                            }
-                        }
-                        libp2p::swarm::SwarmEvent::Behaviour(ChatBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
-                            for (peer_id, _) in list {
-                                self.swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
-                                self.event_sender.send(ChatEvent::PeerExpired(peer_id))?;
-                            }
-                        }
-                        _ => {}
-                    }
+    pub async fn listen(mut gossip_receiver: GossipReceiver) -> anyhow::Result<()> {
+        while let Some(event) = gossip_receiver.try_next().await? {
+            if let Event::Received(msg) = event {
+                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                    print!("{chat_message}");
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn subscribe(
+        &mut self,
+        topic_id: TopicId,
+        bootstrap: Vec<EndpointAddr>,
+    ) -> anyhow::Result<()> {
+        sleep(Duration::from_millis(100)).await;
+        let endpoint_ids: Vec<EndpointId> = bootstrap.iter().map(|addr| addr.id).collect();
+
+        println!("Subscribing to topic: {}", topic_id);
+        println!("Bootstrap peers: {:?}", endpoint_ids);
+
+        let (sender, receiver) = self
+            .gossip
+            .subscribe_and_join(topic_id, endpoint_ids)
+            .await?
+            .split();
+
+        print!("Connected to topic: {}\n", topic_id);
+
+        self.gossip_sender = Some(sender);
+        self.gossip_receiver = Some(receiver);
+
+        Ok(())
+    }
+
+    pub async fn send_message(&mut self, content: String, timestamp: u64) -> anyhow::Result<()> {
+        if let Some(sender) = &mut self.gossip_sender {
+            let message = ChatMessage::new(self.id.clone(), content, timestamp);
+            let serialized = serde_json::to_vec(&message)?;
+            sender.broadcast(serialized.into()).await?;
+        }
+        Ok(())
+    }
+
+    pub fn peer_id(&self) -> EndpointId {
+        self.id.clone()
+    }
+
+    pub fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
+    }
+
+    pub async fn endpoint_addr(&self) -> EndpointAddr {
+        self.endpoint.addr()
+    }
+
+    pub async fn create_topic(&mut self) -> anyhow::Result<Ticket> {
+        let topic_id = TopicId::from_bytes(rand::random());
+
+        self.subscribe(topic_id, vec![]).await?;
+
+        let ticket = Ticket {
+            topic: topic_id,
+            endpoints: vec![self.endpoint.addr()],
+        };
+
+        Ok(ticket)
+    }
+
+    pub async fn join_topic(&mut self, ticket: Ticket) -> anyhow::Result<TopicId> {
+        let topic_id = ticket.topic;
+        let endpoints = ticket.endpoints;
+
+        self.subscribe(topic_id, endpoints).await?;
+
+        Ok(topic_id)
+    }
+
+    pub async fn join_topic_from_string(&mut self, ticket_str: &str) -> anyhow::Result<TopicId> {
+        let ticket = Ticket::from_str(ticket_str)?;
+        self.join_topic(ticket).await
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Mutex};
-    use tokio::time::sleep;
-
-    struct TestClients {
-        client1: (ChatClient, Arc<Mutex<Vec<ChatEvent>>>),
-        client2: (ChatClient, Arc<Mutex<Vec<ChatEvent>>>),
-    }
-
-    async fn client_with_events() -> (ChatClient, Arc<Mutex<Vec<ChatEvent>>>) {
-        let mut client = get_test_client().await;
-
-        let events = Arc::new(Mutex::new(Vec::<ChatEvent>::new()));
-        let events_clone = events.clone();
-
-        let mut client_event_receiver = client.event_receiver();
-
-        tokio::spawn(async move {
-            while let Some(event) = client_event_receiver.recv().await {
-                events_clone.lock().unwrap().push(event)
-            }
-        });
-
-        (client, events)
-    }
-
-    async fn connected_clients() -> TestClients {
-        let (client1, events1) = client_with_events().await;
-        let (client2, events2) = client_with_events().await;
-
-        TestClients {
-            client1: (client1, events1),
-            client2: (client2, events2),
-        }
-    }
+    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_chat_message_serialization() {
-        let original_message = ChatMessage::new(
-            "peer1".to_string(),
-            "Hello, world!".to_string(),
-            1625247600000,
-        );
+        let endpoint = Endpoint::builder()
+            .secret_key(SecretKey::generate(&mut rand::rng()))
+            .bind()
+            .await
+            .expect("Failed to create endpoint");
 
-        let serialized = serde_json::to_string(&original_message).unwrap();
-        let deserialized: ChatMessage = serde_json::from_str(&serialized).unwrap();
+        let original_message =
+            ChatMessage::new(endpoint.id(), "Hello, world!".to_string(), 1625247600000);
+
+        let serialized = serde_json::to_vec(&original_message).expect("Failed to serialize chat message");
+        let deserialized: ChatMessage = serde_json::from_slice(&serialized).expect("Failed to deserialize chat message");
 
         assert_eq!(original_message.sender, deserialized.sender);
         assert_eq!(original_message.content, deserialized.content);
@@ -237,81 +211,163 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_client_creation() {
-        let client = get_test_client().await;
-        assert_eq!(client.topic.hash().as_str(), "test_topic");
-        assert_eq!(client.peer_id(), *client.swarm.local_peer_id());
+        let client = ChatClient::new().await.expect("Failed to create chat client");
+        assert!(client.gossip_sender.is_none());
     }
 
     #[tokio::test]
-    async fn test_peer_discovery() {
-        let connected_clients = connected_clients().await;
-        let (mut client1, events1) = connected_clients.client1;
-        let (mut client2, events2) = connected_clients.client2;
+    async fn test_subscribe_to_topic() {
+        let mut client = ChatClient::new().await.expect("Failed to create chat client");
+        client.create_topic().await.expect("Failed to create topic");
 
-        let handle1 = tokio::spawn(async move {
-            client1.run().await.expect("Failed to run client1");
-        });
-        let handle2 = tokio::spawn(async move {
-            client2.run().await.expect("Failed to run client2");
-        });
-
-        sleep(Duration::from_millis(300)).await;
-
-        let events1_final = events1.lock().unwrap();
-        let events2_final = events2.lock().unwrap();
-
-        let peer_discovered1 = events1_final
-            .iter()
-            .any(|event| matches!(event, ChatEvent::PeerDiscovered(_)));
-        let peer_discovered2 = events2_final
-            .iter()
-            .any(|event| matches!(event, ChatEvent::PeerDiscovered(_)));
-
-        assert!(peer_discovered1);
-        assert!(peer_discovered2);
-
-        drop(handle1);
-        drop(handle2);
+        assert!(client.gossip_sender.is_some());
     }
 
     #[tokio::test]
-    async fn test_message_sending() {
-        let connected_clients = connected_clients().await;
-        let (mut client1, _events1) = connected_clients.client1;
-        let (mut client2, events2) = connected_clients.client2;
-        let message_sender1 = client1.message_sender();
+    async fn test_send_and_receive_message() {
+        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
+        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
 
-        let handle1 = tokio::spawn(async move {
-            client1.run().await.expect("Failed to run client1");
-        });
+        let ticket = client1.create_topic().await.expect("Failed to create topic");
 
-        let handle2 = tokio::spawn(async move {
-            client2.run().await.expect("Failed to run client2");
-        });
+        client2.join_topic(ticket).await.expect("Failed to join topic");
 
-        sleep(Duration::from_millis(300)).await;
+        let mut receiver = client2.gossip_receiver.take().expect("Failed to get gossip receiver");
 
-        message_sender1.send("Hello from client1".to_string()).unwrap();
+        sleep(Duration::from_millis(500)).await;
 
-        sleep(Duration::from_millis(300)).await;
+        let test_message = "Hello from client1".to_string();
+        let timestamp = 1625247600000;
+        let expected_sender = client1.peer_id();
 
-        let events2_final = events2.lock().unwrap();
+        client1
+            .send_message(test_message.clone(), timestamp)
+            .await
+            .expect("Failed to send message");
 
-        let message_received = events2_final.iter().any(|event| {
-            if let ChatEvent::MessageReceived(msg) = event {
-                msg.content == "Hello from client1"
-            } else {
-                false
+        let mut received = false;
+        tokio::select! {
+        result = async {
+            while let Some(event) = receiver.try_next().await.expect("Failed to receive event") {
+                if let Event::Received(msg) = event {
+                    if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                        assert_eq!(chat_message.content, test_message);
+                        assert_eq!(chat_message.sender, expected_sender);
+                        assert_eq!(chat_message.timestamp, timestamp);
+                        return true;
+                    }
+                }
             }
-        });
-
-        assert!(message_received);
-
-        drop(handle1);
-        drop(handle2);
+            false
+        } => {
+            received = result;
+        }
+        _ = sleep(Duration::from_secs(5)) => {
+            panic!("Test timed out waiting for message");
+        }
     }
 
-    async fn get_test_client() -> ChatClient {
-        ChatClient::new("test_topic").await.unwrap()
+        assert!(received, "Message was not received");
     }
+
+    #[tokio::test]
+    async fn test_peer_id() {
+        let client = ChatClient::new().await.expect("Failed to create chat client");
+        let peer_id = client.peer_id();
+        assert_eq!(peer_id, client.id);
+    }
+    /*
+    #[tokio::test]
+    async fn test_ticket_creation_and_join() {
+        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
+        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
+
+        let ticket = client1.create_topic().await.expect("Failed to create topic");
+
+        assert_eq!(ticket.endpoints.len(), 1);
+        assert_eq!(ticket.endpoints[0].id, client1.peer_id());
+
+        let ticket_string = ticket.to_string();
+        println!("Ticket: {}", ticket_string);
+
+        client2.join_topic(ticket).await.expect("Failed to join topic");
+
+        let mut messages = client2.take_message_receiver().expect("Failed to get message receiver");
+
+        sleep(Duration::from_millis(500)).await;
+
+        let test_message = "Hello via ticket!".to_string();
+        let timestamp = 1625247600000;
+        let expected_sender = client1.peer_id();
+
+        client1
+            .send_message(test_message.clone(), timestamp)
+            .await
+            .expect("Failed to send message");
+
+        sleep(Duration::from_millis(500)).await;
+
+        let mut received_messages = Vec::new();
+        loop {
+            tokio::select! {
+                Some(msg) = messages.recv() => {
+                    received_messages.push(msg);
+                }
+                _ = sleep(Duration::from_millis(100)) => {
+                    break;
+                }
+            }
+        }
+
+        // Assert after collecting
+        assert!(!received_messages.is_empty(), "No messages received");
+        let chat_message = &received_messages[0];
+        assert_eq!(chat_message.content, test_message);
+        assert_eq!(chat_message.sender, expected_sender);
+        assert_eq!(chat_message.timestamp, timestamp);
+    }
+
+    #[tokio::test]
+    async fn test_ticket_string_parsing() {
+        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
+        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
+
+        let ticket = client1.create_topic().await.expect("Failed to create topic");
+        let ticket_string = ticket.to_string();
+
+        client2
+            .join_topic_from_string(&ticket_string)
+            .await
+            .expect("Failed to join topic from string");
+
+        let mut messages = client2.take_message_receiver().expect("Failed to get message receiver");
+
+        sleep(Duration::from_millis(500)).await;
+
+        let test_message = "Hello from string ticket!".to_string();
+        let expected_sender = client1.peer_id();
+
+        client1
+            .send_message(test_message.clone(), 1234567890)
+            .await
+            .expect("Failed to send message");
+
+        sleep(Duration::from_millis(500)).await;
+
+        let mut received_messages = Vec::new();
+        loop {
+            tokio::select! {
+                Some(msg) = messages.recv() => {
+                    received_messages.push(msg);
+                }
+                _ = sleep(Duration::from_millis(100)) => {
+                    break;
+                }
+            }
+        }
+        assert!(!received_messages.is_empty(), "No messages received");
+        let chat_message = &received_messages[0];
+        assert_eq!(chat_message.content, test_message);
+        assert_eq!(chat_message.sender, expected_sender);
+    }*/
 }
