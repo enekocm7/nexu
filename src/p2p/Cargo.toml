@@ -1,11 +1,11 @@
 [package]
 name = "p2p"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 futures = "0.3.31"
-libp2p = { version = "0.56.0", features = ["tokio", "noise", "gossipsub", "yamux", "mdns", "macros", "tcp", "quic"] }
+libp2p = { version = "0.56.0", features = ["tokio", "noise", "gossipsub", "yamux", "mdns", "macros", "tcp"] }
 tokio = { version = "1.48.0", features = ["full", "test-util"] }
 chrono = "0.4.42"
 serde = "1.0.228"

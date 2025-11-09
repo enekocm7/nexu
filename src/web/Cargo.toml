@@ -7,8 +7,8 @@ edition = "2021"
 dioxus = { workspace = true, features = [] }
 ui = { workspace = true, features = ["desktop-web", "mobile"] }
 web-sys = {version = "0.3.82", features = ["Navigator", "Window"]}
+p2p_wasm = { workspace = true }
 
 [features]
 default = ["web"]
 web = ["dioxus/web"]
-

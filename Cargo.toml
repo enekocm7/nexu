@@ -6,6 +6,7 @@ members = [
     "src/desktop",
     "src/mobile",
     "src/p2p",
+    "src/p2p_wasm",
 ]
 
 [workspace.dependencies]
@@ -14,4 +15,5 @@ image = "0.25.8"
 
 # workspace
 ui = { path = "src/ui" }
-
+p2p = { path = "src/p2p" }
+p2p_wasm = { path = "src/p2p_wasm" }

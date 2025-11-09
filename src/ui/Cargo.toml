@@ -9,4 +9,3 @@ mobile = []
 
 [dependencies]
 dioxus = { workspace = true }
-
