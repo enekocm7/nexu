@@ -1,14 +1,190 @@
-.desktop-body{
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+html, body {
+    margin: 0;
+    height: 100%;
+}
+
+.desktop-body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
     background-color: #212020;
     color: #333333;
+    display: flex;
+    flex-direction: row;
+    height: 100vh;
 }
 
-.desktop-header{
-    background-color: #ffffff;
-    padding: 20px;
-    text-align: left;
-    font-size: 2em;
-    border-bottom: 2px solid #cccccc;
+.desktop-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: #444444;
+    width: 20%;
+    min-width: 250px;
+}
+
+.desktop-column-header {
+    background-color: #333333;
+    padding-bottom: 30px;
+}
+
+.desktop-column-top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.desktop-column-title {
+    color: ghostwhite;
+    padding-left: 10px;
+}
+
+.desktop-column-new-message-button {
+    width: 50px;
+    height: 50px;
+    font-size: 28px;
+    background-color: #333333;
+    color: whitesmoke;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.desktop-column-new-message-button:hover {
+    background-color: #555555;
+}
+
+.desktop-column-search {
+    border: none;
+    border-radius: 5px;
+    width: 85%;
+    margin-left: 5%;
+    padding: 5px;
+}
+
+.desktop-column-contacts {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.desktop-column-contacts ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.desktop-contact-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 10px;
+    gap: 12px;
+    background-color: #444444;
+    border-bottom: 1px solid #555555;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.desktop-contact-item:hover {
+    background-color: #505050;
+}
+
+.desktop-contact-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background-color: #666666;
+}
+
+.desktop-contact-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.desktop-contact-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.desktop-contact-last-message {
+    margin: 0;
+    font-size: 14px;
+    color: #aaaaaa;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Last Connection Time */
+.desktop-contact-last-connection {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 400;
+    color: #888888;
+    flex-shrink: 0;
+    align-self: flex-start;
+}
+
+.desktop-column-contacts::-webkit-scrollbar {
+    width: 8px;
+}
+
+.desktop-column-contacts::-webkit-scrollbar-track {
+    background: #333333;
+}
+
+.desktop-column-contacts::-webkit-scrollbar-thumb {
+    background: #666666;
+    border-radius: 4px;
+}
+
+.desktop-column-contacts::-webkit-scrollbar-thumb:hover {
+    background: #777777;
+}
+
+@media (max-width: 768px) {
+    .desktop-column {
+        width: 30%;
+        min-width: 200px;
+    }
+
+    
+    .desktop-column-title {
+        font-size: 1.2rem;
+    }
+    
+    .desktop-contact-avatar {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .desktop-contact-name {
+        font-size: 14px;
+    }
+    
+    .desktop-contact-last-message {
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .desktop-column {
+        width: 100%;
+        min-width: unset;
+    }
+    
+    .desktop-column-search {
+        width: 90%;
+        margin-left: 5%;
+    }
 }
