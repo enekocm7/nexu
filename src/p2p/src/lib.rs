@@ -120,16 +120,11 @@ impl ChatClient {
         sleep(Duration::from_millis(100)).await;
         let endpoint_ids: Vec<EndpointId> = bootstrap.iter().map(|addr| addr.id).collect();
 
-        println!("Subscribing to topic: {}", topic_id);
-        println!("Bootstrap peers: {:?}", endpoint_ids);
-
         let (sender, receiver) = self
             .gossip
-            .subscribe_and_join(topic_id, endpoint_ids)
+            .subscribe(topic_id, endpoint_ids)
             .await?
             .split();
-
-        print!("Connected to topic: {}\n", topic_id);
 
         self.gossip_sender = Some(sender);
         self.gossip_receiver = Some(receiver);
