@@ -30,8 +30,12 @@ fn App() -> Element {
             Title { "Nexu" }
         }
         match *device_type.read() {
-            DeviceType::Mobile => rsx! { Mobile {} },
-            DeviceType::Desktop => rsx! { Desktop {} },
+            DeviceType::Mobile => rsx! {
+                Mobile {}
+            },
+            DeviceType::Desktop => rsx! {
+                Desktop {}
+            },
         }
     }
 }
