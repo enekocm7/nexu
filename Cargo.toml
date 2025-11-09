@@ -6,7 +6,7 @@ members = [
     "src/desktop",
     "src/mobile",
     "src/p2p",
-    "src/p2p_wasm", "src/prueba",
+    "src/p2p_wasm",
 ]
 
 [workspace.dependencies]
