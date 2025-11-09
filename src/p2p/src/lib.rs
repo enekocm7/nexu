@@ -120,11 +120,7 @@ impl ChatClient {
         sleep(Duration::from_millis(100)).await;
         let endpoint_ids: Vec<EndpointId> = bootstrap.iter().map(|addr| addr.id).collect();
 
-        let (sender, receiver) = self
-            .gossip
-            .subscribe(topic_id, endpoint_ids)
-            .await?
-            .split();
+        let (sender, receiver) = self.gossip.subscribe(topic_id, endpoint_ids).await?.split();
 
         self.gossip_sender = Some(sender);
         self.gossip_receiver = Some(receiver);
@@ -196,8 +192,10 @@ mod tests {
         let original_message =
             ChatMessage::new(endpoint.id(), "Hello, world!".to_string(), 1625247600000);
 
-        let serialized = serde_json::to_vec(&original_message).expect("Failed to serialize chat message");
-        let deserialized: ChatMessage = serde_json::from_slice(&serialized).expect("Failed to deserialize chat message");
+        let serialized =
+            serde_json::to_vec(&original_message).expect("Failed to serialize chat message");
+        let deserialized: ChatMessage =
+            serde_json::from_slice(&serialized).expect("Failed to deserialize chat message");
 
         assert_eq!(original_message.sender, deserialized.sender);
         assert_eq!(original_message.content, deserialized.content);
@@ -206,13 +204,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_chat_client_creation() {
-        let client = ChatClient::new().await.expect("Failed to create chat client");
+        let client = ChatClient::new()
+            .await
+            .expect("Failed to create chat client");
         assert!(client.gossip_sender.is_none());
     }
 
     #[tokio::test]
     async fn test_subscribe_to_topic() {
-        let mut client = ChatClient::new().await.expect("Failed to create chat client");
+        let mut client = ChatClient::new()
+            .await
+            .expect("Failed to create chat client");
         client.create_topic().await.expect("Failed to create topic");
 
         assert!(client.gossip_sender.is_some());
@@ -223,11 +225,20 @@ mod tests {
         let mut client1 = ChatClient::new().await.expect("Failed to create client1");
         let mut client2 = ChatClient::new().await.expect("Failed to create client2");
 
-        let ticket = client1.create_topic().await.expect("Failed to create topic");
+        let ticket = client1
+            .create_topic()
+            .await
+            .expect("Failed to create topic");
 
-        client2.join_topic(ticket).await.expect("Failed to join topic");
+        client2
+            .join_topic(ticket)
+            .await
+            .expect("Failed to join topic");
 
-        let mut receiver = client2.gossip_receiver.take().expect("Failed to get gossip receiver");
+        let mut receiver = client2
+            .gossip_receiver
+            .take()
+            .expect("Failed to get gossip receiver");
 
         sleep(Duration::from_millis(500)).await;
 
@@ -240,129 +251,37 @@ mod tests {
             .await
             .expect("Failed to send message");
 
-        let mut received = false;
+        let received: bool;
         tokio::select! {
-        result = async {
-            while let Some(event) = receiver.try_next().await.expect("Failed to receive event") {
-                if let Event::Received(msg) = event {
-                    if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
-                        assert_eq!(chat_message.content, test_message);
-                        assert_eq!(chat_message.sender, expected_sender);
-                        assert_eq!(chat_message.timestamp, timestamp);
-                        return true;
+            result = async {
+                while let Some(event) = receiver.try_next().await.expect("Failed to receive event") {
+                    if let Event::Received(msg) = event {
+                        if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            assert_eq!(chat_message.content, test_message);
+                            assert_eq!(chat_message.sender, expected_sender);
+                            assert_eq!(chat_message.timestamp, timestamp);
+                            return true;
+                        }
                     }
                 }
+                false
+            } => {
+                received = result;
             }
-            false
-        } => {
-            received = result;
+            _ = sleep(Duration::from_secs(5)) => {
+                panic!("Test timed out waiting for message");
+            }
         }
-        _ = sleep(Duration::from_secs(5)) => {
-            panic!("Test timed out waiting for message");
-        }
-    }
 
         assert!(received, "Message was not received");
     }
 
     #[tokio::test]
     async fn test_peer_id() {
-        let client = ChatClient::new().await.expect("Failed to create chat client");
+        let client = ChatClient::new()
+            .await
+            .expect("Failed to create chat client");
         let peer_id = client.peer_id();
         assert_eq!(peer_id, client.id);
     }
-    /*
-    #[tokio::test]
-    async fn test_ticket_creation_and_join() {
-        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
-        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
-
-        let ticket = client1.create_topic().await.expect("Failed to create topic");
-
-        assert_eq!(ticket.endpoints.len(), 1);
-        assert_eq!(ticket.endpoints[0].id, client1.peer_id());
-
-        let ticket_string = ticket.to_string();
-        println!("Ticket: {}", ticket_string);
-
-        client2.join_topic(ticket).await.expect("Failed to join topic");
-
-        let mut messages = client2.take_message_receiver().expect("Failed to get message receiver");
-
-        sleep(Duration::from_millis(500)).await;
-
-        let test_message = "Hello via ticket!".to_string();
-        let timestamp = 1625247600000;
-        let expected_sender = client1.peer_id();
-
-        client1
-            .send_message(test_message.clone(), timestamp)
-            .await
-            .expect("Failed to send message");
-
-        sleep(Duration::from_millis(500)).await;
-
-        let mut received_messages = Vec::new();
-        loop {
-            tokio::select! {
-                Some(msg) = messages.recv() => {
-                    received_messages.push(msg);
-                }
-                _ = sleep(Duration::from_millis(100)) => {
-                    break;
-                }
-            }
-        }
-
-        // Assert after collecting
-        assert!(!received_messages.is_empty(), "No messages received");
-        let chat_message = &received_messages[0];
-        assert_eq!(chat_message.content, test_message);
-        assert_eq!(chat_message.sender, expected_sender);
-        assert_eq!(chat_message.timestamp, timestamp);
-    }
-
-    #[tokio::test]
-    async fn test_ticket_string_parsing() {
-        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
-        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
-
-        let ticket = client1.create_topic().await.expect("Failed to create topic");
-        let ticket_string = ticket.to_string();
-
-        client2
-            .join_topic_from_string(&ticket_string)
-            .await
-            .expect("Failed to join topic from string");
-
-        let mut messages = client2.take_message_receiver().expect("Failed to get message receiver");
-
-        sleep(Duration::from_millis(500)).await;
-
-        let test_message = "Hello from string ticket!".to_string();
-        let expected_sender = client1.peer_id();
-
-        client1
-            .send_message(test_message.clone(), 1234567890)
-            .await
-            .expect("Failed to send message");
-
-        sleep(Duration::from_millis(500)).await;
-
-        let mut received_messages = Vec::new();
-        loop {
-            tokio::select! {
-                Some(msg) = messages.recv() => {
-                    received_messages.push(msg);
-                }
-                _ = sleep(Duration::from_millis(100)) => {
-                    break;
-                }
-            }
-        }
-        assert!(!received_messages.is_empty(), "No messages received");
-        let chat_message = &received_messages[0];
-        assert_eq!(chat_message.content, test_message);
-        assert_eq!(chat_message.sender, expected_sender);
-    }*/
 }
