@@ -29,7 +29,7 @@ impl ChatMessage {
 
 impl Display for ChatMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(
+        writeln!(
             f,
             "[{}] {}: {}\n",
             self.timestamp, self.sender, self.content
@@ -130,7 +130,7 @@ impl ChatClient {
 
     pub async fn send_message(&mut self, content: String, timestamp: u64) -> anyhow::Result<()> {
         if let Some(sender) = &mut self.gossip_sender {
-            let message = ChatMessage::new(self.id.clone(), content, timestamp);
+            let message = ChatMessage::new(self.id, content, timestamp);
             let serialized = serde_json::to_vec(&message)?;
             sender.broadcast(serialized.into()).await?;
         }
@@ -138,7 +138,7 @@ impl ChatClient {
     }
 
     pub fn peer_id(&self) -> EndpointId {
-        self.id.clone()
+        self.id
     }
 
     pub fn endpoint(&self) -> &Endpoint {
