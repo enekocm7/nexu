@@ -1,5 +1,6 @@
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
+use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::prelude::*;
 use ui::desktop::desktop_web_components::Desktop;
 
@@ -11,7 +12,8 @@ fn main() {
             Config::default().with_menu(None).with_window(
                 WindowBuilder::new()
                     .with_title("Nexu")
-                    .with_window_icon(load_icon()),
+                    .with_window_icon(load_icon())
+                    .with_min_inner_size(LogicalSize::new(800, 600)),
             ),
         )
         .launch(App);
