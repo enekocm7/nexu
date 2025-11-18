@@ -4,11 +4,11 @@ use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
 use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
-use tokio::time::sleep;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -100,16 +100,26 @@ impl ChatClient {
         })
     }
 
-    pub async fn listen(mut gossip_receiver: GossipReceiver) -> anyhow::Result<()> {
-        while let Some(event) = gossip_receiver.try_next().await? {
-            if let Event::Received(msg) = event {
-                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
-                    print!("{chat_message}");
+    pub async fn listen(&mut self) -> anyhow::Result<()> {
+        let receiver = self
+            .gossip_receiver
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("No gossip receiver"))?;
+        loop {
+            let event_option = receiver.next().await;
+            match event_option {
+                Some(event) => {
+                    if let Event::Received(msg) = event? {
+                        if let Ok(chat_message) =
+                            serde_json::from_slice::<ChatMessage>(&msg.content)
+                        {
+                            print!("{chat_message}");
+                        }
+                    }
                 }
+                None => continue,
             }
         }
-
-        Ok(())
     }
 
     async fn subscribe(
@@ -176,12 +186,15 @@ impl ChatClient {
         self.join_topic(ticket).await
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use tokio::time::{sleep, Duration};
 
     #[tokio::test]
+    #[serial]
     async fn test_chat_message_serialization() {
         let endpoint = Endpoint::builder()
             .secret_key(SecretKey::generate(&mut rand::rng()))
@@ -203,6 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_chat_client_creation() {
         let client = ChatClient::new()
             .await
@@ -211,6 +225,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_subscribe_to_topic() {
         let mut client = ChatClient::new()
             .await
@@ -221,6 +236,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn test_send_and_receive_message() {
         let mut client1 = ChatClient::new().await.expect("Failed to create client1");
         let mut client2 = ChatClient::new().await.expect("Failed to create client2");
@@ -235,48 +251,242 @@ mod tests {
             .await
             .expect("Failed to join topic");
 
-        let mut receiver = client2
+        sleep(Duration::from_secs(2)).await;
+        
+        let mut receiver1 = client1
             .gossip_receiver
             .take()
-            .expect("Failed to get gossip receiver");
+            .expect("Failed to get gossip receiver for client1");
+        
+        let mut receiver2 = client2
+            .gossip_receiver
+            .take()
+            .expect("Failed to get gossip receiver for client2");
+        
+        sleep(Duration::from_secs(2)).await;
 
-        sleep(Duration::from_millis(500)).await;
-
-        let test_message = "Hello from client1".to_string();
-        let timestamp = 1625247600000;
-        let expected_sender = client1.peer_id();
-
+        let message1 = "Hello from client1".to_string();
+        let timestamp1 = 1625247600000;
         client1
-            .send_message(test_message.clone(), timestamp)
+            .send_message(message1.clone(), timestamp1)
             .await
-            .expect("Failed to send message");
+            .expect("Failed to send message from client1");
 
-        let received: bool;
+        sleep(Duration::from_secs(1)).await;
+
+        let message2 = "Hello from client2".to_string();
+        let timestamp2 = 1625247600001;
+        client2
+            .send_message(message2.clone(), timestamp2)
+            .await
+            .expect("Failed to send message from client2");
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
+
+        let mut messages_received_by_client1 = Vec::new();
+        let mut messages_received_by_client2 = Vec::new();
+
         tokio::select! {
-            result = async {
-                while let Some(event) = receiver.try_next().await.expect("Failed to receive event") {
-                    if let Event::Received(msg) = event {
-                        if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
-                            assert_eq!(chat_message.content, test_message);
-                            assert_eq!(chat_message.sender, expected_sender);
-                            assert_eq!(chat_message.timestamp, timestamp);
-                            return true;
+            _ = async {
+                let collection_duration = Duration::from_secs(5);
+                let start = tokio::time::Instant::now();
+
+                loop {
+                    tokio::select! {
+                        result = receiver1.try_next() => {
+                            if let Ok(Some(Event::Received(msg))) = result {
+                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                    messages_received_by_client1.push(chat_message);
+                                }
+                            }
+                        }
+                        result = receiver2.try_next() => {
+                            if let Ok(Some(Event::Received(msg))) = result {
+                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                    messages_received_by_client2.push(chat_message);
+                                }
+                            }
+                        }
+                        _ = sleep(Duration::from_millis(100)) => {
+                            if start.elapsed() >= collection_duration {
+                                break;
+                            }
                         }
                     }
                 }
-                false
-            } => {
-                received = result;
-            }
-            _ = sleep(Duration::from_secs(5)) => {
-                panic!("Test timed out waiting for message");
+            } => {}
+            _ = sleep(Duration::from_secs(20)) => {
+                panic!("Test timed out");
             }
         }
 
-        assert!(received, "Message was not received");
+        assert!(
+            messages_received_by_client2.iter().any(|m| {
+                m.sender == client1_id && m.content == message1 && m.timestamp == timestamp1
+            }),
+            "Client2 should have received message from client1. Received {} messages",
+            messages_received_by_client2.len()
+        );
+
+        assert!(
+            messages_received_by_client1.iter().any(|m| {
+                m.sender == client2_id && m.content == message2 && m.timestamp == timestamp2
+            }),
+            "Client1 should have received message from client2. Received {} messages",
+            messages_received_by_client1.len()
+        );
     }
 
     #[tokio::test]
+    #[serial]
+    async fn test_send_and_receive_message_three_clients() {
+        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
+        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
+        let mut client3 = ChatClient::new().await.expect("Failed to create client3");
+
+        let ticket = client1
+            .create_topic()
+            .await
+            .expect("Failed to create topic");
+
+        client2
+            .join_topic(ticket.clone())
+            .await
+            .expect("Failed to join topic for client2");
+
+        client3
+            .join_topic(ticket)
+            .await
+            .expect("Failed to join topic for client3");
+
+        let mut receiver1 = client1
+            .gossip_receiver
+            .take()
+            .expect("Failed to get gossip receiver for client1");
+        let mut receiver2 = client2
+            .gossip_receiver
+            .take()
+            .expect("Failed to get gossip receiver for client2");
+        let mut receiver3 = client3
+            .gossip_receiver
+            .take()
+            .expect("Failed to get gossip receiver for client3");
+
+        sleep(Duration::from_secs(3)).await;
+
+        let message1 = "Hello from client1".to_string();
+        let timestamp1 = 1625247600000;
+        client1
+            .send_message(message1.clone(), timestamp1)
+            .await
+            .expect("Failed to send message from client1");
+
+        let message2 = "Hello from client2".to_string();
+        let timestamp2 = 1625247600001;
+        client2
+            .send_message(message2.clone(), timestamp2)
+            .await
+            .expect("Failed to send message from client2");
+
+        let message3 = "Hello from client3".to_string();
+        let timestamp3 = 1625247600002;
+        client3
+            .send_message(message3.clone(), timestamp3)
+            .await
+            .expect("Failed to send message from client3");
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
+        let client3_id = client3.peer_id();
+
+        let mut messages_received_by_client1 = Vec::new();
+        let mut messages_received_by_client2 = Vec::new();
+        let mut messages_received_by_client3 = Vec::new();
+
+        tokio::select! {
+            _ = async {
+                let collection_duration = Duration::from_secs(5);
+                let start = tokio::time::Instant::now();
+
+                loop {
+                    tokio::select! {
+                        result = receiver1.try_next() => {
+                            if let Ok(Some(Event::Received(msg))) = result {
+                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                    messages_received_by_client1.push(chat_message);
+                                }
+                            }
+                        }
+                        result = receiver2.try_next() => {
+                            if let Ok(Some(Event::Received(msg))) = result {
+                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                    messages_received_by_client2.push(chat_message);
+                                }
+                            }
+                        }
+                        result = receiver3.try_next() => {
+                            if let Ok(Some(Event::Received(msg))) = result {
+                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                    messages_received_by_client3.push(chat_message);
+                                }
+                            }
+                        }
+                        _ = sleep(Duration::from_millis(100)) => {
+                            if start.elapsed() >= collection_duration {
+                                break;
+                            }
+                        }
+                    }
+                }
+            } => {}
+            _ = sleep(Duration::from_secs(20)) => {
+                panic!("Test timed out");
+            }
+        }
+
+        assert!(
+            messages_received_by_client2
+                .iter()
+                .any(|m| m.sender == client1_id && m.content == message1),
+            "Client2 should have received message from client1"
+        );
+        assert!(
+            messages_received_by_client3
+                .iter()
+                .any(|m| m.sender == client1_id && m.content == message1),
+            "Client3 should have received message from client1"
+        );
+
+        assert!(
+            messages_received_by_client1
+                .iter()
+                .any(|m| m.sender == client2_id && m.content == message2),
+            "Client1 should have received message from client2"
+        );
+        assert!(
+            messages_received_by_client3
+                .iter()
+                .any(|m| m.sender == client2_id && m.content == message2),
+            "Client3 should have received message from client2"
+        );
+
+        assert!(
+            messages_received_by_client1
+                .iter()
+                .any(|m| m.sender == client3_id && m.content == message3),
+            "Client1 should have received message from client3"
+        );
+        assert!(
+            messages_received_by_client2
+                .iter()
+                .any(|m| m.sender == client3_id && m.content == message3),
+            "Client2 should have received message from client3"
+        );
+    }
+
+    #[tokio::test]
+    #[serial]
     async fn test_peer_id() {
         let client = ChatClient::new()
             .await
