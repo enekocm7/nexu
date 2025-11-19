@@ -2,14 +2,15 @@ mod models;
 
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
-    
+
     use chrono::{DateTime, TimeDelta, Utc};
     use dioxus::prelude::*;
 
-    use crate::desktop::models::Contact;
+    use crate::desktop::models::{Topic, TopicCreationMode};
 
     static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
+    static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
 
     #[component]
     pub fn Desktop() -> Element {
@@ -18,14 +19,14 @@ pub mod desktop_web_components {
             div { class: "desktop-body",
                 Column {
                     contacts: vec![
-                        Contact {
+                        Topic {
                             id: "1".to_string(),
                             name: "Alice".to_string(),
                             avatar_url: None,
                             last_connection: Some(1625155200),
                             last_message: Some("Hey, how are you?".to_string()),
                         },
-                        Contact {
+                        Topic {
                             id: "2".to_string(),
                             name: "Bob".to_string(),
                             avatar_url: None,
@@ -39,7 +40,9 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn Column(contacts: Vec<Contact>) -> Element {
+    fn Column(contacts: Vec<Topic>) -> Element {
+        let mut show_topic_dialog = use_signal(|| false);
+
         rsx! {
             div { class: "desktop-column",
                 div { class: "desktop-column-header",
@@ -47,7 +50,8 @@ pub mod desktop_web_components {
                         h2 { class: "desktop-column-title", "Messages" }
                         button {
                             class: "desktop-column-new-message-button",
-                            title: "New Chat",
+                            title: "New Topic",
+                            onclick: move |_| show_topic_dialog.set(true),
                             "+"
                         }
                     }
@@ -66,6 +70,104 @@ pub mod desktop_web_components {
                     }
                 }
                 div { class: "desktop-column-footer" }
+
+                if show_topic_dialog() {
+                    TopicDialog { toggle: show_topic_dialog }
+                }
+            }
+        }
+    }
+
+    #[component]
+    fn TopicDialog(mut toggle: Signal<bool>) -> Element {
+        let mut topic_name = use_signal(String::new);
+        let mut selected_mode = use_signal(|| TopicCreationMode::Create);
+
+        rsx! {
+            div { class: "topic-dialog-overlay",
+                onclick: move |_| {
+                    toggle.set(false);
+                    topic_name.set(String::new());
+                },
+                
+                div { class: "topic-dialog",
+                    onclick: move |e| {
+                        e.stop_propagation();
+                    },
+                    div { class: "topic-dialog-header",
+                        h3 { class: "topic-dialog-title", "New Topic" }
+                        button {
+                            class: "topic-dialog-close",
+                            onclick: move |_| {
+                                toggle.set(false);
+                                topic_name.set(String::new());
+                            },
+                            img { 
+                                src: CLOSE_ICON
+                            }
+                        }
+                    }
+                    div { class: "topic-dialog-body",
+                        div { class: "topic-mode-tabs",
+                            button {
+                                class: if *selected_mode.read() == TopicCreationMode::Create { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                onclick: move |_| selected_mode.set(TopicCreationMode::Create),
+                                "Create Topic"
+                            }
+                            button {
+                                class: if *selected_mode.read() == TopicCreationMode::Join { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                onclick: move |_| selected_mode.set(TopicCreationMode::Join),
+                                "Join Topic"
+                            }
+                        }
+                        div { class: "topic-input-group",
+                            label { class: "topic-input-label",
+                                if *selected_mode.read() == TopicCreationMode::Create {
+                                    "Topic Name"
+                                } else {
+                                    "Topic ID or Invite Link"
+                                }
+                            }
+                            input {
+                                class: "topic-input",
+                                r#type: "text",
+                                value: "{topic_name}",
+                                placeholder: if *selected_mode.read() == TopicCreationMode::Create { "Enter topic name..." } else { "Enter topic ID or paste invite link..." },
+                                oninput: move |e| topic_name.set(e.value()),
+                            }
+                        }
+                        p { class: "topic-dialog-description",
+                            if *selected_mode.read() == TopicCreationMode::Create {
+                                "Create a new topic to start chatting with others. You can share the topic ID with your friends."
+                            } else {
+                                "Join an existing topic by entering its ID or invite link shared by a friend."
+                            }
+                        }
+                    }
+                    div { class: "topic-dialog-footer",
+                        button {
+                            class: "topic-dialog-button topic-dialog-button-cancel",
+                            onclick: move |_| {
+                                toggle.set(false);
+                                topic_name.set(String::new());
+                            },
+                            "Cancel"
+                        }
+                        button { class: "topic-dialog-button topic-dialog-button-primary",
+                            disabled: topic_name().trim().is_empty(),
+                            onclick: move |_| {
+                                //TODO Handle topic creation
+                                toggle.set(false);
+                                topic_name.set(String::new());
+                            },
+                            if *selected_mode.read() == TopicCreationMode::Create {
+                                "Create"
+                            } else {
+                                "Join"
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -106,7 +208,7 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn ContactItem(contact: Contact) -> Element {
+    fn ContactItem(contact: Topic) -> Element {
         let avatar_url = if contact.avatar_url.is_some() {
             contact.avatar_url.unwrap()
         } else {

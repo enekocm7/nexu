@@ -1,5 +1,5 @@
 #[derive(Clone)]
-pub struct Contact {
+pub struct Topic {
     pub id: String,
     pub name: String,
     pub avatar_url: Option<String>,
@@ -7,8 +7,14 @@ pub struct Contact {
     pub last_message: Option<String>,
 }
 
-impl PartialEq for Contact {
+impl PartialEq for Topic {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
+}
+
+#[derive(PartialEq)]
+pub enum TopicCreationMode {
+    Create,
+    Join
 }
