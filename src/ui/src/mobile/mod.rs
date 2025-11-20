@@ -8,11 +8,9 @@ pub mod mobile_components {
     pub fn Mobile() -> Element {
         rsx! {
             link { rel: "stylesheet", href: MAIN_CSS }
-            title { "Nexu Mobile"}
+            title { "Nexu Mobile" }
             body { class: "mobile-body",
-                h1 { class: "mobile-header",
-                    "Mobile UI Component"
-                }
+                h1 { class: "mobile-header", "Mobile UI Component" }
             }
         }
     }

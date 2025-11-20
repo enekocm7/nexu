@@ -1,8 +1,12 @@
+mod topic_service;
+mod client;
+
+use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
-use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::prelude::*;
 use ui::desktop::desktop_web_components::Desktop;
+use ui::desktop::models::AppState;
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -21,10 +25,28 @@ fn main() {
 
 #[component]
 fn App() -> Element {
+    let app_state = use_signal(|| AppState::new());
+
+    let on_create_topic = move |name: String| {
+        let mut cloned = app_state.clone();
+        spawn(async move {
+            let mut state = cloned.write();
+            topic_service::create_topic(name, &mut state).await;
+        });
+    };
+
+    let on_join_topic = move |topic_id: String| {
+        let mut cloned = app_state.clone();
+        spawn(async move {
+            let mut state = cloned.write();
+            topic_service::join_topic(topic_id, &mut state).await;
+        });
+    };
+
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
 
-        Desktop {}
+        Desktop { app_state, on_create_topic, on_join_topic }
     }
 }
 

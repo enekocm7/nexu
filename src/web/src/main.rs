@@ -34,7 +34,7 @@ fn App() -> Element {
                 Mobile {}
             },
             DeviceType::Desktop => rsx! {
-                Desktop {}
+                //TODO Desktop p2p implementation
             },
         }
     }

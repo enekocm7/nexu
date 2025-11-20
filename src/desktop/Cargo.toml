@@ -6,8 +6,11 @@ edition = "2021"
 [dependencies]
 dioxus = { workspace = true, features = [] }
 ui = { workspace = true, features = ["desktop-web"] }
-image = {workspace = true }
+image = { workspace = true }
 p2p = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+anyhow = { workspace = true }
+chrono = { workspace = true }
 
 [features]
 default = ["desktop"]

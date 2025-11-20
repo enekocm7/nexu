@@ -1,46 +1,37 @@
-mod models;
+pub mod models;
 
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
-
     use chrono::{DateTime, TimeDelta, Utc};
     use dioxus::prelude::*;
 
-    use crate::desktop::models::{Topic, TopicCreationMode};
+    use crate::desktop::models::{AppState, Topic, TopicCreationMode};
 
     static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
 
     #[component]
-    pub fn Desktop() -> Element {
+    pub fn Desktop(app_state: Signal<AppState>,on_create_topic: EventHandler<String>, on_join_topic: EventHandler<String>) -> Element {
+        let contacts = app_state.read().get_all_topics()
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
             div { class: "desktop-body",
                 Column {
-                    contacts: vec![
-                        Topic {
-                            id: "1".to_string(),
-                            name: "Alice".to_string(),
-                            avatar_url: None,
-                            last_connection: Some(1625155200),
-                            last_message: Some("Hey, how are you?".to_string()),
-                        },
-                        Topic {
-                            id: "2".to_string(),
-                            name: "Bob".to_string(),
-                            avatar_url: None,
-                            last_connection: Some(1625241600),
-                            last_message: Some("Let's catch up later.".to_string()),
-                        },
-                    ],
+                    contacts,
+                    on_create_topic,
+                    on_join_topic,
                 }
             }
         }
     }
 
     #[component]
-    fn Column(contacts: Vec<Topic>) -> Element {
+    fn Column(contacts: Vec<Topic>, on_create_topic: EventHandler<String>, on_join_topic: EventHandler<String>) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
 
         rsx! {
@@ -72,25 +63,44 @@ pub mod desktop_web_components {
                 div { class: "desktop-column-footer" }
 
                 if show_topic_dialog() {
-                    TopicDialog { toggle: show_topic_dialog }
+                    TopicDialog {
+                        toggle: show_topic_dialog,
+                        on_create: on_create_topic,
+                        on_join: on_join_topic,
+                    }
                 }
             }
         }
     }
 
     #[component]
-    fn TopicDialog(mut toggle: Signal<bool>) -> Element {
+    fn TopicDialog(mut toggle: Signal<bool>, on_create: EventHandler<String>, on_join: EventHandler<String>) -> Element {
         let mut topic_name = use_signal(String::new);
         let mut selected_mode = use_signal(|| TopicCreationMode::Create);
 
+        let handle_submit = move |_| {
+            let mode = *selected_mode.read();
+            let name = topic_name().trim().to_string();
+
+            if !name.is_empty() {
+                match mode {
+                    TopicCreationMode::Create => on_create.call(name),
+                    TopicCreationMode::Join => on_join.call(name),
+                }
+                toggle.set(false);
+                topic_name.set(String::new());
+            }
+        };
+
         rsx! {
-            div { class: "topic-dialog-overlay",
+            div {
+                class: "topic-dialog-overlay",
                 onclick: move |_| {
                     toggle.set(false);
                     topic_name.set(String::new());
                 },
-                
-                div { class: "topic-dialog",
+                div {
+                    class: "topic-dialog",
                     onclick: move |e| {
                         e.stop_propagation();
                     },
@@ -102,9 +112,7 @@ pub mod desktop_web_components {
                                 toggle.set(false);
                                 topic_name.set(String::new());
                             },
-                            img { 
-                                src: CLOSE_ICON
-                            }
+                            img { src: CLOSE_ICON }
                         }
                     }
                     div { class: "topic-dialog-body",
@@ -153,13 +161,10 @@ pub mod desktop_web_components {
                             },
                             "Cancel"
                         }
-                        button { class: "topic-dialog-button topic-dialog-button-primary",
+                        button {
+                            class: "topic-dialog-button topic-dialog-button-primary",
                             disabled: topic_name().trim().is_empty(),
-                            onclick: move |_| {
-                                //TODO Handle topic creation
-                                toggle.set(false);
-                                topic_name.set(String::new());
-                            },
+                            onclick: handle_submit,
                             if *selected_mode.read() == TopicCreationMode::Create {
                                 "Create"
                             } else {

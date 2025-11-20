@@ -4,11 +4,12 @@ use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
 use serde::{Deserialize, Serialize};
-use tokio::time::sleep;
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
+use tokio::time::sleep;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -74,8 +75,8 @@ pub struct ChatClient {
     endpoint: Endpoint,
     gossip: Gossip,
     _router: Router,
-    gossip_sender: Option<GossipSender>,
-    gossip_receiver: Option<GossipReceiver>,
+    gossip_sender: HashMap<TopicId, GossipSender>,
+    gossip_receiver: HashMap<TopicId, GossipReceiver>,
 }
 
 impl ChatClient {
@@ -95,16 +96,16 @@ impl ChatClient {
             endpoint,
             gossip,
             _router: router,
-            gossip_sender: None,
-            gossip_receiver: None,
+            gossip_sender: HashMap::new(),
+            gossip_receiver: HashMap::new(),
         })
     }
 
-    pub async fn listen(&mut self) -> anyhow::Result<()> {
+    pub async fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
         let receiver = self
             .gossip_receiver
-            .as_mut()
-            .ok_or_else(|| anyhow::anyhow!("No gossip receiver"))?;
+            .get_mut(topic_id)
+            .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
         loop {
             let event_option = receiver.next().await;
             match event_option {
@@ -132,23 +133,28 @@ impl ChatClient {
 
         let (sender, receiver) = self.gossip.subscribe(topic_id, endpoint_ids).await?.split();
 
-        self.gossip_sender = Some(sender);
-        self.gossip_receiver = Some(receiver);
+        self.gossip_sender.insert(topic_id, sender);
+        self.gossip_receiver.insert(topic_id, receiver);
 
         Ok(())
     }
 
-    pub async fn send_message(&mut self, content: String, timestamp: u64) -> anyhow::Result<()> {
-        if let Some(sender) = &mut self.gossip_sender {
-            let message = ChatMessage::new(self.id, content, timestamp);
-            let serialized = serde_json::to_vec(&message)?;
-            sender.broadcast(serialized.into()).await?;
-        }
+    pub async fn send_message(&mut self, content: &str, timestamp: u64, topic_id: &TopicId) -> anyhow::Result<()> {
+        let sender = self
+            .gossip_sender
+            .get_mut(&topic_id)
+            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
+
+
+        let message = ChatMessage::new(self.id, content.to_owned(), timestamp);
+        let serialized = serde_json::to_vec(&message)?;
+        sender.broadcast(serialized.into()).await?;
+
         Ok(())
     }
 
-    pub fn peer_id(&self) -> EndpointId {
-        self.id
+    pub fn peer_id(&self) -> &EndpointId {
+        &self.id
     }
 
     pub fn endpoint(&self) -> &Endpoint {
@@ -221,7 +227,7 @@ mod tests {
         let client = ChatClient::new()
             .await
             .expect("Failed to create chat client");
-        assert!(client.gossip_sender.is_none());
+        assert!(client.gossip_sender.is_empty());
     }
 
     #[tokio::test]
@@ -230,9 +236,9 @@ mod tests {
         let mut client = ChatClient::new()
             .await
             .expect("Failed to create chat client");
-        client.create_topic().await.expect("Failed to create topic");
+        let ticket = client.create_topic().await.expect("Failed to create topic");
 
-        assert!(client.gossip_sender.is_some());
+        assert!(client.gossip_sender.contains_key(&ticket.topic));
     }
 
     #[tokio::test]
@@ -247,42 +253,42 @@ mod tests {
             .expect("Failed to create topic");
 
         client2
-            .join_topic(ticket)
+            .join_topic(ticket.clone())
             .await
             .expect("Failed to join topic");
 
         sleep(Duration::from_secs(2)).await;
-        
-        let mut receiver1 = client1
-            .gossip_receiver
-            .take()
-            .expect("Failed to get gossip receiver for client1");
-        
-        let mut receiver2 = client2
-            .gossip_receiver
-            .take()
-            .expect("Failed to get gossip receiver for client2");
-        
+
+        let client1_id = *client1.peer_id();
+        let client2_id = *client2.peer_id();
+
         sleep(Duration::from_secs(2)).await;
 
-        let message1 = "Hello from client1".to_string();
+        let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send_message(message1.clone(), timestamp1)
+            .send_message(message1, timestamp1, &ticket.topic)
             .await
             .expect("Failed to send message from client1");
 
         sleep(Duration::from_secs(1)).await;
 
-        let message2 = "Hello from client2".to_string();
+        let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send_message(message2.clone(), timestamp2)
+            .send_message(message2, timestamp2, &ticket.topic)
             .await
             .expect("Failed to send message from client2");
 
-        let client1_id = client1.peer_id();
-        let client2_id = client2.peer_id();
+        let receiver1 = client1
+            .gossip_receiver
+            .get_mut(&ticket.topic)
+            .expect("Failed to get gossip receiver for client1");
+
+        let receiver2 = client2
+            .gossip_receiver
+            .get_mut(&ticket.topic)
+            .expect("Failed to get gossip receiver for client2");
 
         let mut messages_received_by_client1 = Vec::new();
         let mut messages_received_by_client2 = Vec::new();
@@ -356,49 +362,50 @@ mod tests {
             .expect("Failed to join topic for client2");
 
         client3
-            .join_topic(ticket)
+            .join_topic(ticket.clone())
             .await
             .expect("Failed to join topic for client3");
 
-        let mut receiver1 = client1
-            .gossip_receiver
-            .take()
-            .expect("Failed to get gossip receiver for client1");
-        let mut receiver2 = client2
-            .gossip_receiver
-            .take()
-            .expect("Failed to get gossip receiver for client2");
-        let mut receiver3 = client3
-            .gossip_receiver
-            .take()
-            .expect("Failed to get gossip receiver for client3");
-
         sleep(Duration::from_secs(3)).await;
 
-        let message1 = "Hello from client1".to_string();
+        let client1_id = *client1.peer_id();
+        let client2_id = *client2.peer_id();
+        let client3_id = *client3.peer_id();
+
+        let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send_message(message1.clone(), timestamp1)
+            .send_message(message1, timestamp1, &ticket.topic)
             .await
             .expect("Failed to send message from client1");
 
-        let message2 = "Hello from client2".to_string();
+        let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send_message(message2.clone(), timestamp2)
+            .send_message(message2, timestamp2, &ticket.topic)
             .await
             .expect("Failed to send message from client2");
 
-        let message3 = "Hello from client3".to_string();
+        let message3 = "Hello from client3";
         let timestamp3 = 1625247600002;
         client3
-            .send_message(message3.clone(), timestamp3)
+            .send_message(message3, timestamp3, &ticket.topic)
             .await
             .expect("Failed to send message from client3");
 
-        let client1_id = client1.peer_id();
-        let client2_id = client2.peer_id();
-        let client3_id = client3.peer_id();
+
+        let receiver1 = client1
+            .gossip_receiver
+            .get_mut(&ticket.topic)
+            .expect("Failed to get gossip receiver for client1");
+        let receiver2 = client2
+            .gossip_receiver
+            .get_mut(&ticket.topic)
+            .expect("Failed to get gossip receiver for client2");
+        let receiver3 = client3
+            .gossip_receiver
+            .get_mut(&ticket.topic)
+            .expect("Failed to get gossip receiver for client3");
 
         let mut messages_received_by_client1 = Vec::new();
         let mut messages_received_by_client2 = Vec::new();
@@ -491,7 +498,7 @@ mod tests {
         let client = ChatClient::new()
             .await
             .expect("Failed to create chat client");
-        let peer_id = client.peer_id();
+        let peer_id = *client.peer_id();
         assert_eq!(peer_id, client.id);
     }
 }
