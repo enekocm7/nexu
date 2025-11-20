@@ -1,12 +1,13 @@
-mod topic_service;
 mod client;
 
+use crate::client::DesktopClient;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
+use std::sync::Arc;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::AppState;
+use ui::desktop::models::{AppState, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -26,20 +27,44 @@ fn main() {
 #[component]
 fn App() -> Element {
     let app_state = use_signal(|| AppState::new());
+    let desktop_client = use_signal(|| Arc::new(DesktopClient::new()));
+
+    use_effect(move || {
+        let client_ref = desktop_client.read().clone();
+        spawn(async move {
+            if let Err(e) = client_ref.initialize().await {
+                eprintln!("Failed to initialize DesktopClient: {}", e);
+            }
+        });
+    });
 
     let on_create_topic = move |name: String| {
         let mut cloned = app_state.clone();
+        let client_ref = desktop_client.read().clone();
         spawn(async move {
-            let mut state = cloned.write();
-            topic_service::create_topic(name, &mut state).await;
+            match client_ref.create_topic().await {
+                Ok(topic_id) => {
+                    let mut state = cloned.write();
+                    let topic = Topic::new(topic_id.clone(), name);
+                    state.add_topic(topic);
+                }
+                Err(e) => eprintln!("Failed to create topic: {}", e),
+            }
         });
     };
 
     let on_join_topic = move |topic_id: String| {
         let mut cloned = app_state.clone();
+        let client_ref = desktop_client.read().clone();
         spawn(async move {
-            let mut state = cloned.write();
-            topic_service::join_topic(topic_id, &mut state).await;
+            match client_ref.join_topic(&topic_id).await {
+                Ok(_) => {
+                    let mut state = cloned.write();
+                    let topic = Topic::new(topic_id.clone(), topic_id.to_string());
+                    state.add_topic(topic);
+                }
+                Err(e) => eprintln!("Failed to join topic: {}", e),
+            }
         });
     };
 

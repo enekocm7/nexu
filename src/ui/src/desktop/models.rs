@@ -9,6 +9,18 @@ pub struct Topic {
     pub last_message: Option<String>,
 }
 
+impl Topic {
+    pub fn new(id: String, name: String) -> Self {
+        Self {
+            id,
+            name,
+            avatar_url: None,
+            last_connection: None,
+            last_message: None,
+        }
+    }
+}
+
 impl PartialEq for Topic {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
