@@ -7,6 +7,7 @@ pub struct Topic {
     pub avatar_url: Option<String>,
     pub last_connection: Option<u64>,
     pub last_message: Option<String>,
+    pub messages: Vec<Message>,
 }
 
 impl Topic {
@@ -17,6 +18,7 @@ impl Topic {
             avatar_url: None,
             last_connection: None,
             last_message: None,
+            messages: Vec::new(),
         }
     }
 }
@@ -30,7 +32,7 @@ impl PartialEq for Topic {
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum TopicCreationMode {
     Create,
-    Join
+    Join,
 }
 
 #[cfg(feature = "desktop-web")]
@@ -47,23 +49,32 @@ impl AppState {
             current_topic_id: None,
         }
     }
-    
+
     pub fn add_topic(&mut self, topic: Topic) {
         self.topics.insert(topic.id.clone(), topic);
     }
-    
+
     pub fn set_current_topic(&mut self, topic_id: String) {
         self.current_topic_id = Some(topic_id);
     }
-    
+
     pub fn get_current_topic(&self) -> Option<&Topic> {
         match &self.current_topic_id {
             Some(id) => self.topics.get(id),
             None => None,
         }
     }
-    
+
     pub fn get_all_topics(&self) -> Vec<&Topic> {
         self.topics.values().collect()
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Message {
+    pub id: String,
+    pub topic_id: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub is_sent: bool,
 }
