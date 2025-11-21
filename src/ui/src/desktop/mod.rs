@@ -12,14 +12,22 @@ pub mod desktop_web_components {
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
 
     #[component]
-    pub fn Desktop(app_state: Signal<AppState>, on_create_topic: EventHandler<String>, on_join_topic: EventHandler<String>) -> Element {
-        let contacts = app_state.read().get_all_topics()
+    pub fn Desktop(
+        app_state: Signal<AppState>,
+        on_create_topic: EventHandler<String>,
+        on_join_topic: EventHandler<String>,
+    ) -> Element {
+        let contacts = app_state
+            .read()
+            .get_all_topics()
             .into_iter()
             .cloned()
             .collect::<Vec<_>>();
 
         let mut show_topic_dialog = use_signal(|| false);
         let selected_topic = use_signal::<Option<Topic>>(|| None);
+
+        let mut search_query = use_signal(String::new);
 
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
@@ -39,12 +47,15 @@ pub mod desktop_web_components {
                             class: "desktop-column-search",
                             r#type: "text",
                             icon: "search",
-                            placeholder: "Search"
+                            placeholder: "Search",
+                            oninput: move |value| {
+                                search_query.set(value.value());
+                            },
                         }
                     }
                     div { class: "desktop-column-contacts",
                         ul {
-                            for contact in contacts.iter() {
+                            for contact in contacts.iter().filter(|contact| contact.name.to_lowercase().contains(&search_query().to_lowercase())) {
                                 ContactItem { contact: contact.clone(), on_select: selected_topic }
                             }
                         }
@@ -67,7 +78,11 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn TopicDialog(mut toggle: Signal<bool>, on_create: EventHandler<String>, on_join: EventHandler<String>) -> Element {
+    fn TopicDialog(
+        mut toggle: Signal<bool>,
+        on_create: EventHandler<String>,
+        on_join: EventHandler<String>,
+    ) -> Element {
         let mut topic_name = use_signal(String::new);
         let mut selected_mode = use_signal(|| TopicCreationMode::Create);
 
