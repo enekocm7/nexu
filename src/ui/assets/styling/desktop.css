@@ -106,7 +106,6 @@ body {
 
 .desktop-column-contacts {
     flex: 1;
-    overflow-y: auto;
 }
 
 .desktop-column-contacts ul {
