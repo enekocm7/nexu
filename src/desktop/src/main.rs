@@ -7,7 +7,7 @@ use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
 use std::sync::Arc;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, Topic};
+use ui::desktop::models::{AppState, Message, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -68,10 +68,41 @@ fn App() -> Element {
         });
     };
 
+    let on_send_message = move |(topic_id, message): (String, String)| {
+        let mut cloned = app_state.clone();
+        let client_ref = desktop_client.read().clone();
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        spawn(async move {
+            match client_ref.send_message(&topic_id, &message).await {
+                Ok(_) => {
+                    let mut state = cloned.write();
+                    if let Some(topic) = state.get_topic(&topic_id) {
+                        let message = Message::new(
+                            client_ref.peer_id().await.unwrap(),
+                            topic_id,
+                            message,
+                            now,
+                            true,
+                        );
+                        topic.add_message(message);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to send message to topic {}: {}", topic_id, e);
+                }
+            }
+        });
+    };
+
     rsx! {
         document::Link { rel: "stylesheet", href: MAIN_CSS }
 
-        Desktop { app_state, on_create_topic, on_join_topic }
+        Desktop {
+            app_state,
+            on_create_topic,
+            on_join_topic,
+            on_send_message,
+        }
     }
 }
 

@@ -21,6 +21,11 @@ impl Topic {
             messages: Vec::new(),
         }
     }
+
+    pub fn add_message(&mut self, message: Message) {
+        self.last_message = Some(message.content.clone());
+        self.messages.push(message);
+    }
 }
 
 impl PartialEq for Topic {
@@ -65,6 +70,14 @@ impl AppState {
         }
     }
 
+    pub fn get_topic(&mut self, topic_id: &str) -> Option<&mut Topic> {
+        self.topics.get_mut(topic_id)
+    }
+
+    pub fn get_topic_immutable(&self, topic_id: &str) -> Option<&Topic> {
+        self.topics.get(topic_id)
+    }
+
     pub fn get_all_topics(&self) -> Vec<&Topic> {
         self.topics.values().collect()
     }
@@ -72,9 +85,21 @@ impl AppState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Message {
-    pub id: String,
+    pub sender_id: String,
     pub topic_id: String,
     pub content: String,
     pub timestamp: u64,
     pub is_sent: bool,
+}
+
+impl Message {
+    pub fn new(sender_id: String, topic_id: String, content: String, timestamp: u64, is_sent: bool) -> Self {
+        Self {
+            sender_id,
+            topic_id,
+            content,
+            timestamp,
+            is_sent,
+        }
+    }
 }
