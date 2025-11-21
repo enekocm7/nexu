@@ -2,14 +2,20 @@ pub mod models;
 
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
+    use crate::components::toast::ToastProvider;
+    use crate::desktop::models::{AppState, Message, Topic, TopicCreationMode};
+    use arboard::Clipboard;
     use chrono::{DateTime, TimeDelta, Utc};
     use dioxus::prelude::*;
-
-    use crate::desktop::models::{AppState, Message, Topic, TopicCreationMode};
+    use dioxus_primitives::context_menu::{
+        ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
+    };
+    use dioxus_primitives::toast::{use_toast, ToastOptions};
 
     static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
+    static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
     #[component]
     pub fn Desktop(
@@ -18,20 +24,23 @@ pub mod desktop_web_components {
         on_join_topic: EventHandler<String>,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
-        let contacts = app_state
-            .read()
-            .get_all_topics()
-            .into_iter()
-            .cloned()
-            .collect::<Vec<_>>();
+        let contacts = use_memo(move || {
+            app_state
+                .read()
+                .get_all_topics()
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        });
 
         let mut show_topic_dialog = use_signal(|| false);
-        let selected_topic = use_signal::<Option<String>>(|| None);
-
+        let mut selected_topic = use_signal::<Option<String>>(|| None);
+        let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut search_query = use_signal(String::new);
 
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
+            link { rel: "stylesheet", href: COMPONENTS_CSS }
             div { class: "desktop-body",
                 div { class: "desktop-column",
                     div { class: "desktop-column-header",
@@ -56,16 +65,51 @@ pub mod desktop_web_components {
                     }
                     div { class: "desktop-column-contacts",
                         ul {
-                            for contact in contacts
-                                .iter()
+                            for contact in contacts()
+                                .into_iter()
                                 .filter(|contact| {
                                     contact.name.to_lowercase().contains(&search_query().to_lowercase())
                                 })
                             {
-                                ContactItem {
-                                    contact: contact.clone(),
-                                    on_select: selected_topic,
+                                {
+                                    let contact_id = contact.id.clone();
+                                    let contact_for_details = contact.clone();
+                                    rsx!{
+                                        ContextMenu{
+                                            ContextMenuTrigger {
+                                                ContactItem { contact: contact.clone(), on_select: selected_topic.clone() }
+                                            }
+                                            ContextMenuContent { class: "context-menu-content",
+                                                ContextMenuItem { class: "context-menu-item",
+                                                    value: "Open Chat".to_string(),
+                                                    index: 0usize,
+                                                    on_select:  move |_| {
+                                                        selected_topic.set(Some(contact_id.clone()));
+                                                    },
+                                                    "Open Chat"
+                                                }
+                                                ContextMenuItem { class: "context-menu-item",
+                                                    value: "Open Details".to_string(),
+                                                    index: 1usize,
+                                                    on_select:  move |_| {
+                                                        show_topic_details.set(Some(contact_for_details.clone()));
+                                                    },
+                                                    "Open Details"
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
+
+                            }
+                        }
+                    }
+
+                    if let Some(topic) = show_topic_details() {
+                        ToastProvider {
+                            TopicDetails {
+                                topic: topic.clone(),
+                                toggle: show_topic_details
                             }
                         }
                     }
@@ -217,6 +261,9 @@ pub mod desktop_web_components {
                 onclick: move |_| {
                     on_select.set(Some(contact.id.clone()));
                 },
+                oncontextmenu: move |e| {
+                    e.prevent_default();
+                },
                 img { class: "desktop-contact-avatar", src: "{avatar_url}", alt: "{contact.name}", draggable: "false" }
                 div { class: "desktop-contact-info",
                     h3 { class: "desktop-contact-name", "{contact.name}" }
@@ -308,6 +355,57 @@ pub mod desktop_web_components {
             div { class: if message.is_sent { "chat-message sent" } else { "chat-message received" },
                 p { class: "message-text", "{message.content}" }
                 p { class: "chat-message-timestamp", "10:30 AM" }
+            }
+        }
+    }
+
+    #[component]
+    fn TopicDetails(topic: Topic, mut toggle: Signal<Option<Topic>>) -> Element {
+        let toast = use_toast();
+
+        let handle_copy_topic_id = {
+            let topic_id = topic.id.clone();
+            move |_event: Event<MouseData>| match Clipboard::new() {
+                Ok(mut clipboard) => match clipboard.set_text(topic_id.clone()) {
+                    Ok(_) => {
+                        toast.success(
+                            "Topic ID copied to clipboard!".to_owned(),
+                            ToastOptions::default(),
+                        );
+                    }
+                    Err(_) => {
+                        toast.error(
+                            "Error copying Topic ID.".to_owned(),
+                            ToastOptions::default(),
+                        );
+                    }
+                },
+                Err(_) => {
+                    toast.error(
+                        "Error accessing clipboard.".to_owned(),
+                        ToastOptions::default(),
+                    );
+                }
+            }
+        };
+
+        rsx! {
+            div {
+                class: "topic-details-overlay",
+                onclick: move |_| toggle.set(None),
+                div {
+                    class: "topic-details",
+                    onclick: move |e| e.stop_propagation(),
+                    h2 { class: "topic-details-title", "{topic.name}" }
+                    hr {}
+                    p { class: "topic-details-section-title", "Topic ID" }
+                    p {
+                        class: "topic-details-topic-id",
+                        title: "Click to copy",
+                        onclick: handle_copy_topic_id,
+                        "{topic.id}"
+                    }
+                }
             }
         }
     }

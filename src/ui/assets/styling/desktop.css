@@ -98,9 +98,8 @@ body {
 
 .desktop-column-search:focus {
     background-color: #353535;
-    box-shadow:
-        0 0 0 2px rgba(100, 150, 255, 0.4),
-        0 4px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.25);
     transform: translateY(-1px);
 }
 
@@ -341,9 +340,8 @@ body {
 
 .desktop-chat-input:focus {
     background-color: #353535;
-    box-shadow:
-        0 0 0 2px rgba(100, 150, 255, 0.4),
-        0 4px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.4),
+    0 4px 10px rgba(0, 0, 0, 0.25);
 }
 
 .desktop-chat-send-button {
@@ -370,7 +368,8 @@ body {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.topic-dialog-overlay {
+.topic-dialog-overlay,
+.topic-details-overlay {
     position: fixed;
     top: 0;
     left: 0;
@@ -582,6 +581,84 @@ body {
     color: #666666;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+.context-menu-content {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px;
+    min-width: 180px;
+    z-index: 1000;
+}
+
+.context-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    font-size: 14px;
+    color: #333333;
+}
+
+.context-menu-item:hover {
+    background-color: #f5f5f5;
+}
+
+.context-menu-item:active {
+    background-color: #eeeeee;
+}
+
+.topic-details {
+    background-color: #333333;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 500px;
+    padding: 24px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    animation: slideIn 0.3s ease;
+}
+
+.topic-details-title {
+    margin: 0 0 20px 0;
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.topic-details hr {
+    border: none;
+    border-top: 1px solid #444444;
+    margin: 20px 0;
+}
+
+.topic-details-section-title {
+    margin: 16px 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #aaaaaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.topic-details-topic-id {
+    margin: 0;
+    padding: 12px 16px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #ffffff;
+    font-family: monospace;
+    font-size: 14px;
+    word-break: break-all;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.topic-details-topic-id:hover {
+    background-color: #353535;
+    border-color: #5a7fb8;
 }
 
 @media (max-width: 1024px) {
@@ -814,8 +891,7 @@ body {
 
     .desktop-column-search:focus {
         background-color: #303030;
-        box-shadow:
-            0 0 0 2px rgba(120, 170, 255, 0.5),
-            0 4px 10px rgba(0, 0, 0, 0.3);
+        box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.5),
+        0 4px 10px rgba(0, 0, 0, 0.3);
     }
 }
