@@ -1,4 +1,4 @@
-use futures_lite::StreamExt;
+use futures_lite::{Stream, StreamExt};
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
@@ -9,6 +9,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use std::time::Duration;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tokio::time::sleep;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -101,26 +102,40 @@ impl ChatClient {
         })
     }
 
-    pub async fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
-        let receiver = self
+    pub async fn listen(
+        &mut self,
+        topic_id: &TopicId,
+    ) -> anyhow::Result<UnboundedReceiver<ChatMessage>> {
+        let mut receiver = self
             .gossip_receiver
-            .get_mut(topic_id)
+            .remove(topic_id)
             .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
-        loop {
-            let event_option = receiver.next().await;
-            match event_option {
-                Some(event) => {
-                    if let Event::Received(msg) = event? {
+
+        let (tx, rx) = unbounded_channel();
+
+        tokio::spawn(async move {
+            loop {
+                let event_option = receiver.next().await;
+                match event_option {
+                    Some(Ok(Event::Received(msg))) => {
                         if let Ok(chat_message) =
                             serde_json::from_slice::<ChatMessage>(&msg.content)
                         {
-                            print!("{chat_message}");
+                            if tx.send(chat_message).is_err() {
+                                break;
+                            }
                         }
                     }
+                    Some(Ok(Event::NeighborUp(_))) => continue,
+                    Some(Ok(Event::NeighborDown(_))) => continue,
+                    Some(Ok(Event::Lagged)) => continue,
+                    Some(Err(_)) => continue,
+                    None => break,
                 }
-                None => continue,
             }
-        }
+        });
+
+        Ok(rx)
     }
 
     async fn subscribe(
@@ -139,12 +154,16 @@ impl ChatClient {
         Ok(())
     }
 
-    pub async fn send_message(&mut self, content: &str, timestamp: u64, topic_id: &TopicId) -> anyhow::Result<()> {
+    pub async fn send_message(
+        &mut self,
+        content: &str,
+        timestamp: u64,
+        topic_id: &TopicId,
+    ) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
             .get_mut(&topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
-
 
         let message = ChatMessage::new(self.id, content.to_owned(), timestamp);
         let serialized = serde_json::to_vec(&message)?;
@@ -392,7 +411,6 @@ mod tests {
             .send_message(message3, timestamp3, &ticket.topic)
             .await
             .expect("Failed to send message from client3");
-
 
         let receiver1 = client1
             .gossip_receiver
