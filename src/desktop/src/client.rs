@@ -1,16 +1,20 @@
 use dioxus::core::anyhow;
-use p2p::{ChatClient, Ticket};
+use p2p::{ChatClient, ChatMessage, Ticket};
+use std::collections::HashMap;
 use std::str::FromStr;
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::{Mutex, OnceCell};
 
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
+    message_receivers: HashMap<String, UnboundedReceiver<ChatMessage>>,
 }
 
 impl DesktopClient {
     pub fn new() -> Self {
         Self {
             client: OnceCell::new(),
+            message_receivers: HashMap::new(),
         }
     }
 
@@ -29,21 +33,27 @@ impl DesktopClient {
         Ok(client.lock().await.peer_id().to_string())
     }
 
-    pub async fn create_topic(&self) -> anyhow::Result<String> {
+    pub async fn create_topic(&mut self) -> anyhow::Result<String> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
         let topic_id = client.lock().await.create_topic().await?;
+        let message_receiver = client.lock().await.listen(&topic_id.topic).await?;
+        self.message_receivers
+            .insert(topic_id.to_string(), message_receiver);
         Ok(topic_id.to_string())
     }
 
-    pub async fn join_topic(&self, topic_id: &str) -> anyhow::Result<()> {
+    pub async fn join_topic(&mut self, topic_id: &str) -> anyhow::Result<()> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        client.lock().await.join_topic_from_string(topic_id).await?;
+        let topic_id = client.lock().await.join_topic_from_string(topic_id).await?;
+        let message_receiver = client.lock().await.listen(&topic_id).await?;
+        self.message_receivers
+            .insert(topic_id.to_string(), message_receiver);
         Ok(())
     }
 
