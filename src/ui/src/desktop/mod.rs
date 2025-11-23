@@ -60,7 +60,7 @@ pub mod desktop_web_components {
                             placeholder: "Search",
                             oninput: move |value| {
                                 search_query.set(value.value());
-                            },
+                            }
                         }
                     }
                     div { class: "desktop-column-contacts",
@@ -100,26 +100,18 @@ pub mod desktop_web_components {
                                         }
                                     }
                                 }
-
                             }
                         }
                     }
 
                     if let Some(topic) = show_topic_details() {
-                        ToastProvider {
-                            TopicDetails {
-                                topic: topic.clone(),
-                                toggle: show_topic_details
-                            }
+                        ToastProvider { 
+                            TopicDetails { topic: topic.clone(), toggle: show_topic_details }
                         }
                     }
 
                     if show_topic_dialog() {
-                        TopicDialog {
-                            toggle: show_topic_dialog,
-                            on_create: on_create_topic,
-                            on_join: on_join_topic,
-                        }
+                        TopicDialog { toggle: show_topic_dialog, on_create: on_create_topic, on_join: on_join_topic }
                     }
                 }
                 if let Some(topic_id) = selected_topic() {
@@ -182,12 +174,20 @@ pub mod desktop_web_components {
                     div { class: "topic-dialog-body",
                         div { class: "topic-mode-tabs",
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Create { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                class: if *selected_mode.read() == TopicCreationMode::Create {
+                                    "topic-mode-tab active"
+                                } else {
+                                    "topic-mode-tab"
+                                },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Create),
                                 "Create Topic"
                             }
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Join { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                class: if *selected_mode.read() == TopicCreationMode::Join {
+                                    "topic-mode-tab active"
+                                } else {
+                                    "topic-mode-tab"
+                                },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Join),
                                 "Join Topic"
                             }
@@ -204,8 +204,12 @@ pub mod desktop_web_components {
                                 class: "topic-input",
                                 r#type: "text",
                                 value: "{topic_name}",
-                                placeholder: if *selected_mode.read() == TopicCreationMode::Create { "Enter topic name..." } else { "Enter topic ID or paste invite link..." },
-                                oninput: move |e| topic_name.set(e.value()),
+                                placeholder: if *selected_mode.read() == TopicCreationMode::Create {
+                                    "Enter topic name..."
+                                } else {
+                                    "Enter topic ID or paste invite link..."
+                                },
+                                oninput: move |e| topic_name.set(e.value())
                             }
                         }
                         p { class: "topic-dialog-description",
@@ -264,7 +268,12 @@ pub mod desktop_web_components {
                 oncontextmenu: move |e| {
                     e.prevent_default();
                 },
-                img { class: "desktop-contact-avatar", src: "{avatar_url}", alt: "{contact.name}", draggable: "false" }
+                img {
+                    class: "desktop-contact-avatar",
+                    src: "{avatar_url}",
+                    alt: "{contact.name}",
+                    draggable: "false"
+                }
                 div { class: "desktop-contact-info",
                     h3 { class: "desktop-contact-name", "{contact.name}" }
                     p { class: "desktop-contact-last-message",
@@ -311,8 +320,15 @@ pub mod desktop_web_components {
             rsx! {
                 div { class: "desktop-chat-window",
                     div { class: "desktop-chat-header",
-                        img { class: "desktop-contact-avatar", src: "{avatar_url}" }
-                        h2 { class: "desktop-contact-name", "{topic_name}" }
+                        img {
+                            class: "desktop-contact-avatar",
+                            src: "{avatar_url}"
+                        }
+                        h2 {
+                            class: "desktop-contact-name",
+                            title: "{topic_name}",
+                            "{topic_name}"
+                        }
                     }
                     div { class: "desktop-chat-messages",
                         for message in messages.iter() {
@@ -327,7 +343,7 @@ pub mod desktop_web_components {
                             value: "{message_input()}",
                             oninput: move |e| {
                                 message_input.set(e.value());
-                            },
+                            }
                         }
                         button {
                             class: "desktop-chat-send-button",

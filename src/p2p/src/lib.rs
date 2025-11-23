@@ -1,4 +1,4 @@
-use futures_lite::{Stream, StreamExt};
+use futures_lite::StreamExt;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};

@@ -156,6 +156,13 @@ body {
     gap: 4px;
 }
 
+.desktop-chat-header .desktop-contact-name {
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .desktop-contact-name {
     margin: 0;
     font-size: clamp(14px, 2vw, 16px);

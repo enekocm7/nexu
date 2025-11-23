@@ -38,11 +38,12 @@ impl DesktopClient {
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let topic_id = client.lock().await.create_topic().await?;
-        let message_receiver = client.lock().await.listen(&topic_id.topic).await?;
+        let ticket = client.lock().await.create_topic().await?;
+        let message_receiver = client.lock().await.listen(&ticket.topic).await?;
+        let ticket_str = ticket.to_string();
         self.message_receivers
-            .insert(topic_id.to_string(), message_receiver);
-        Ok(topic_id.to_string())
+            .insert(ticket_str.clone(), message_receiver);
+        Ok(ticket_str)
     }
 
     pub async fn join_topic(&mut self, topic_id: &str) -> anyhow::Result<()> {
@@ -70,5 +71,11 @@ impl DesktopClient {
             .send_message(message, timestamp, &ticket.topic)
             .await?;
         Ok(())
+    }
+
+    pub fn get_message_receiver(
+        &mut self
+    ) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
+        &mut self.message_receivers
     }
 }
