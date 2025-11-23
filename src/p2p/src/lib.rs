@@ -42,6 +42,7 @@ impl Display for ChatMessage {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ticket {
     pub topic: TopicId,
+    pub name: String,
     pub endpoints: Vec<EndpointAddr>,
 }
 
@@ -184,13 +185,14 @@ impl ChatClient {
         self.endpoint.addr()
     }
 
-    pub async fn create_topic(&mut self) -> anyhow::Result<Ticket> {
+    pub async fn create_topic(&mut self, name: &str) -> anyhow::Result<Ticket> {
         let topic_id = TopicId::from_bytes(rand::random());
 
         self.subscribe(topic_id, vec![]).await?;
 
         let ticket = Ticket {
             topic: topic_id,
+            name: name.to_string(),
             endpoints: vec![self.endpoint.addr()],
         };
 
@@ -255,7 +257,10 @@ mod tests {
         let mut client = ChatClient::new()
             .await
             .expect("Failed to create chat client");
-        let ticket = client.create_topic().await.expect("Failed to create topic");
+        let ticket = client
+            .create_topic("test")
+            .await
+            .expect("Failed to create topic");
 
         assert!(client.gossip_sender.contains_key(&ticket.topic));
     }
@@ -267,7 +272,7 @@ mod tests {
         let mut client2 = ChatClient::new().await.expect("Failed to create client2");
 
         let ticket = client1
-            .create_topic()
+            .create_topic("test")
             .await
             .expect("Failed to create topic");
 
@@ -371,7 +376,7 @@ mod tests {
         let mut client3 = ChatClient::new().await.expect("Failed to create client3");
 
         let ticket = client1
-            .create_topic()
+            .create_topic("test")
             .await
             .expect("Failed to create topic");
 
