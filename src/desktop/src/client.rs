@@ -46,25 +46,32 @@ impl DesktopClient {
         Ok(ticket_str)
     }
 
-    pub async fn join_topic(&mut self, topic_id: &str) -> anyhow::Result<()> {
+    pub async fn join_topic(&mut self, ticket_str: &str) -> anyhow::Result<String> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let topic_id = client.lock().await.join_topic_from_string(topic_id).await?;
+
+        let ticket = Ticket::from_str(ticket_str)?;
+        let topic_id = client.lock().await.join_topic(ticket).await?;
+
         let message_receiver = client.lock().await.listen(&topic_id).await?;
+        
         self.message_receivers
-            .insert(topic_id.to_string(), message_receiver);
-        Ok(())
+            .insert(ticket_str.to_string(), message_receiver);
+
+        Ok(ticket_str.to_string())
     }
 
-    pub async fn send_message(&self, topic_id: &str, message: &str) -> anyhow::Result<()> {
+    pub async fn send_message(&self, ticket_str: &str, message: &str) -> anyhow::Result<()> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let ticket = Ticket::from_str(topic_id)?;
+
+        let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
+
         client
             .lock()
             .await

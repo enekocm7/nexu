@@ -90,9 +90,9 @@ fn App() -> Element {
             let join_result = client_ref.lock().await.join_topic(&topic_id).await;
 
             match join_result {
-                Ok(_) => {
+                Ok(ticket_str) => {
                     let mut state = cloned.write();
-                    let topic = Topic::new(topic_id.clone(), topic_id.to_string());
+                    let topic = Topic::new(ticket_str.clone(), ticket_str);
                     state.add_topic(topic);
                 }
                 Err(e) => eprintln!("Failed to join topic: {}", e),
