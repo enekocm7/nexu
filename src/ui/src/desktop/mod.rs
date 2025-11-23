@@ -369,6 +369,7 @@ pub mod desktop_web_components {
     fn ChatMessage(message: Message) -> Element {
         rsx! {
             div { class: if message.is_sent { "chat-message sent" } else { "chat-message received" },
+                p { class: "message-sender-id", "{message.sender_id}" }
                 p { class: "message-text", "{message.content}" }
                 p { class: "chat-message-timestamp", "10:30 AM" }
             }

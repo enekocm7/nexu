@@ -313,6 +313,26 @@ body {
     color: #ffffff;
 }
 
+.message-sender-id {
+    margin: 0 0 4px 0;
+    font-size: clamp(11px, 1.6vw, 12px);
+    font-weight: 500;
+    opacity: 0.8;
+    color: #e0e0e0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.chat-message.sent .message-sender-id {
+    display: none;
+}
+
+.chat-message.received .message-sender-id {
+    text-align: left;
+    color: #c0c0c0;
+}
+
 .message-text {
     margin: 0;
     font-size: clamp(14px, 2vw, 15px);
