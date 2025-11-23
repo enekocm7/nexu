@@ -157,7 +157,14 @@ body {
 }
 
 .desktop-chat-header .desktop-contact-name {
-    max-width: 250px;
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.topic-details-title {
+    max-width: 90%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
