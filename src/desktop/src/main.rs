@@ -5,6 +5,8 @@ use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
+use p2p::Ticket;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
@@ -63,13 +65,12 @@ fn App() -> Element {
         });
     });
 
-
     let on_create_topic = move |name: String| {
         let mut cloned = app_state.clone();
         let desktop_client_clone = desktop_client.clone();
         spawn(async move {
             let client_ref = desktop_client_clone.read().clone();
-            let topic_id_result = client_ref.lock().await.create_topic().await;
+            let topic_id_result = client_ref.lock().await.create_topic(&name).await;
 
             match topic_id_result {
                 Ok(topic_id) => {
@@ -92,7 +93,8 @@ fn App() -> Element {
             match join_result {
                 Ok(ticket_str) => {
                     let mut state = cloned.write();
-                    let topic = Topic::new(ticket_str.clone(), ticket_str);
+                    let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
+                    let topic = Topic::new(ticket_str.clone(), ticket.name);
                     state.add_topic(topic);
                 }
                 Err(e) => eprintln!("Failed to join topic: {}", e),
@@ -118,13 +120,7 @@ fn App() -> Element {
                 (Ok(_), Ok(peer_id)) => {
                     let mut state = cloned.write();
                     if let Some(topic) = state.get_topic(&topic_id) {
-                        let msg = Message::new(
-                            peer_id,
-                            topic_id,
-                            message,
-                            now,
-                            true,
-                        );
+                        let msg = Message::new(peer_id, topic_id, message, now, true);
                         topic.add_message(msg);
                     }
                 }

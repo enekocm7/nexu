@@ -33,12 +33,12 @@ impl DesktopClient {
         Ok(client.lock().await.peer_id().to_string())
     }
 
-    pub async fn create_topic(&mut self) -> anyhow::Result<String> {
+    pub async fn create_topic(&mut self, name: &str) -> anyhow::Result<String> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let ticket = client.lock().await.create_topic().await?;
+        let ticket = client.lock().await.create_topic(name).await?;
         let message_receiver = client.lock().await.listen(&ticket.topic).await?;
         let ticket_str = ticket.to_string();
         self.message_receivers
@@ -56,7 +56,7 @@ impl DesktopClient {
         let topic_id = client.lock().await.join_topic(ticket).await?;
 
         let message_receiver = client.lock().await.listen(&topic_id).await?;
-        
+
         self.message_receivers
             .insert(ticket_str.to_string(), message_receiver);
 
@@ -80,9 +80,7 @@ impl DesktopClient {
         Ok(())
     }
 
-    pub fn get_message_receiver(
-        &mut self
-    ) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
+    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
         &mut self.message_receivers
     }
 }
