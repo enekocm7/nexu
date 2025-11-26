@@ -1,4 +1,5 @@
 mod client;
+mod utils;
 
 use crate::client::DesktopClient;
 use dioxus::desktop::tao::dpi::LogicalSize;
@@ -41,6 +42,16 @@ fn App() -> Element {
                 return;
             }
 
+            if let Ok(loaded_topics) = utils::load_topics_from_file() {
+                for topic in loaded_topics {
+                    if let Err(e) = client_ref.lock().await.join_topic(topic.id.as_str()).await {
+                        eprintln!("Failed to join topic {}: {}", topic.id, e);
+                        continue;
+                    };
+                    state_clone.write().add_topic(topic);
+                }
+            }
+
             loop {
                 {
                     let mut client = client_ref.lock().await;
@@ -56,6 +67,11 @@ fn App() -> Element {
                                     false,
                                 );
                                 topic_obj.add_message(msg);
+
+                                if let Err(_) = utils::save_topics_to_file(&state.get_all_topics())
+                                {
+                                    eprintln!("Failed to save topics to file");
+                                }
                             }
                         }
                     }
@@ -77,6 +93,10 @@ fn App() -> Element {
                     let mut state = cloned.write();
                     let topic = Topic::new(topic_id.clone(), name);
                     state.add_topic(topic);
+
+                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                        eprintln!("Failed to save topics to file");
+                    }
                 }
                 Err(e) => eprintln!("Failed to create topic: {}", e),
             }
@@ -96,6 +116,10 @@ fn App() -> Element {
                     let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
                     let topic = Topic::new(ticket_str.clone(), ticket.name);
                     state.add_topic(topic);
+
+                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                        eprintln!("Failed to save topics to file");
+                    }
                 }
                 Err(e) => eprintln!("Failed to join topic: {}", e),
             }
@@ -139,6 +163,10 @@ fn App() -> Element {
                     if let Some(topic) = state.get_topic(&topic_id) {
                         let msg = Message::new(peer_id, topic_id, message, now, true);
                         topic.add_message(msg);
+
+                        if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                            eprintln!("Failed to save topics to file");
+                        }
                     }
                 }
                 (Err(e), _) => {
