@@ -29,7 +29,6 @@ pub mod desktop_web_components {
                 .read()
                 .get_all_topics()
                 .into_iter()
-                .cloned()
                 .collect::<Vec<_>>()
         });
 

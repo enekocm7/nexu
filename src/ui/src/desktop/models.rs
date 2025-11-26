@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use bitcode::{Decode, Encode};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Encode, Decode)]
 pub struct Topic {
     pub id: String,
     pub name: String,
@@ -78,12 +79,12 @@ impl AppState {
         self.topics.get(topic_id)
     }
 
-    pub fn get_all_topics(&self) -> Vec<&Topic> {
-        self.topics.values().collect()
+    pub fn get_all_topics(&self) -> Vec<Topic> {
+        self.topics.values().cloned().collect()
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Encode, Decode)]
 pub struct Message {
     pub sender_id: String,
     pub topic_id: String,
