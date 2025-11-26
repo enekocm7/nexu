@@ -137,6 +137,10 @@ fn App() -> Element {
                 Ok(_) => {
                     let mut state = cloned.write();
                     state.remove_topic(&topic_id);
+
+                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                        eprintln!("Failed to save topics to file");
+                    }
                 }
                 Err(e) => eprintln!("Failed to leave topic: {}", e),
             }
