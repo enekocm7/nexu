@@ -59,6 +59,15 @@ impl AppState {
         self.topics.insert(topic.id.clone(), topic);
     }
 
+    pub fn remove_topic(&mut self, topic_id: &str) {
+        self.topics.remove(topic_id);
+        if let Some(current_id) = &self.current_topic_id {
+            if current_id == topic_id {
+                self.current_topic_id = None;
+            }
+        }
+    }
+
     pub fn set_current_topic(&mut self, topic_id: String) {
         self.current_topic_id = Some(topic_id);
     }
@@ -93,7 +102,13 @@ pub struct Message {
 }
 
 impl Message {
-    pub fn new(sender_id: String, topic_id: String, content: String, timestamp: u64, is_sent: bool) -> Self {
+    pub fn new(
+        sender_id: String,
+        topic_id: String,
+        content: String,
+        timestamp: u64,
+        is_sent: bool,
+    ) -> Self {
         Self {
             sender_id,
             topic_id,

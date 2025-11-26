@@ -22,6 +22,7 @@ pub mod desktop_web_components {
         app_state: Signal<AppState>,
         on_create_topic: EventHandler<String>,
         on_join_topic: EventHandler<String>,
+        on_leave_topic: EventHandler<String>,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
         let contacts = use_memo(move || {
@@ -83,8 +84,11 @@ pub mod desktop_web_components {
                                                 ContextMenuItem { class: "context-menu-item",
                                                     value: "Open Chat".to_string(),
                                                     index: 0usize,
-                                                    on_select:  move |_| {
-                                                        selected_topic.set(Some(contact_id.clone()));
+                                                    on_select: {
+                                                        let contact_id = contact_id.clone();
+                                                        move |_| {
+                                                            selected_topic.set(Some(contact_id.clone()));
+                                                        }
                                                     },
                                                     "Open Chat"
                                                 }
@@ -96,6 +100,17 @@ pub mod desktop_web_components {
                                                     },
                                                     "Open Details"
                                                 }
+                                                ContextMenuItem { class: "context-menu-item context-menu-item-danger",
+                                                    value: "Leave Topic".to_string(),
+                                                    index: 2usize,
+                                                    on_select:  {
+                                                        let contact_id = contact_id.clone();
+                                                        move |_| {
+                                                            on_leave_topic.call(contact_id.clone())
+                                                        }
+                                                    },
+                                                    "Leave Topic"
+                                                }
                                             }
                                         }
                                     }
@@ -105,7 +120,7 @@ pub mod desktop_web_components {
                     }
 
                     if let Some(topic) = show_topic_details() {
-                        ToastProvider { 
+                        ToastProvider {
                             TopicDetails { topic: topic.clone(), toggle: show_topic_details }
                         }
                     }

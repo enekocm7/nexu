@@ -212,6 +212,12 @@ impl ChatClient {
         let ticket = Ticket::from_str(ticket_str)?;
         self.join_topic(ticket).await
     }
+
+    pub async fn leave_topic(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
+        self.gossip_sender.remove(topic_id);
+        self.gossip_receiver.remove(topic_id);
+        Ok(())
+    }
 }
 
 #[cfg(test)]

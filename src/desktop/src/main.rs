@@ -102,6 +102,23 @@ fn App() -> Element {
         });
     };
 
+    let on_leave_topic = move |topic_id: String| {
+        let mut cloned = app_state.clone();
+        let desktop_client_clone = desktop_client.clone();
+        spawn(async move {
+            let client_ref = desktop_client_clone.read().clone();
+            let leave_result = client_ref.lock().await.leave_topic(&topic_id).await;
+
+            match leave_result {
+                Ok(_) => {
+                    let mut state = cloned.write();
+                    state.remove_topic(&topic_id);
+                }
+                Err(e) => eprintln!("Failed to leave topic: {}", e),
+            }
+        });
+    };
+
     let on_send_message = move |(topic_id, message): (String, String)| {
         let mut cloned = app_state.clone();
         let now = chrono::Utc::now().timestamp_millis() as u64;
@@ -141,6 +158,7 @@ fn App() -> Element {
             app_state,
             on_create_topic,
             on_join_topic,
+            on_leave_topic,
             on_send_message
         }
     }

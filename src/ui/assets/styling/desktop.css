@@ -624,6 +624,10 @@ body {
     background-color: #eeeeee;
 }
 
+.context-menu-item-danger {
+    color: #d9534f;
+}
+
 .topic-details {
     background-color: #333333;
     border-radius: 16px;

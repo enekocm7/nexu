@@ -80,6 +80,20 @@ impl DesktopClient {
         Ok(())
     }
 
+    pub async fn leave_topic(&mut self, ticket_str: &str) -> anyhow::Result<()> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+
+        let ticket = Ticket::from_str(ticket_str)?;
+        client.lock().await.leave_topic(&ticket.topic).await?;
+
+        self.message_receivers.remove(ticket_str);
+
+        Ok(())
+    }
+
     pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
         &mut self.message_receivers
     }
