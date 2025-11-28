@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use bitcode::{Decode, Encode};
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, Encode, Decode)]
 pub struct Topic {
@@ -48,6 +48,12 @@ pub struct AppState {
     current_topic_id: Option<String>,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -58,6 +64,12 @@ impl AppState {
 
     pub fn add_topic(&mut self, topic: Topic) {
         self.topics.insert(topic.id.clone(), topic);
+    }
+
+    pub fn modify_topic_name(&mut self, topic_id: &str, new_name: &str) {
+        if let Some(topic) = self.topics.get_mut(topic_id) {
+            topic.name = new_name.to_string();
+        }
     }
 
     pub fn remove_topic(&mut self, topic_id: &str) {

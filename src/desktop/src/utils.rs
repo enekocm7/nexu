@@ -63,12 +63,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_file_path = temp_dir.path().join("test_topics.json");
 
-        let mut topics = vec![
+        let topics = vec![
             create_test_topic("topic1", "Topic One"),
             create_test_topic("topic2", "Topic Two"),
         ];
 
-        let save_result = save_topics_to_file_with_path(&mut topics, &test_file_path);
+        let save_result = save_topics_to_file_with_path(&topics, &test_file_path);
         assert!(save_result.is_ok(), "Failed to save topics");
 
         let load_result = load_topics_from_file_with_path(&test_file_path);
@@ -91,9 +91,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_file_path = temp_dir.path().join("test_topics_messages.json");
 
-        let mut topics = vec![create_test_topic_with_message("topic1", "Topic One")];
+        let topics = vec![create_test_topic_with_message("topic1", "Topic One")];
 
-        save_topics_to_file_with_path(&mut topics, &test_file_path).unwrap();
+        save_topics_to_file_with_path(&topics, &test_file_path).unwrap();
 
         let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
 
@@ -109,9 +109,9 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_file_path = temp_dir.path().join("empty_topics.json");
 
-        let mut topics: Vec<Topic> = Vec::new();
+        let topics: Vec<Topic> = Vec::new();
 
-        let save_result = save_topics_to_file_with_path(&mut topics, &test_file_path);
+        let save_result = save_topics_to_file_with_path(&topics, &test_file_path);
         assert!(save_result.is_ok(), "Failed to save empty topics");
 
         let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
@@ -133,9 +133,9 @@ mod tests {
     #[test]
     fn test_save_to_invalid_path() {
         let invalid_path = PathBuf::from("/nonexistent/directory/test.json");
-        let mut topics = vec![create_test_topic("topic1", "Topic One")];
+        let topics = vec![create_test_topic("topic1", "Topic One")];
 
-        let result = save_topics_to_file_with_path(&mut topics, &invalid_path);
+        let result = save_topics_to_file_with_path(&topics, &invalid_path);
         assert!(
             result.is_err(),
             "Expected error when saving to invalid path"
@@ -162,14 +162,14 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let test_file_path = temp_dir.path().join("overwrite_test.json");
 
-        let mut topics1 = vec![create_test_topic("topic1", "Topic One")];
-        save_topics_to_file_with_path(&mut topics1, &test_file_path).unwrap();
+        let topics1 = vec![create_test_topic("topic1", "Topic One")];
+        save_topics_to_file_with_path(&topics1, &test_file_path).unwrap();
 
-        let mut topics2 = vec![
+        let topics2 = vec![
             create_test_topic("topic2", "Topic Two"),
             create_test_topic("topic3", "Topic Three"),
         ];
-        save_topics_to_file_with_path(&mut topics2, &test_file_path).unwrap();
+        save_topics_to_file_with_path(&topics2, &test_file_path).unwrap();
 
         let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
         assert_eq!(loaded_topics.len(), 2, "Expected 2 topics after overwrite");
@@ -205,9 +205,9 @@ mod tests {
         );
         topic.add_message(message);
 
-        let mut topics = vec![topic];
+        let topics = vec![topic];
 
-        save_topics_to_file_with_path(&mut topics, &test_file_path).unwrap();
+        save_topics_to_file_with_path(&topics, &test_file_path).unwrap();
         let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
 
         let loaded_topic = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();

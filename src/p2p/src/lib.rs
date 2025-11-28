@@ -160,7 +160,7 @@ impl ChatClient {
     ) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
-            .get_mut(&topic_id)
+            .get_mut(topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
         let message = ChatMessage::new(self.id, content.to_owned(), timestamp);

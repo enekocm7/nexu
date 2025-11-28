@@ -30,12 +30,12 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let app_state = use_signal(|| AppState::new());
+    let app_state = use_signal(AppState::new);
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     use_effect(move || {
         let client_ref = desktop_client.read().clone();
-        let mut state_clone = app_state.clone();
+        let mut state_clone = app_state;
         spawn(async move {
             if let Err(e) = client_ref.lock().await.initialize().await {
                 eprintln!("Failed to initialize DesktopClient: {}", e);
@@ -58,7 +58,7 @@ fn App() -> Element {
                     let mut state = state_clone.write();
                     for (topic, receiver) in client.get_message_receiver() {
                         while let Ok(message) = receiver.try_recv() {
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic(topic) {
                                 let msg = Message::new(
                                     message.sender.to_string(),
                                     topic.clone(),
@@ -68,8 +68,7 @@ fn App() -> Element {
                                 );
                                 topic_obj.add_message(msg);
 
-                                if let Err(_) = utils::save_topics_to_file(&state.get_all_topics())
-                                {
+                                if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                                     eprintln!("Failed to save topics to file");
                                 }
                             }
@@ -82,8 +81,8 @@ fn App() -> Element {
     });
 
     let on_create_topic = move |name: String| {
-        let mut cloned = app_state.clone();
-        let desktop_client_clone = desktop_client.clone();
+        let mut cloned = app_state;
+        let desktop_client_clone = desktop_client;
         spawn(async move {
             let client_ref = desktop_client_clone.read().clone();
             let topic_id_result = client_ref.lock().await.create_topic(&name).await;
@@ -94,7 +93,7 @@ fn App() -> Element {
                     let topic = Topic::new(topic_id.clone(), name);
                     state.add_topic(topic);
 
-                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
                     }
                 }
@@ -104,8 +103,8 @@ fn App() -> Element {
     };
 
     let on_join_topic = move |topic_id: String| {
-        let mut cloned = app_state.clone();
-        let desktop_client_clone = desktop_client.clone();
+        let mut cloned = app_state;
+        let desktop_client_clone = desktop_client;
         spawn(async move {
             let client_ref = desktop_client_clone.read().clone();
             let join_result = client_ref.lock().await.join_topic(&topic_id).await;
@@ -117,7 +116,7 @@ fn App() -> Element {
                     let topic = Topic::new(ticket_str.clone(), ticket.name);
                     state.add_topic(topic);
 
-                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
                     }
                 }
@@ -127,8 +126,8 @@ fn App() -> Element {
     };
 
     let on_leave_topic = move |topic_id: String| {
-        let mut cloned = app_state.clone();
-        let desktop_client_clone = desktop_client.clone();
+        let mut cloned = app_state;
+        let desktop_client_clone = desktop_client;
         spawn(async move {
             let client_ref = desktop_client_clone.read().clone();
             let leave_result = client_ref.lock().await.leave_topic(&topic_id).await;
@@ -138,7 +137,7 @@ fn App() -> Element {
                     let mut state = cloned.write();
                     state.remove_topic(&topic_id);
 
-                    if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
                     }
                 }
@@ -147,10 +146,21 @@ fn App() -> Element {
         });
     };
 
+    let on_modify_topic = move |topic: Topic| {
+        let mut cloned = app_state;
+        spawn(async move {
+            let mut state = cloned.write();
+            state.modify_topic_name(&topic.id, &topic.name);
+            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                eprintln!("Failed to save topics to file");
+            }
+        });
+    };
+
     let on_send_message = move |(topic_id, message): (String, String)| {
-        let mut cloned = app_state.clone();
+        let mut cloned = app_state;
         let now = chrono::Utc::now().timestamp_millis() as u64;
-        let desktop_client_clone = desktop_client.clone();
+        let desktop_client_clone = desktop_client;
         spawn(async move {
             let client_ref = desktop_client_clone.read().clone();
 
@@ -168,7 +178,7 @@ fn App() -> Element {
                         let msg = Message::new(peer_id, topic_id, message, now, true);
                         topic.add_message(msg);
 
-                        if let Err(_) = utils::save_topics_to_file(&state.get_all_topics()) {
+                        if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                             eprintln!("Failed to save topics to file");
                         }
                     }
@@ -191,7 +201,8 @@ fn App() -> Element {
             on_create_topic,
             on_join_topic,
             on_leave_topic,
-            on_send_message
+            on_send_message,
+            on_modify_topic
         }
     }
 }
