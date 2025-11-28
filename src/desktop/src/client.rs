@@ -39,7 +39,7 @@ impl DesktopClient {
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
         let ticket = client.lock().await.create_topic(name).await?;
-        let message_receiver = client.lock().await.listen(&ticket.topic).await?;
+        let message_receiver = client.lock().await.listen(&ticket.topic)?;
         let ticket_str = ticket.to_string();
         self.message_receivers
             .insert(ticket_str.clone(), message_receiver);
@@ -55,7 +55,7 @@ impl DesktopClient {
         let ticket = Ticket::from_str(ticket_str)?;
         let topic_id = client.lock().await.join_topic(ticket).await?;
 
-        let message_receiver = client.lock().await.listen(&topic_id).await?;
+        let message_receiver = client.lock().await.listen(&topic_id)?;
 
         self.message_receivers
             .insert(ticket_str.to_string(), message_receiver);

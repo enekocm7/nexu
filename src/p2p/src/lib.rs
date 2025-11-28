@@ -103,10 +103,7 @@ impl ChatClient {
         })
     }
 
-    pub async fn listen(
-        &mut self,
-        topic_id: &TopicId,
-    ) -> anyhow::Result<UnboundedReceiver<ChatMessage>> {
+    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<ChatMessage>> {
         let mut receiver = self
             .gossip_receiver
             .remove(topic_id)
