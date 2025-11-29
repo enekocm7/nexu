@@ -1,5 +1,5 @@
 use dioxus::core::anyhow;
-use p2p::{ChatClient, ChatMessage, Ticket};
+use p2p::{ChatClient, ChatMessage, Message, Ticket};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -71,12 +71,14 @@ impl DesktopClient {
 
         let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
+        let message = ChatMessage::new(
+            *client.lock().await.peer_id(),
+            message.to_string(),
+            timestamp,
+            ticket.topic,
+        );
 
-        client
-            .lock()
-            .await
-            .send_message(message, timestamp, &ticket.topic)
-            .await?;
+        client.lock().await.send(Message::Chat(message)).await?;
         Ok(())
     }
 
