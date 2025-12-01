@@ -79,7 +79,7 @@ pub mod desktop_web_components {
                                         rsx!{
                                             ContextMenu{
                                                 ContextMenuTrigger {
-                                                    TopicItem { contact: Signal::new(contact.clone()), on_select: selected_topic }
+                                                    TopicItem { contact: Signal::new(contact), on_select: selected_topic }
                                                 }
                                                 ContextMenuContent { class: "context-menu-content",
                                                     ContextMenuItem { class: "context-menu-item",
