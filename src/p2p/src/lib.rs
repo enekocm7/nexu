@@ -27,10 +27,21 @@ pub struct ChatMessage {
     pub timestamp: u64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UpdateTopicMessage {
     pub topic: TopicId,
     pub name: String,
     pub avatar_url: Option<String>,
+}
+
+impl UpdateTopicMessage {
+    pub fn new(topic: TopicId, name: String, avatar_url: Option<String>) -> Self {
+        UpdateTopicMessage {
+            topic,
+            name,
+            avatar_url,
+        }
+    }
 }
 
 impl ChatMessage {
@@ -118,13 +129,13 @@ impl ChatClient {
         })
     }
 
-    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<ChatMessage>> {
+    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<Message>> {
         let mut receiver = self
             .gossip_receiver
             .remove(topic_id)
             .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
 
-        let (tx, rx) = unbounded_channel();
+        let (tx, rx) = unbounded_channel::<Message>();
 
         tokio::spawn(async move {
             loop {
@@ -134,9 +145,13 @@ impl ChatClient {
                         if let Ok(chat_message) =
                             serde_json::from_slice::<ChatMessage>(&msg.content)
                         {
-                            if tx.send(chat_message).is_err() {
-                                break;
-                            }
+                            tx.send(Message::Chat(chat_message))
+                                .expect("Failed to send message");
+                        } else if let Ok(update_topic_message) =
+                            serde_json::from_slice::<UpdateTopicMessage>(&msg.content)
+                        {
+                            tx.send(Message::UpdateTopic(update_topic_message))
+                                .expect("Failed to send update topic message");
                         }
                     }
                     Some(Ok(Event::NeighborUp(_))) => continue,
@@ -194,7 +209,13 @@ impl ChatClient {
     }
 
     async fn send_topic_update(&mut self, message: UpdateTopicMessage) -> anyhow::Result<()> {
-        // Implementation for sending topic update messages can be added here.
+        let sender = self
+            .gossip_sender
+            .get_mut(&message.topic)
+            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
+
+        let serialized = serde_json::to_vec(&message)?;
+        sender.broadcast(serialized.into()).await?;
         Ok(())
     }
 

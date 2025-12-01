@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, OnceCell};
 
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
-    message_receivers: HashMap<String, UnboundedReceiver<ChatMessage>>,
+    message_receivers: HashMap<String, UnboundedReceiver<Message>>,
 }
 
 impl DesktopClient {
@@ -63,6 +63,36 @@ impl DesktopClient {
         Ok(ticket_str.to_string())
     }
 
+    pub async fn send(&self, message: Message) -> anyhow::Result<()> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+
+        match message {
+            Message::Chat(chat_msg) => {
+                client.lock().await.send(Message::Chat(chat_msg)).await?;
+                Ok(())
+            }
+            Message::UpdateTopic(update_msg) => {
+                client
+                    .lock()
+                    .await
+                    .send(Message::UpdateTopic(update_msg))
+                    .await?;
+                Ok(())
+            }
+            Message::JoinTopic => {
+                client.lock().await.send(Message::JoinTopic).await?;
+                Ok(())
+            }
+            Message::LeaveTopic => {
+                client.lock().await.send(Message::LeaveTopic).await?;
+                Ok(())
+            }
+        }
+    }
+
     pub async fn send_message(&self, ticket_str: &str, message: &str) -> anyhow::Result<()> {
         let client = self
             .client
@@ -96,7 +126,7 @@ impl DesktopClient {
         Ok(())
     }
 
-    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
+    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<Message>> {
         &mut self.message_receivers
     }
 }
