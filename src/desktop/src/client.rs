@@ -93,7 +93,11 @@ impl DesktopClient {
         }
     }
 
-    pub async fn send_message(&self, ticket_str: &str, message: &str) -> anyhow::Result<()> {
+    pub async fn get_chat_message(
+        &self,
+        ticket_str: &str,
+        message: &str,
+    ) -> anyhow::Result<ChatMessage> {
         let client = self
             .client
             .get()
@@ -107,9 +111,7 @@ impl DesktopClient {
             timestamp,
             ticket.topic,
         );
-
-        client.lock().await.send(Message::Chat(message)).await?;
-        Ok(())
+        Ok(message)
     }
 
     pub async fn leave_topic(&mut self, ticket_str: &str) -> anyhow::Result<()> {

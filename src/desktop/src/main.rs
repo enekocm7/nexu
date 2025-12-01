@@ -128,7 +128,11 @@ fn App() -> Element {
             let client_ref = desktop_client.read().clone();
             let (send_result, peer_id_result) = {
                 let client = client_ref.lock().await;
-                let send = client.send_message(&ticket_id, &message).await;
+                let message = client
+                    .get_chat_message(&ticket_id, &message)
+                    .await
+                    .expect("Failed to create chat message");
+                let send = client.send(Message::Chat(message)).await;
                 let peer = client.peer_id().await;
                 (send, peer)
             };
