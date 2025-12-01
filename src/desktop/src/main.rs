@@ -30,20 +30,18 @@ fn main() {
 
 #[component]
 fn App() -> Element {
-    let app_state = use_signal(AppState::new);
+    let mut app_state = use_signal(AppState::new);
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     let on_modify_topic = move |topic: Topic| {
-        let mut cloned = app_state;
-        let desktop_client_clone = desktop_client;
         spawn(async move {
-            let mut state = cloned.write();
+            let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
-            let client_ref = desktop_client_clone.read().clone();
             let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
             let update_message =
                 UpdateTopicMessage::new(ticket.topic, topic.name, topic.avatar_url);
-            if let Err(e) = client_ref
+            if let Err(e) = desktop_client
+                .read()
                 .lock()
                 .await
                 .send(Message::UpdateTopic(update_message))
@@ -58,15 +56,12 @@ fn App() -> Element {
     };
 
     let on_create_topic = move |name: String| {
-        let mut cloned = app_state;
-        let desktop_client_clone = desktop_client;
         spawn(async move {
-            let client_ref = desktop_client_clone.read().clone();
-            let topic_id_result = client_ref.lock().await.create_topic(&name).await;
+            let topic_id_result = desktop_client.read().lock().await.create_topic(&name).await;
 
             match topic_id_result {
                 Ok(topic_id) => {
-                    let mut state = cloned.write();
+                    let mut state = app_state.write();
                     let topic = Topic::new(topic_id.clone(), name);
                     state.add_topic(topic);
 
@@ -80,15 +75,17 @@ fn App() -> Element {
     };
 
     let on_join_topic = move |topic_id: String| {
-        let mut cloned = app_state;
-        let desktop_client_clone = desktop_client;
         spawn(async move {
-            let client_ref = desktop_client_clone.read().clone();
-            let join_result = client_ref.lock().await.join_topic(&topic_id).await;
+            let join_result = desktop_client
+                .read()
+                .lock()
+                .await
+                .join_topic(&topic_id)
+                .await;
 
             match join_result {
                 Ok(ticket_str) => {
-                    let mut state = cloned.write();
+                    let mut state = app_state.write();
                     let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
                     let topic = Topic::new(ticket_str.clone(), ticket.name);
                     state.add_topic(topic);
@@ -103,15 +100,17 @@ fn App() -> Element {
     };
 
     let on_leave_topic = move |topic_id: String| {
-        let mut cloned = app_state;
-        let desktop_client_clone = desktop_client;
         spawn(async move {
-            let client_ref = desktop_client_clone.read().clone();
-            let leave_result = client_ref.lock().await.leave_topic(&topic_id).await;
+            let leave_result = desktop_client
+                .read()
+                .lock()
+                .await
+                .leave_topic(&topic_id)
+                .await;
 
             match leave_result {
                 Ok(_) => {
-                    let mut state = cloned.write();
+                    let mut state = app_state.write();
                     state.remove_topic(&topic_id);
 
                     if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -124,12 +123,9 @@ fn App() -> Element {
     };
 
     let on_send_message = move |(ticket_id, message): (String, String)| {
-        let mut cloned = app_state;
         let now = chrono::Utc::now().timestamp_millis() as u64;
-        let desktop_client_clone = desktop_client;
         spawn(async move {
-            let client_ref = desktop_client_clone.read().clone();
-
+            let client_ref = desktop_client.read().clone();
             let (send_result, peer_id_result) = {
                 let client = client_ref.lock().await;
                 let send = client.send_message(&ticket_id, &message).await;
@@ -139,7 +135,7 @@ fn App() -> Element {
 
             match (send_result, peer_id_result) {
                 (Ok(_), Ok(peer_id)) => {
-                    let mut state = cloned.write();
+                    let mut state = app_state.write();
                     if let Some(topic) = state.get_topic(&ticket_id) {
                         let msg = ui::desktop::models::Message::new(
                             peer_id, ticket_id, message, now, true,
@@ -163,7 +159,6 @@ fn App() -> Element {
 
     use_effect(move || {
         let client_ref = desktop_client.read().clone();
-        let mut state_clone = app_state;
         spawn(async move {
             if let Err(e) = client_ref.lock().await.initialize().await {
                 eprintln!("Failed to initialize DesktopClient: {}", e);
@@ -176,14 +171,14 @@ fn App() -> Element {
                         eprintln!("Failed to join topic {}: {}", topic.id, e);
                         continue;
                     };
-                    state_clone.write().add_topic(topic);
+                    app_state.write().add_topic(topic);
                 }
             }
 
             loop {
                 {
                     let mut client = client_ref.lock().await;
-                    let mut state = state_clone.write();
+                    let mut state = app_state.write();
                     for (topic, receiver) in client.get_message_receiver() {
                         while let Ok(message) = receiver.try_recv() {
                             if let Some(topic_obj) = state.get_topic(topic) {
