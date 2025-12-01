@@ -12,19 +12,45 @@ use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tokio::time::sleep;
 
+pub enum Message {
+    Chat(ChatMessage),
+    UpdateTopic(UpdateTopicMessage),
+    JoinTopic,
+    LeaveTopic,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub sender: EndpointId,
+    pub topic_id: TopicId,
     pub content: String,
     pub timestamp: u64,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UpdateTopicMessage {
+    pub topic: TopicId,
+    pub name: String,
+    pub avatar_url: Option<String>,
+}
+
+impl UpdateTopicMessage {
+    pub fn new(topic: TopicId, name: String, avatar_url: Option<String>) -> Self {
+        UpdateTopicMessage {
+            topic,
+            name,
+            avatar_url,
+        }
+    }
+}
+
 impl ChatMessage {
-    pub fn new(sender: EndpointId, content: String, timestamp: u64) -> Self {
+    pub fn new(sender: EndpointId, content: String, timestamp: u64, topic_id: TopicId) -> Self {
         ChatMessage {
             sender,
             content,
             timestamp,
+            topic_id,
         }
     }
 }
@@ -103,13 +129,13 @@ impl ChatClient {
         })
     }
 
-    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<ChatMessage>> {
+    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<Message>> {
         let mut receiver = self
             .gossip_receiver
             .remove(topic_id)
             .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
 
-        let (tx, rx) = unbounded_channel();
+        let (tx, rx) = unbounded_channel::<Message>();
 
         tokio::spawn(async move {
             loop {
@@ -119,9 +145,13 @@ impl ChatClient {
                         if let Ok(chat_message) =
                             serde_json::from_slice::<ChatMessage>(&msg.content)
                         {
-                            if tx.send(chat_message).is_err() {
-                                break;
-                            }
+                            tx.send(Message::Chat(chat_message))
+                                .expect("Failed to send message");
+                        } else if let Ok(update_topic_message) =
+                            serde_json::from_slice::<UpdateTopicMessage>(&msg.content)
+                        {
+                            tx.send(Message::UpdateTopic(update_topic_message))
+                                .expect("Failed to send update topic message");
                         }
                     }
                     Some(Ok(Event::NeighborUp(_))) => continue,
@@ -152,21 +182,40 @@ impl ChatClient {
         Ok(())
     }
 
-    pub async fn send_message(
-        &mut self,
-        content: &str,
-        timestamp: u64,
-        topic_id: &TopicId,
-    ) -> anyhow::Result<()> {
+    pub async fn send(&mut self, message: Message) -> anyhow::Result<()> {
+        match message {
+            Message::Chat(chat_message) => {
+                self.send_message(chat_message).await?;
+            }
+            Message::UpdateTopic(update_topic_message) => {
+                self.send_topic_update(update_topic_message).await?;
+            }
+            Message::JoinTopic => {}
+            Message::LeaveTopic => {}
+        }
+        Ok(())
+    }
+
+    async fn send_message(&mut self, message: ChatMessage) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
-            .get_mut(&topic_id)
+            .get_mut(&message.topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
-        let message = ChatMessage::new(self.id, content.to_owned(), timestamp);
         let serialized = serde_json::to_vec(&message)?;
         sender.broadcast(serialized.into()).await?;
 
+        Ok(())
+    }
+
+    async fn send_topic_update(&mut self, message: UpdateTopicMessage) -> anyhow::Result<()> {
+        let sender = self
+            .gossip_sender
+            .get_mut(&message.topic)
+            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
+
+        let serialized = serde_json::to_vec(&message)?;
+        sender.broadcast(serialized.into()).await?;
         Ok(())
     }
 
@@ -232,8 +281,12 @@ mod tests {
             .await
             .expect("Failed to create endpoint");
 
-        let original_message =
-            ChatMessage::new(endpoint.id(), "Hello, world!".to_string(), 1625247600000);
+        let original_message = ChatMessage::new(
+            endpoint.id(),
+            "Hello, world!".to_string(),
+            1625247600000,
+            TopicId::from_bytes(rand::random()),
+        );
 
         let serialized =
             serde_json::to_vec(&original_message).expect("Failed to serialize chat message");
@@ -294,7 +347,12 @@ mod tests {
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send_message(message1, timestamp1, &ticket.topic)
+            .send(Message::Chat(ChatMessage::new(
+                client1_id,
+                message1.to_string(),
+                timestamp1,
+                ticket.topic,
+            )))
             .await
             .expect("Failed to send message from client1");
 
@@ -303,7 +361,12 @@ mod tests {
         let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send_message(message2, timestamp2, &ticket.topic)
+            .send(Message::Chat(ChatMessage::new(
+                client2_id,
+                message2.to_string(),
+                timestamp2,
+                ticket.topic,
+            )))
             .await
             .expect("Failed to send message from client2");
 
@@ -402,21 +465,36 @@ mod tests {
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send_message(message1, timestamp1, &ticket.topic)
+            .send(Message::Chat(ChatMessage::new(
+                client1_id,
+                message1.to_string(),
+                timestamp1,
+                ticket.topic,
+            )))
             .await
             .expect("Failed to send message from client1");
 
         let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send_message(message2, timestamp2, &ticket.topic)
+            .send(Message::Chat(ChatMessage::new(
+                client2_id,
+                message2.to_string(),
+                timestamp2,
+                ticket.topic,
+            )))
             .await
             .expect("Failed to send message from client2");
 
         let message3 = "Hello from client3";
         let timestamp3 = 1625247600002;
         client3
-            .send_message(message3, timestamp3, &ticket.topic)
+            .send(Message::Chat(ChatMessage::new(
+                client3_id,
+                message3.to_string(),
+                timestamp3,
+                ticket.topic,
+            )))
             .await
             .expect("Failed to send message from client3");
 

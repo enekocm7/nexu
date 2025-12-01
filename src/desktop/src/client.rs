@@ -1,5 +1,5 @@
 use dioxus::core::anyhow;
-use p2p::{ChatClient, ChatMessage, Ticket};
+use p2p::{ChatClient, ChatMessage, Message, Ticket};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, OnceCell};
 
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
-    message_receivers: HashMap<String, UnboundedReceiver<ChatMessage>>,
+    message_receivers: HashMap<String, UnboundedReceiver<Message>>,
 }
 
 impl DesktopClient {
@@ -63,7 +63,41 @@ impl DesktopClient {
         Ok(ticket_str.to_string())
     }
 
-    pub async fn send_message(&self, ticket_str: &str, message: &str) -> anyhow::Result<()> {
+    pub async fn send(&self, message: Message) -> anyhow::Result<()> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+
+        match message {
+            Message::Chat(chat_msg) => {
+                client.lock().await.send(Message::Chat(chat_msg)).await?;
+                Ok(())
+            }
+            Message::UpdateTopic(update_msg) => {
+                client
+                    .lock()
+                    .await
+                    .send(Message::UpdateTopic(update_msg))
+                    .await?;
+                Ok(())
+            }
+            Message::JoinTopic => {
+                client.lock().await.send(Message::JoinTopic).await?;
+                Ok(())
+            }
+            Message::LeaveTopic => {
+                client.lock().await.send(Message::LeaveTopic).await?;
+                Ok(())
+            }
+        }
+    }
+
+    pub async fn get_chat_message(
+        &self,
+        ticket_str: &str,
+        message: &str,
+    ) -> anyhow::Result<ChatMessage> {
         let client = self
             .client
             .get()
@@ -71,13 +105,13 @@ impl DesktopClient {
 
         let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
-
-        client
-            .lock()
-            .await
-            .send_message(message, timestamp, &ticket.topic)
-            .await?;
-        Ok(())
+        let message = ChatMessage::new(
+            *client.lock().await.peer_id(),
+            message.to_string(),
+            timestamp,
+            ticket.topic,
+        );
+        Ok(message)
     }
 
     pub async fn leave_topic(&mut self, ticket_str: &str) -> anyhow::Result<()> {
@@ -94,7 +128,7 @@ impl DesktopClient {
         Ok(())
     }
 
-    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<ChatMessage>> {
+    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<Message>> {
         &mut self.message_receivers
     }
 }
