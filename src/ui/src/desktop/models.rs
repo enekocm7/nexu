@@ -12,11 +12,11 @@ pub struct Topic {
 }
 
 impl Topic {
-    pub fn new(id: String, name: String) -> Self {
+    pub fn new(id: String, name: String, avatar_url: Option<String>) -> Self {
         Self {
             id,
             name,
-            avatar_url: None,
+            avatar_url,
             last_connection: None,
             last_message: None,
             messages: Vec::new(),
@@ -72,12 +72,18 @@ impl AppState {
         }
     }
 
+    pub fn modify_topic_avatar(&mut self, topic_id: &str, avatar_url: Option<String>) {
+        if let Some(topic) = self.topics.get_mut(topic_id) {
+            topic.avatar_url = avatar_url;
+        }
+    }
+
     pub fn remove_topic(&mut self, topic_id: &str) {
         self.topics.remove(topic_id);
-        if let Some(current_id) = &self.current_topic_id {
-            if current_id == topic_id {
-                self.current_topic_id = None;
-            }
+        if let Some(current_id) = &self.current_topic_id
+            && current_id == topic_id
+        {
+            self.current_topic_id = None;
         }
     }
 

@@ -5,12 +5,14 @@ pub mod desktop_web_components {
     use crate::components::toast::ToastProvider;
     use crate::desktop::models::{AppState, Message, Topic, TopicCreationMode};
     use arboard::Clipboard;
+    use base64::Engine;
+    use base64::prelude::BASE64_STANDARD;
     use chrono::{DateTime, TimeDelta, Utc};
     use dioxus::prelude::*;
     use dioxus_primitives::context_menu::{
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
     };
-    use dioxus_primitives::toast::{use_toast, ToastOptions};
+    use dioxus_primitives::toast::{ToastOptions, use_toast};
 
     static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
@@ -262,7 +264,9 @@ pub mod desktop_web_components {
     #[component]
     fn TopicItem(contact: Signal<Topic>, on_select: Signal<Option<String>>) -> Element {
         let topic = contact.read().clone();
-        let avatar_url = if let Some(url) = &topic.avatar_url {
+        let avatar_url = if let Some(url) = &topic.avatar_url
+            && !url.is_empty()
+        {
             url.clone()
         } else {
             DEFAULT_AVATAR.to_string()
@@ -441,6 +445,50 @@ pub mod desktop_web_components {
             toggle.set(None);
         };
 
+        let topic_clone_for_image = topic.clone();
+        let handle_image_change = move |event: Event<FormData>| {
+            let files = event.files();
+            if let Some(file) = files.first() {
+                let file = file.clone();
+                let topic_clone = topic_clone_for_image.clone();
+                spawn(async move {
+                    match file.read_bytes().await {
+                        Ok(bytes) => {
+                            let base64 = BASE64_STANDARD.encode(&bytes);
+                            let url =
+                                format!("data:{};base64,{}", file.content_type().unwrap(), base64);
+
+                            let mut updated_topic = topic_clone.clone();
+                            updated_topic.avatar_url = Some(url);
+                            on_modify_topic.call(updated_topic);
+                            toggle.set(None);
+
+                            toast.success(
+                                "Topic avatar updated successfully".to_owned(),
+                                ToastOptions::default(),
+                            );
+                        }
+                        Err(e) => {
+                            toast.error(
+                                format!("Failed to read file: {}", e),
+                                ToastOptions::default(),
+                            );
+                        }
+                    }
+                });
+            } else {
+                toast.error("No file selected.".to_owned(), ToastOptions::default());
+            }
+        };
+
+        let avatar_url = if let Some(url) = &topic.avatar_url
+            && !url.is_empty()
+        {
+            url.clone()
+        } else {
+            DEFAULT_AVATAR.to_string()
+        };
+
         rsx! {
             div {
                 class: "topic-details-overlay",
@@ -449,6 +497,14 @@ pub mod desktop_web_components {
                     class: "topic-details",
                     onclick: move |e| e.stop_propagation(),
                     div { class: "topic-details-header",
+                        label { class: "topic-details-image-wrapper",
+                            img { class: "topic-details-image", src: avatar_url }
+                            input {
+                                r#type: "file",
+                                style: "display: none;",
+                                onchange: handle_image_change
+                            }
+                        }
                         input {
                             class: "topic-details-title",
                             r#type: "text",

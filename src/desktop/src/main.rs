@@ -37,6 +37,7 @@ fn App() -> Element {
         spawn(async move {
             let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
+            state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
             let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
             let update_message =
                 UpdateTopicMessage::new(ticket.topic, topic.name, topic.avatar_url);
@@ -58,11 +59,10 @@ fn App() -> Element {
     let on_create_topic = move |name: String| {
         spawn(async move {
             let topic_id_result = desktop_client.read().lock().await.create_topic(&name).await;
-
             match topic_id_result {
                 Ok(topic_id) => {
                     let mut state = app_state.write();
-                    let topic = Topic::new(topic_id.clone(), name);
+                    let topic = Topic::new(topic_id.clone(), name, None);
                     state.add_topic(topic);
 
                     if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -87,7 +87,7 @@ fn App() -> Element {
                 Ok(ticket_str) => {
                     let mut state = app_state.write();
                     let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-                    let topic = Topic::new(ticket_str.clone(), ticket.name);
+                    let topic = Topic::new(ticket_str.clone(), ticket.name, None);
                     state.add_topic(topic);
 
                     if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -198,7 +198,11 @@ fn App() -> Element {
                                         topic_obj.add_message(msg);
                                     }
                                     Message::UpdateTopic(update_message) => {
-                                        let topic = Topic::new(topic.clone(), update_message.name);
+                                        let topic = Topic::new(
+                                            topic.clone(),
+                                            update_message.name,
+                                            update_message.avatar_url,
+                                        );
                                         on_modify_topic(topic);
                                     }
                                     Message::JoinTopic => {}

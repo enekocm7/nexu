@@ -7,7 +7,7 @@ const TOPICS_FILE_PATH: &str = "topics_data.bin";
 
 pub fn save_topics_to_file(topics: &Vec<Topic>) -> io::Result<()> {
     let path = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .unwrap_or_else(|| PathBuf::from("."))
         .join(TOPICS_DIR_NAME)
         .join(TOPICS_FILE_PATH);
     fs::create_dir_all(path.parent().unwrap())?;
@@ -22,7 +22,7 @@ pub fn save_topics_to_file_with_path(topics: &Vec<Topic>, path: &PathBuf) -> io:
 
 pub fn load_topics_from_file() -> io::Result<Vec<Topic>> {
     let path = dirs::data_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
+        .unwrap_or_else(|| PathBuf::from("."))
         .join(TOPICS_DIR_NAME)
         .join(TOPICS_FILE_PATH);
     println!("Loading topics from file, path: {:?}", path);
@@ -42,7 +42,7 @@ mod tests {
     use ui::desktop::models::{Message, Topic};
 
     fn create_test_topic(id: &str, name: &str) -> Topic {
-        Topic::new(id.to_string(), name.to_string())
+        Topic::new(id.to_string(), name.to_string(), None)
     }
 
     fn create_test_topic_with_message(id: &str, name: &str) -> Topic {
