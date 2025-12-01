@@ -65,7 +65,7 @@ pub mod desktop_web_components {
                                     .into_iter()
                                     .collect::<Vec<Topic>>();
                                 contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-
+                            
                                 contacts
                                     .into_iter()
                                     .filter(|contact| {
@@ -119,7 +119,7 @@ pub mod desktop_web_components {
                     }
 
                     if let Some(topic) = show_topic_details() {
-                        ToastProvider {
+                        ToastProvider { 
                             TopicDetails { topic: topic.clone(), toggle: show_topic_details, on_modify_topic }
                         }
                     }
@@ -320,7 +320,7 @@ pub mod desktop_web_components {
 
             let mut message_input = use_signal(String::new);
 
-            let mut handle_send_message = {
+            let send_message = use_callback({
                 let topic_id = topic_id.clone();
                 move |_| {
                     let content = message_input().trim().to_string();
@@ -329,7 +329,7 @@ pub mod desktop_web_components {
                         message_input.set(String::new());
                     }
                 }
-            };
+            });
 
             rsx! {
                 div { class: "desktop-chat-window",
@@ -357,13 +357,17 @@ pub mod desktop_web_components {
                             value: "{message_input()}",
                             oninput: move |e| {
                                 message_input.set(e.value());
+                            },
+                            onkeypress: move |e| {
+                                if e.key() == Key::Enter {
+                                    send_message(());
+                                }
                             }
                         }
                         button {
                             class: "desktop-chat-send-button",
                             onclick: move |_| {
-                                handle_send_message(());
-                                message_input.set(String::new())
+                                send_message(());
                             },
                             "Send"
                         }
