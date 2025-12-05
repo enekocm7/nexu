@@ -2,21 +2,22 @@ use futures_lite::StreamExt;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
-use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
+use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
+use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 use tokio::time::sleep;
 
 pub enum Message {
     Chat(ChatMessage),
-    UpdateTopic(UpdateTopicMessage),
     JoinTopic,
     LeaveTopic,
+    TopicMetadata(TopicMetadataMessage),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -28,17 +29,26 @@ pub struct ChatMessage {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UpdateTopicMessage {
+pub struct TopicMetadataMessage {
     pub topic: TopicId,
     pub name: String,
     pub avatar_url: Option<String>,
 }
 
-impl UpdateTopicMessage {
-    pub fn new(topic: TopicId, name: String, avatar_url: Option<String>) -> Self {
-        UpdateTopicMessage {
+impl TopicMetadataMessage {
+    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>) -> Self {
+        TopicMetadataMessage {
             topic,
-            name,
+            name: name.to_string(),
+            avatar_url,
+        }
+    }
+
+    pub fn new_from_string(topic: &str, name: &str, avatar_url: Option<String>) -> Self {
+        let topic = TopicId::from_str(topic).expect("Invalid topic ID string");
+        TopicMetadataMessage {
+            topic,
+            name: name.to_string(),
             avatar_url,
         }
     }
@@ -108,8 +118,9 @@ pub struct ChatClient {
 }
 
 impl ChatClient {
-    pub async fn new() -> anyhow::Result<Self> {
-        let secret = SecretKey::generate(&mut rand::rng());
+    pub async fn new(path_buf: PathBuf) -> anyhow::Result<Self> {
+        let secret = //TODO Remove this for release load_secret_key(path_buf.join("secret.key")).await?;
+            SecretKey::generate(&mut rand::rng());
 
         let endpoint = Endpoint::builder().secret_key(secret).bind().await?;
 
@@ -148,9 +159,9 @@ impl ChatClient {
                             tx.send(Message::Chat(chat_message))
                                 .expect("Failed to send message");
                         } else if let Ok(update_topic_message) =
-                            serde_json::from_slice::<UpdateTopicMessage>(&msg.content)
+                            serde_json::from_slice::<TopicMetadataMessage>(&msg.content)
                         {
-                            tx.send(Message::UpdateTopic(update_topic_message))
+                            tx.send(Message::TopicMetadata(update_topic_message))
                                 .expect("Failed to send update topic message");
                         }
                     }
@@ -187,7 +198,7 @@ impl ChatClient {
             Message::Chat(chat_message) => {
                 self.send_message(chat_message).await?;
             }
-            Message::UpdateTopic(update_topic_message) => {
+            Message::TopicMetadata(update_topic_message) => {
                 self.send_topic_update(update_topic_message).await?;
             }
             Message::JoinTopic => {}
@@ -208,7 +219,7 @@ impl ChatClient {
         Ok(())
     }
 
-    async fn send_topic_update(&mut self, message: UpdateTopicMessage) -> anyhow::Result<()> {
+    async fn send_topic_update(&mut self, message: TopicMetadataMessage) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
             .get_mut(&message.topic)
@@ -266,11 +277,27 @@ impl ChatClient {
     }
 }
 
+pub async fn load_secret_key(path_buf: PathBuf) -> anyhow::Result<SecretKey> {
+    if path_buf.exists() {
+        let secret_key_bytes = tokio::fs::read(path_buf).await?;
+        let secret_key = SecretKey::try_from(&secret_key_bytes[0..32])?;
+        Ok(secret_key)
+    } else {
+        let secret_key = SecretKey::generate(&mut rand::rng());
+        let secret_key_bytes = secret_key.to_bytes();
+        if let Some(parent) = path_buf.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(path_buf, &secret_key_bytes).await?;
+        Ok(secret_key)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serial_test::serial;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     #[tokio::test]
     #[serial]
@@ -301,7 +328,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_chat_client_creation() {
-        let client = ChatClient::new()
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let client = ChatClient::new(temp_dir.path().to_path_buf())
             .await
             .expect("Failed to create chat client");
         assert!(client.gossip_sender.is_empty());
@@ -310,7 +338,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_subscribe_to_topic() {
-        let mut client = ChatClient::new()
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
             .await
             .expect("Failed to create chat client");
         let ticket = client
@@ -324,8 +353,14 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_send_and_receive_message() {
-        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
-        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let mut client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
 
         let ticket = client1
             .create_topic("test")
@@ -391,17 +426,16 @@ mod tests {
                 loop {
                     tokio::select! {
                         result = receiver1.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result {
-                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            if let Ok(Some(Event::Received(msg))) = result
+                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
                                     messages_received_by_client1.push(chat_message);
                                 }
-                            }
                         }
                         result = receiver2.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result {
-                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            if let Ok(Some(Event::Received(msg))) = result
+                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
                                     messages_received_by_client2.push(chat_message);
-                                }
+
                             }
                         }
                         _ = sleep(Duration::from_millis(100)) => {
@@ -437,9 +471,18 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_send_and_receive_message_three_clients() {
-        let mut client1 = ChatClient::new().await.expect("Failed to create client1");
-        let mut client2 = ChatClient::new().await.expect("Failed to create client2");
-        let mut client3 = ChatClient::new().await.expect("Failed to create client3");
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir3 = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let mut client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+        let mut client3 = ChatClient::new(temp_dir3.path().to_path_buf())
+            .await
+            .expect("Failed to create client3");
 
         let ticket = client1
             .create_topic("test")
@@ -523,25 +566,22 @@ mod tests {
                 loop {
                     tokio::select! {
                         result = receiver1.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result {
-                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            if let Ok(Some(Event::Received(msg))) = result
+                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
                                     messages_received_by_client1.push(chat_message);
                                 }
-                            }
                         }
                         result = receiver2.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result {
-                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            if let Ok(Some(Event::Received(msg))) = result
+                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
                                     messages_received_by_client2.push(chat_message);
                                 }
-                            }
                         }
                         result = receiver3.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result {
-                                if let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                            if let Ok(Some(Event::Received(msg))) = result
+                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
                                     messages_received_by_client3.push(chat_message);
                                 }
-                            }
                         }
                         _ = sleep(Duration::from_millis(100)) => {
                             if start.elapsed() >= collection_duration {
@@ -599,7 +639,8 @@ mod tests {
     #[tokio::test]
     #[serial]
     async fn test_peer_id() {
-        let client = ChatClient::new()
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let client = ChatClient::new(temp_dir.path().to_path_buf())
             .await
             .expect("Failed to create chat client");
         let peer_id = *client.peer_id();

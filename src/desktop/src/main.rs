@@ -6,7 +6,7 @@ use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
-use p2p::{Message, Ticket, UpdateTopicMessage};
+use p2p::{Message, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -40,12 +40,12 @@ fn App() -> Element {
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
             let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
             let update_message =
-                UpdateTopicMessage::new(ticket.topic, topic.name, topic.avatar_url);
+                TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url);
             if let Err(e) = desktop_client
                 .read()
                 .lock()
                 .await
-                .send(Message::UpdateTopic(update_message))
+                .send(Message::TopicMetadata(update_message))
                 .await
             {
                 eprintln!("Failed to send update topic message: {}", e);
@@ -197,11 +197,11 @@ fn App() -> Element {
                                         );
                                         topic_obj.add_message(msg);
                                     }
-                                    Message::UpdateTopic(update_message) => {
+                                    Message::TopicMetadata(metadata) => {
                                         let topic = Topic::new(
                                             topic.clone(),
-                                            update_message.name,
-                                            update_message.avatar_url,
+                                            metadata.name,
+                                            metadata.avatar_url,
                                         );
                                         on_modify_topic(topic);
                                     }

@@ -19,8 +19,11 @@ impl DesktopClient {
     }
 
     pub async fn initialize(&self) -> anyhow::Result<()> {
+        let dir = dirs::data_dir()
+            .ok_or_else(|| anyhow!("Could not find data directory"))?
+            .join("nexu");
         self.client
-            .get_or_try_init(|| async { ChatClient::new().await.map(Mutex::new) })
+            .get_or_try_init(|| async { ChatClient::new(dir).await.map(Mutex::new) })
             .await?;
         Ok(())
     }
@@ -74,11 +77,11 @@ impl DesktopClient {
                 client.lock().await.send(Message::Chat(chat_msg)).await?;
                 Ok(())
             }
-            Message::UpdateTopic(update_msg) => {
+            Message::TopicMetadata(metadata) => {
                 client
                     .lock()
                     .await
-                    .send(Message::UpdateTopic(update_msg))
+                    .send(Message::TopicMetadata(metadata))
                     .await?;
                 Ok(())
             }
