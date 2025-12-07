@@ -9,6 +9,7 @@ pub struct Topic {
     pub last_connection: Option<u64>,
     pub last_message: Option<String>,
     pub messages: Vec<Message>,
+    pub last_changed: u64,
 }
 
 impl Topic {
@@ -20,6 +21,7 @@ impl Topic {
             last_connection: None,
             last_message: None,
             messages: Vec::new(),
+            last_changed: chrono::Utc::now().timestamp_millis() as u64,
         }
     }
 
@@ -75,6 +77,18 @@ impl AppState {
     pub fn modify_topic_avatar(&mut self, topic_id: &str, avatar_url: Option<String>) {
         if let Some(topic) = self.topics.get_mut(topic_id) {
             topic.avatar_url = avatar_url;
+        }
+    }
+
+    pub fn set_last_changed_to_now(&mut self, topic_id: &str) {
+        if let Some(topic) = self.topics.get_mut(topic_id) {
+            topic.last_changed = chrono::Utc::now().timestamp_millis() as u64;
+        }
+    }
+
+    pub fn set_last_changed(&mut self, topic_id: &str, timestamp: u64) {
+        if let Some(topic) = self.topics.get_mut(topic_id) {
+            topic.last_changed = timestamp
         }
     }
 

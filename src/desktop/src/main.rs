@@ -38,9 +38,14 @@ fn App() -> Element {
             let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
+            state.set_last_changed_to_now(&topic.id);
             let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
-            let update_message =
-                TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url);
+            let update_message = TopicMetadataMessage::new(
+                ticket.topic,
+                &topic.name,
+                topic.avatar_url,
+                topic.last_changed,
+            );
             if let Err(e) = desktop_client
                 .read()
                 .lock()
@@ -58,11 +63,11 @@ fn App() -> Element {
 
     let on_create_topic = move |name: String| {
         spawn(async move {
-            let topic_id_result = desktop_client.read().lock().await.create_topic(&name).await;
-            match topic_id_result {
-                Ok(topic_id) => {
+            let ticket = desktop_client.read().lock().await.create_topic().await;
+            match ticket {
+                Ok(ticket) => {
                     let mut state = app_state.write();
-                    let topic = Topic::new(topic_id.clone(), name, None);
+                    let topic = Topic::new(ticket.clone(), name, None);
                     state.add_topic(topic);
 
                     if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -85,16 +90,30 @@ fn App() -> Element {
 
             match join_result {
                 Ok(ticket_str) => {
-                    let mut state = app_state.write();
                     let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-                    let topic = Topic::new(ticket_str.clone(), ticket.name, None);
-                    state.add_topic(topic);
+                    let result = desktop_client
+                        .read()
+                        .lock()
+                        .await
+                        .send(Message::JoinTopic(p2p::JoinMessage::new(ticket.topic)))
+                        .await;
 
-                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
-                        eprintln!("Failed to save topics to file");
+                    match result {
+                        Ok(_) => {
+                            let mut state = app_state.write();
+                            let topic = Topic::new(ticket_str.clone(), ticket_str.clone(), None);
+                            state.add_topic(topic);
+
+                            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                                eprintln!("Failed to save topics to file");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("Failed to join topic: {e}");
+                        }
                     }
                 }
-                Err(e) => eprintln!("Failed to join topic: {}", e),
+                Err(e) => eprintln!("Failed to join topic: {e}"),
             }
         });
     };
@@ -169,7 +188,7 @@ fn App() -> Element {
                 return;
             }
 
-            if let Ok(loaded_topics) = utils::load_topics_from_file() {
+            /*if let Ok(loaded_topics) = utils::load_topics_from_file() {
                 for topic in loaded_topics {
                     if let Err(e) = client_ref.lock().await.join_topic(topic.id.as_str()).await {
                         eprintln!("Failed to join topic {}: {}", topic.id, e);
@@ -177,45 +196,110 @@ fn App() -> Element {
                     };
                     app_state.write().add_topic(topic);
                 }
-            }
+            }*/
 
             loop {
-                {
+                let messages: Vec<(String, Message)> = {
                     let mut client = client_ref.lock().await;
-                    let mut state = app_state.write();
+                    let mut msgs = Vec::new();
                     for (topic, receiver) in client.get_message_receiver() {
                         while let Ok(message) = receiver.try_recv() {
-                            if let Some(topic_obj) = state.get_topic(topic) {
-                                match message {
-                                    Message::Chat(msg) => {
-                                        let msg = ui::desktop::models::Message::new(
-                                            msg.sender.to_string(),
-                                            topic.clone(),
-                                            msg.content,
-                                            msg.timestamp,
-                                            false,
-                                        );
-                                        topic_obj.add_message(msg);
-                                    }
-                                    Message::TopicMetadata(metadata) => {
-                                        let topic = Topic::new(
-                                            topic.clone(),
-                                            metadata.name,
-                                            metadata.avatar_url,
-                                        );
-                                        on_modify_topic(topic);
-                                    }
-                                    Message::JoinTopic => {}
-                                    Message::LeaveTopic => {}
-                                }
-
-                                if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
-                                    eprintln!("Failed to save topics to file");
-                                }
-                            }
+                            msgs.push((topic.to_string(), message));
                         }
                     }
+                    msgs
+                };
+
+                let had_messages = !messages.is_empty();
+
+                for (topic, message) in messages {
+                    match message {
+                        Message::Chat(msg) => {
+                            let mut state = app_state.write();
+                            if let Some(topic_obj) = state.get_topic(&topic) {
+                                let message = ui::desktop::models::Message::new(
+                                    msg.sender.to_string(),
+                                    topic_obj.id.clone(),
+                                    msg.content,
+                                    msg.timestamp,
+                                    false,
+                                );
+                                topic_obj.add_message(message);
+                            }
+                        }
+
+                        Message::TopicMetadata(metadata) => {
+                            let should_send = {
+                                let mut state = app_state.write();
+                                if let Some(existing_topic) = state.get_topic(&topic) {
+                                    if metadata.timestamp >= existing_topic.last_changed {
+                                        state.modify_topic_name(&topic, &metadata.name);
+                                        state.modify_topic_avatar(&topic, metadata.avatar_url);
+                                        state.set_last_changed(&topic, metadata.timestamp);
+                                        None
+                                    } else {
+                                        Some(TopicMetadataMessage::new(
+                                            Ticket::from_str(&topic).unwrap().topic,
+                                            &existing_topic.name,
+                                            existing_topic.avatar_url.clone(),
+                                            existing_topic.last_changed,
+                                        ))
+                                    }
+                                } else {
+                                    None
+                                }
+                            };
+
+                            if let Some(metadata) = should_send
+                                && let Err(e) = client_ref
+                                    .lock()
+                                    .await
+                                    .send(Message::TopicMetadata(metadata))
+                                    .await
+                            {
+                                eprintln!("Failed to send TopicMetadataMessage: {}", e);
+                            }
+                        }
+
+                        Message::JoinTopic(join_message) => {
+                            let metadata_to_send = {
+                                let state = app_state.read();
+                                state.get_all_topics().iter().find_map(|topic| {
+                                    let ticket = Ticket::from_str(&topic.id).ok()?;
+                                    if ticket.topic == join_message.topic {
+                                        Some(TopicMetadataMessage::new(
+                                            ticket.topic,
+                                            &topic.name,
+                                            topic.avatar_url.clone(),
+                                            topic.last_changed,
+                                        ))
+                                    } else {
+                                        None
+                                    }
+                                })
+                            };
+
+                            if let Some(message) = metadata_to_send
+                                && let Err(e) = client_ref
+                                    .lock()
+                                    .await
+                                    .send(Message::TopicMetadata(message))
+                                    .await
+                            {
+                                eprintln!("Failed to send TopicMetadataMessage: {}", e);
+                            }
+                        }
+
+                        Message::LeaveTopic => {}
+                    }
                 }
+
+                if had_messages
+                    && utils::save_topics_to_file(&app_state.read().get_all_topics()).is_err()
+                {
+                    eprintln!("Failed to save topics to file");
+                }
+
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         });

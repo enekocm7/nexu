@@ -15,9 +15,54 @@ use tokio::time::sleep;
 
 pub enum Message {
     Chat(ChatMessage),
-    JoinTopic,
+    JoinTopic(JoinMessage),
     LeaveTopic,
     TopicMetadata(TopicMetadataMessage),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct JoinMessage {
+    pub topic: TopicId,
+}
+
+impl JoinMessage {
+    pub fn new(topic: TopicId) -> Self {
+        JoinMessage { topic }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TopicMetadataMessage {
+    pub topic: TopicId,
+    pub name: String,
+    pub avatar_url: Option<String>,
+    pub timestamp: u64,
+}
+
+impl TopicMetadataMessage {
+    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>, timestamp: u64) -> Self {
+        TopicMetadataMessage {
+            topic,
+            name: name.to_string(),
+            avatar_url,
+            timestamp,
+        }
+    }
+
+    pub fn new_from_string(
+        topic: &str,
+        name: &str,
+        avatar_url: Option<String>,
+        timestamp: u64,
+    ) -> Self {
+        let topic = TopicId::from_str(topic).expect("Invalid topic ID string");
+        TopicMetadataMessage {
+            topic,
+            name: name.to_string(),
+            avatar_url,
+            timestamp,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -26,32 +71,6 @@ pub struct ChatMessage {
     pub topic_id: TopicId,
     pub content: String,
     pub timestamp: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TopicMetadataMessage {
-    pub topic: TopicId,
-    pub name: String,
-    pub avatar_url: Option<String>,
-}
-
-impl TopicMetadataMessage {
-    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>) -> Self {
-        TopicMetadataMessage {
-            topic,
-            name: name.to_string(),
-            avatar_url,
-        }
-    }
-
-    pub fn new_from_string(topic: &str, name: &str, avatar_url: Option<String>) -> Self {
-        let topic = TopicId::from_str(topic).expect("Invalid topic ID string");
-        TopicMetadataMessage {
-            topic,
-            name: name.to_string(),
-            avatar_url,
-        }
-    }
 }
 
 impl ChatMessage {
@@ -78,7 +97,6 @@ impl Display for ChatMessage {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Ticket {
     pub topic: TopicId,
-    pub name: String,
     pub endpoints: Vec<EndpointAddr>,
 }
 
@@ -163,6 +181,11 @@ impl ChatClient {
                         {
                             tx.send(Message::TopicMetadata(update_topic_message))
                                 .expect("Failed to send update topic message");
+                        } else if let Ok(join_message) =
+                            serde_json::from_slice::<JoinMessage>(&msg.content)
+                        {
+                            tx.send(Message::JoinTopic(join_message))
+                                .expect("Failed to send join message");
                         }
                     }
                     Some(Ok(Event::NeighborUp(_))) => continue,
@@ -199,9 +222,11 @@ impl ChatClient {
                 self.send_message(chat_message).await?;
             }
             Message::TopicMetadata(update_topic_message) => {
-                self.send_topic_update(update_topic_message).await?;
+                self.send_topic_metadata(update_topic_message).await?;
             }
-            Message::JoinTopic => {}
+            Message::JoinTopic(topic_id) => {
+                self.send_join_topic(topic_id).await?;
+            }
             Message::LeaveTopic => {}
         }
         Ok(())
@@ -219,7 +244,18 @@ impl ChatClient {
         Ok(())
     }
 
-    async fn send_topic_update(&mut self, message: TopicMetadataMessage) -> anyhow::Result<()> {
+    async fn send_topic_metadata(&mut self, message: TopicMetadataMessage) -> anyhow::Result<()> {
+        let sender = self
+            .gossip_sender
+            .get_mut(&message.topic)
+            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
+
+        let serialized = serde_json::to_vec(&message)?;
+        sender.broadcast(serialized.into()).await?;
+        Ok(())
+    }
+
+    async fn send_join_topic(&mut self, message: JoinMessage) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
             .get_mut(&message.topic)
@@ -242,14 +278,13 @@ impl ChatClient {
         self.endpoint.addr()
     }
 
-    pub async fn create_topic(&mut self, name: &str) -> anyhow::Result<Ticket> {
+    pub async fn create_topic(&mut self) -> anyhow::Result<Ticket> {
         let topic_id = TopicId::from_bytes(rand::random());
 
         self.subscribe(topic_id, vec![]).await?;
 
         let ticket = Ticket {
             topic: topic_id,
-            name: name.to_string(),
             endpoints: vec![self.endpoint.addr()],
         };
 
@@ -342,10 +377,7 @@ mod tests {
         let mut client = ChatClient::new(temp_dir.path().to_path_buf())
             .await
             .expect("Failed to create chat client");
-        let ticket = client
-            .create_topic("test")
-            .await
-            .expect("Failed to create topic");
+        let ticket = client.create_topic().await.expect("Failed to create topic");
 
         assert!(client.gossip_sender.contains_key(&ticket.topic));
     }
@@ -363,7 +395,7 @@ mod tests {
             .expect("Failed to create client2");
 
         let ticket = client1
-            .create_topic("test")
+            .create_topic()
             .await
             .expect("Failed to create topic");
 
@@ -485,7 +517,7 @@ mod tests {
             .expect("Failed to create client3");
 
         let ticket = client1
-            .create_topic("test")
+            .create_topic()
             .await
             .expect("Failed to create topic");
 
