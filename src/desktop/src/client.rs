@@ -19,8 +19,11 @@ impl DesktopClient {
     }
 
     pub async fn initialize(&self) -> anyhow::Result<()> {
+        let dir = dirs::data_dir()
+            .ok_or_else(|| anyhow!("Could not find data directory"))?
+            .join("nexu");
         self.client
-            .get_or_try_init(|| async { ChatClient::new().await.map(Mutex::new) })
+            .get_or_try_init(|| async { ChatClient::new(dir).await.map(Mutex::new) })
             .await?;
         Ok(())
     }
@@ -33,12 +36,12 @@ impl DesktopClient {
         Ok(client.lock().await.peer_id().to_string())
     }
 
-    pub async fn create_topic(&mut self, name: &str) -> anyhow::Result<String> {
+    pub async fn create_topic(&mut self) -> anyhow::Result<String> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let ticket = client.lock().await.create_topic(name).await?;
+        let ticket = client.lock().await.create_topic().await?;
         let message_receiver = client.lock().await.listen(&ticket.topic)?;
         let ticket_str = ticket.to_string();
         self.message_receivers
@@ -69,28 +72,8 @@ impl DesktopClient {
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
-        match message {
-            Message::Chat(chat_msg) => {
-                client.lock().await.send(Message::Chat(chat_msg)).await?;
-                Ok(())
-            }
-            Message::UpdateTopic(update_msg) => {
-                client
-                    .lock()
-                    .await
-                    .send(Message::UpdateTopic(update_msg))
-                    .await?;
-                Ok(())
-            }
-            Message::JoinTopic => {
-                client.lock().await.send(Message::JoinTopic).await?;
-                Ok(())
-            }
-            Message::LeaveTopic => {
-                client.lock().await.send(Message::LeaveTopic).await?;
-                Ok(())
-            }
-        }
+        client.lock().await.send(message).await?;
+        Ok(())
     }
 
     pub async fn get_chat_message(
