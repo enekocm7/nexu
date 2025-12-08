@@ -38,14 +38,10 @@ fn App() -> Element {
             let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
-            state.set_last_changed_to_now(&topic.id);
+            let time = state.set_last_changed_to_now(&topic.id);
             let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
-            let update_message = TopicMetadataMessage::new(
-                ticket.topic,
-                &topic.name,
-                topic.avatar_url,
-                topic.last_changed,
-            );
+            let update_message =
+                TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url, time);
             if let Err(e) = desktop_client
                 .read()
                 .lock()
@@ -233,13 +229,15 @@ fn App() -> Element {
                                         state.modify_topic_avatar(&topic, metadata.avatar_url);
                                         state.set_last_changed(&topic, metadata.timestamp);
                                         None
-                                    } else {
+                                    } else if let Ok(ticket) = Ticket::from_str(&topic) {
                                         Some(TopicMetadataMessage::new(
-                                            Ticket::from_str(&topic).unwrap().topic,
+                                            ticket.topic,
                                             &existing_topic.name,
                                             existing_topic.avatar_url.clone(),
                                             existing_topic.last_changed,
                                         ))
+                                    } else {
+                                        None
                                     }
                                 } else {
                                     None

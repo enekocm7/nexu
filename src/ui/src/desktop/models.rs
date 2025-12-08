@@ -92,15 +92,18 @@ impl AppState {
         }
     }
 
-    pub fn set_last_changed_to_now(&mut self, topic_id: &str) {
+    pub fn set_last_changed_to_now(&mut self, topic_id: &str) -> u64 {
         if let Some(topic) = self.topics.get_mut(topic_id) {
-            topic.last_changed = chrono::Utc::now().timestamp_millis() as u64;
+            let now = chrono::Utc::now().timestamp_millis() as u64;
+            topic.last_changed = now;
+            return now;
         }
+        0
     }
 
     pub fn set_last_changed(&mut self, topic_id: &str, timestamp: u64) {
         if let Some(topic) = self.topics.get_mut(topic_id) {
-            topic.last_changed = timestamp
+            topic.last_changed = timestamp;
         }
     }
 
