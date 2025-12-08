@@ -137,8 +137,7 @@ pub struct ChatClient {
 
 impl ChatClient {
     pub async fn new(path_buf: PathBuf) -> anyhow::Result<Self> {
-        let secret = //TODO Remove this for release load_secret_key(path_buf.join("secret.key")).await?;
-            SecretKey::generate(&mut rand::rng());
+        let secret = load_secret_key(path_buf.join("secret.key")).await?;
 
         let endpoint = Endpoint::builder().secret_key(secret).bind().await?;
 

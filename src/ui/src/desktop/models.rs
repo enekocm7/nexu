@@ -25,6 +25,18 @@ impl Topic {
         }
     }
 
+    pub fn new_placeholder(id: String) -> Self {
+        Self {
+            id,
+            name: "Loading...".to_string(),
+            avatar_url: None,
+            last_connection: None,
+            last_message: None,
+            messages: Vec::new(),
+            last_changed: 0,
+        }
+    }
+
     pub fn add_message(&mut self, message: Message) {
         self.last_message = Some(message.content.clone());
         self.messages.push(message);

@@ -90,28 +90,24 @@ fn App() -> Element {
 
             match join_result {
                 Ok(ticket_str) => {
+                    let mut state = app_state.write();
+                    let topic = Topic::new_placeholder(ticket_str.clone());
+                    state.add_topic(topic);
+
+                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                        eprintln!("Failed to save topics to file");
+                    }
+
+                    tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
                     let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-                    let result = desktop_client
+                    desktop_client
                         .read()
                         .lock()
                         .await
                         .send(Message::JoinTopic(p2p::JoinMessage::new(ticket.topic)))
-                        .await;
-
-                    match result {
-                        Ok(_) => {
-                            let mut state = app_state.write();
-                            let topic = Topic::new(ticket_str.clone(), ticket_str.clone(), None);
-                            state.add_topic(topic);
-
-                            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
-                                eprintln!("Failed to save topics to file");
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to join topic: {e}");
-                        }
-                    }
+                        .await
+                        .expect("Failed to send JoinTopic message");
                 }
                 Err(e) => eprintln!("Failed to join topic: {e}"),
             }
@@ -188,7 +184,7 @@ fn App() -> Element {
                 return;
             }
 
-            /*if let Ok(loaded_topics) = utils::load_topics_from_file() {
+            if let Ok(loaded_topics) = utils::load_topics_from_file() {
                 for topic in loaded_topics {
                     if let Err(e) = client_ref.lock().await.join_topic(topic.id.as_str()).await {
                         eprintln!("Failed to join topic {}: {}", topic.id, e);
@@ -196,7 +192,7 @@ fn App() -> Element {
                     };
                     app_state.write().add_topic(topic);
                 }
-            }*/
+            }
 
             loop {
                 let messages: Vec<(String, Message)> = {
