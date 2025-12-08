@@ -32,6 +32,7 @@ pub mod desktop_web_components {
         let mut selected_topic = use_signal::<Option<String>>(|| None);
         let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut search_query = use_signal(String::new);
+        let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
 
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
@@ -75,6 +76,7 @@ pub mod desktop_web_components {
                                     })
                                     .map(|contact| {
                                         let contact_id = contact.id.clone();
+                                        let contact_name = contact.name.clone();
                                         let contact_for_details = contact.clone();
                                         rsx!{
                                             ContextMenu{
@@ -106,8 +108,9 @@ pub mod desktop_web_components {
                                                         index: 2usize,
                                                         on_select:  {
                                                             let contact_id = contact_id.clone();
+                                                            let contact_name = contact_name.clone();
                                                             move |_| {
-                                                                on_leave_topic.call(contact_id.clone())
+                                                                show_leave_confirmation.set(Some((contact_id.clone(), contact_name.clone())))
                                                             }
                                                         },
                                                         "Leave Topic"
@@ -128,6 +131,21 @@ pub mod desktop_web_components {
 
                     if show_topic_dialog() {
                         TopicDialog { toggle: show_topic_dialog, on_create: on_create_topic, on_join: on_join_topic }
+                    }
+
+                    if let Some((topic_id, topic_name)) = show_leave_confirmation() {
+                        ConfirmationDialog {
+                            title: "Leave Topic".to_string(),
+                            message: format!("Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.", topic_name),
+                            confirm_text: "Leave".to_string(),
+                            cancel_text: "Cancel".to_string(),
+                            is_danger: true,
+                            toggle: show_leave_confirmation,
+                            on_confirm: move |_| {
+                                on_leave_topic.call(topic_id.clone());
+                                show_leave_confirmation.set(None);
+                            }
+                        }
                     }
                 }
                 if let Some(topic_id) = selected_topic() {
@@ -254,6 +272,57 @@ pub mod desktop_web_components {
                             } else {
                                 "Join"
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[component]
+    fn ConfirmationDialog(
+        title: String,
+        message: String,
+        confirm_text: String,
+        cancel_text: String,
+        is_danger: bool,
+        mut toggle: Signal<Option<(String, String)>>,
+        on_confirm: EventHandler<()>,
+    ) -> Element {
+        let button_class = if is_danger {
+            "confirmation-dialog-button confirmation-dialog-button-danger"
+        } else {
+            "confirmation-dialog-button confirmation-dialog-button-primary"
+        };
+
+        rsx! {
+            div {
+                class: "confirmation-dialog-overlay",
+                onclick: move |_| toggle.set(None),
+                div {
+                    class: "confirmation-dialog",
+                    onclick: move |e| e.stop_propagation(),
+                    div { class: "confirmation-dialog-header",
+                        h3 { class: "confirmation-dialog-title", "{title}" }
+                        button {
+                            class: "confirmation-dialog-close",
+                            onclick: move |_| toggle.set(None),
+                            img { src: CLOSE_ICON }
+                        }
+                    }
+                    div { class: "confirmation-dialog-body",
+                        p { class: "confirmation-dialog-message", "{message}" }
+                    }
+                    div { class: "confirmation-dialog-footer",
+                        button {
+                            class: "confirmation-dialog-button confirmation-dialog-button-cancel",
+                            onclick: move |_| toggle.set(None),
+                            "{cancel_text}"
+                        }
+                        button {
+                            class: "{button_class}",
+                            onclick: move |_| on_confirm.call(()),
+                            "{confirm_text}"
                         }
                     }
                 }
