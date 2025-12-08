@@ -617,6 +617,134 @@ body {
     box-shadow: none;
 }
 
+.confirmation-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1001;
+    animation: fadeIn 0.2s ease;
+}
+
+.confirmation-dialog {
+    background-color: #333333;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 450px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    animation: slideIn 0.3s ease;
+    overflow: hidden;
+}
+
+.confirmation-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #444444;
+}
+
+.confirmation-dialog-title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.confirmation-dialog-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.confirmation-dialog-close img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) saturate(100%) invert(73%) sepia(0%) saturate(0%) hue-rotate(180deg) brightness(92%) contrast(88%);
+    transition: filter 0.2s ease;
+}
+
+.confirmation-dialog-close:hover {
+    background-color: #444444;
+}
+
+.confirmation-dialog-close:hover img {
+    filter: brightness(0) saturate(100%) invert(100%) sepia(0%) saturate(7500%) hue-rotate(324deg) brightness(103%) contrast(103%);
+}
+
+.confirmation-dialog-body {
+    padding: 24px;
+}
+
+.confirmation-dialog-message {
+    margin: 0;
+    color: #cccccc;
+    font-size: 15px;
+    line-height: 1.6;
+}
+
+.confirmation-dialog-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    padding: 20px 24px;
+    border-top: 1px solid #444444;
+    background-color: #2a2a2a;
+}
+
+.confirmation-dialog-button {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.confirmation-dialog-button-cancel {
+    background-color: #3a3a3a;
+    color: #cccccc;
+}
+
+.confirmation-dialog-button-cancel:hover {
+    background-color: #454545;
+    color: #ffffff;
+}
+
+.confirmation-dialog-button-primary {
+    background-color: #5a7fb8;
+    color: #ffffff;
+}
+
+.confirmation-dialog-button-primary:hover {
+    background-color: #6a8fc8;
+    box-shadow: 0 4px 12px rgba(90, 127, 184, 0.3);
+}
+
+.confirmation-dialog-button-danger {
+    background-color: #d9534f;
+    color: #ffffff;
+}
+
+.confirmation-dialog-button-danger:hover {
+    background-color: #e76460;
+    box-shadow: 0 4px 12px rgba(217, 83, 79, 0.4);
+}
+
 .context-menu-content {
     background-color: #ffffff;
     border: 1px solid #e0e0e0;
