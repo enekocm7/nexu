@@ -13,5 +13,5 @@ chrono = { workspace = true }
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
 arboard = "3.6.1"
 bitcode = { workspace = true }
-base64 = "0.22.1"
+base64 = { workspace = true }
 
