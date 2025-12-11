@@ -141,7 +141,9 @@ impl ChatClient {
 
         let endpoint = Endpoint::builder().secret_key(secret).bind().await?;
 
-        let gossip = Gossip::builder().spawn(endpoint.clone());
+        let gossip = Gossip::builder()
+            .max_message_size(1_048_576)
+            .spawn(endpoint.clone());
 
         let router = Router::builder(endpoint.clone())
             .accept(ALPN, gossip.clone())

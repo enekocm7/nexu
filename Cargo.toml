@@ -16,7 +16,7 @@ tokio = { version = "1.48.0", features = ["full", "test-util"] }
 anyhow = "1.0.100"
 chrono = "0.4.42"
 bitcode = "0.6.7"
-
+base64 = "0.22.1"
 # workspace
 ui = { path = "src/ui" }
 p2p = { path = "src/p2p" }

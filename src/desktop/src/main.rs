@@ -2,6 +2,7 @@ mod client;
 mod utils;
 
 use crate::client::DesktopClient;
+use base64::Engine;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
@@ -35,6 +36,20 @@ fn App() -> Element {
 
     let on_modify_topic = move |topic: Topic| {
         spawn(async move {
+            if let Some(ref avatar_url) = topic.avatar_url
+                && let Some(base64_data) = avatar_url.strip_prefix("data:")
+                && let Some(comma_pos) = base64_data.find(',')
+            {
+                let base64_str = &base64_data[comma_pos + 1..];
+                if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(base64_str) {
+                    const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
+                    if decoded.len() > MAX_SIZE {
+                        eprintln!("Image size exceeds 512 KB limit, rejecting update");
+                        return;
+                    }
+                }
+            }
+
             let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
