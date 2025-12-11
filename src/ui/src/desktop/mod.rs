@@ -454,7 +454,7 @@ pub mod desktop_web_components {
                 spawn(async move {
                     match file.read_bytes().await {
                         Ok(bytes) => {
-                            const MAX_SIZE: usize = 512 * 1024; // 512 KB
+                            const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
                             if bytes.len() > MAX_SIZE {
                                 toast.error(
                                     "Image size must be less than 512 KB".to_owned(),

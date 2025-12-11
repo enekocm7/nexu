@@ -42,7 +42,7 @@ fn App() -> Element {
             {
                 let base64_str = &base64_data[comma_pos + 1..];
                 if let Ok(decoded) = base64::engine::general_purpose::STANDARD.decode(base64_str) {
-                    const MAX_SIZE: usize = 512 * 1024; // 512 KB
+                    const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
                     if decoded.len() > MAX_SIZE {
                         eprintln!("Image size exceeds 512 KB limit, rejecting update");
                         return;
