@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use ui::desktop::desktop_web_components::Desktop;
 use ui::mobile::mobile_components::Mobile;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");

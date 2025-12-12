@@ -100,29 +100,21 @@ pub struct Ticket {
     pub endpoints: Vec<EndpointAddr>,
 }
 
-impl Ticket {
-    fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
-        serde_json::from_slice(bytes).map_err(Into::into)
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        serde_json::to_vec(self).expect("serde_json::to_vec is infallible")
-    }
-}
-
 impl Display for Ticket {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let mut text = data_encoding::BASE32_NOPAD.encode(&self.to_bytes()[..]);
-        text.make_ascii_lowercase();
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let bytes = postcard::to_stdvec(self).map_err(|_| fmt::Error)?;
+        let text = bs58::encode(bytes).into_string();
         write!(f, "{}", text)
     }
 }
 
 impl FromStr for Ticket {
     type Err = anyhow::Error;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let bytes = data_encoding::BASE32_NOPAD.decode(s.to_ascii_uppercase().as_bytes())?;
-        Self::from_bytes(&bytes)
+        let bytes = bs58::decode(s).into_vec()?;
+        let ticket = postcard::from_bytes(&bytes)?;
+        Ok(ticket)
     }
 }
 
@@ -172,18 +164,17 @@ impl ChatClient {
                 let event_option = receiver.next().await;
                 match event_option {
                     Some(Ok(Event::Received(msg))) => {
-                        if let Ok(chat_message) =
-                            serde_json::from_slice::<ChatMessage>(&msg.content)
+                        if let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content)
                         {
                             tx.send(Message::Chat(chat_message))
                                 .expect("Failed to send message");
                         } else if let Ok(update_topic_message) =
-                            serde_json::from_slice::<TopicMetadataMessage>(&msg.content)
+                            postcard::from_bytes::<TopicMetadataMessage>(&msg.content)
                         {
                             tx.send(Message::TopicMetadata(update_topic_message))
                                 .expect("Failed to send update topic message");
                         } else if let Ok(join_message) =
-                            serde_json::from_slice::<JoinMessage>(&msg.content)
+                            postcard::from_bytes::<JoinMessage>(&msg.content)
                         {
                             tx.send(Message::JoinTopic(join_message))
                                 .expect("Failed to send join message");
@@ -239,7 +230,7 @@ impl ChatClient {
             .get_mut(&message.topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
-        let serialized = serde_json::to_vec(&message)?;
+        let serialized = postcard::to_stdvec(&message)?;
         sender.broadcast(serialized.into()).await?;
 
         Ok(())
@@ -251,7 +242,7 @@ impl ChatClient {
             .get_mut(&message.topic)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
-        let serialized = serde_json::to_vec(&message)?;
+        let serialized = postcard::to_stdvec(&message)?;
         sender.broadcast(serialized.into()).await?;
         Ok(())
     }
@@ -262,7 +253,7 @@ impl ChatClient {
             .get_mut(&message.topic)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
-        let serialized = serde_json::to_vec(&message)?;
+        let serialized = postcard::to_stdvec(&message)?;
         sender.broadcast(serialized.into()).await?;
         Ok(())
     }
@@ -352,9 +343,9 @@ mod tests {
         );
 
         let serialized =
-            serde_json::to_vec(&original_message).expect("Failed to serialize chat message");
+            postcard::to_allocvec(&original_message).expect("Failed to serialize chat message");
         let deserialized: ChatMessage =
-            serde_json::from_slice(&serialized).expect("Failed to deserialize chat message");
+            postcard::from_bytes(&serialized).expect("Failed to deserialize chat message");
 
         assert_eq!(original_message.sender, deserialized.sender);
         assert_eq!(original_message.content, deserialized.content);
@@ -460,13 +451,13 @@ mod tests {
                     tokio::select! {
                         result = receiver1.try_next() => {
                             if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
                                     messages_received_by_client1.push(chat_message);
                                 }
                         }
                         result = receiver2.try_next() => {
                             if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
                                     messages_received_by_client2.push(chat_message);
 
                             }
@@ -600,19 +591,19 @@ mod tests {
                     tokio::select! {
                         result = receiver1.try_next() => {
                             if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
                                     messages_received_by_client1.push(chat_message);
                                 }
                         }
                         result = receiver2.try_next() => {
                             if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
                                     messages_received_by_client2.push(chat_message);
                                 }
                         }
                         result = receiver3.try_next() => {
                             if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = serde_json::from_slice::<ChatMessage>(&msg.content) {
+                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
                                     messages_received_by_client3.push(chat_message);
                                 }
                         }
