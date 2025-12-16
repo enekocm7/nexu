@@ -37,7 +37,11 @@ pub mod desktop_web_components {
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
             link { rel: "stylesheet", href: COMPONENTS_CSS }
-            div { class: "desktop-body",
+            div {
+                class: "desktop-body",
+                oncontextmenu: move |e| {
+                    e.prevent_default();
+                },
                 div { class: "desktop-column",
                     div { class: "desktop-column-header",
                         div { class: "desktop-column-top-bar",
@@ -68,7 +72,7 @@ pub mod desktop_web_components {
                                     .into_iter()
                                     .collect::<Vec<Topic>>();
                                 contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-                            
+                                
                                 contacts
                                     .into_iter()
                                     .filter(|contact| {
@@ -124,7 +128,7 @@ pub mod desktop_web_components {
                     }
 
                     if let Some(topic) = show_topic_details() {
-                        ToastProvider { 
+                        ToastProvider {
                             TopicDetails { topic: topic.clone(), toggle: show_topic_details, on_modify_topic }
                         }
                     }
