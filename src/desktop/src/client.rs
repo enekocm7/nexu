@@ -2,12 +2,12 @@ use dioxus::core::anyhow;
 use p2p::{ChatClient, ChatMessage, Message, Ticket};
 use std::collections::HashMap;
 use std::str::FromStr;
-use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::{Mutex, OnceCell};
+use flume::Receiver;
 
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
-    message_receivers: HashMap<String, UnboundedReceiver<Message>>,
+    message_receivers: HashMap<String, Receiver<Message>>,
 }
 
 impl DesktopClient {
@@ -111,7 +111,7 @@ impl DesktopClient {
         Ok(())
     }
 
-    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, UnboundedReceiver<Message>> {
+    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, Receiver<Message>> {
         &mut self.message_receivers
     }
 }

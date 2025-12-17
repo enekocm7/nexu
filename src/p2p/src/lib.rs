@@ -1,3 +1,4 @@
+use flume::Receiver;
 use futures_lite::StreamExt;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, SecretKey};
@@ -8,11 +9,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
-use std::str::FromStr;
-use std::time::Duration;
-use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
-use tokio::time::sleep;
-
+    use std::str::FromStr;
+    use std::time::Duration;
+    use tokio::time::sleep;
+    
 pub enum Message {
     Chat(ChatMessage),
     JoinTopic(JoinMessage),
@@ -149,17 +149,17 @@ impl ChatClient {
             gossip_sender: HashMap::new(),
             gossip_receiver: HashMap::new(),
         })
-    }
-
-    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<UnboundedReceiver<Message>> {
-        let mut receiver = self
-            .gossip_receiver
+        }
+    
+        pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<Receiver<Message>> {
+            let mut receiver = self
+                .gossip_receiver
             .remove(topic_id)
-            .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
-
-        let (tx, rx) = unbounded_channel::<Message>();
-
-        tokio::spawn(async move {
+                .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
+    
+            let (tx, rx) = flume::unbounded::<Message>();
+    
+            tokio::spawn(async move {
             loop {
                 let event_option = receiver.next().await;
                 match event_option {
