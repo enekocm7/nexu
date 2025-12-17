@@ -1,0 +1,7 @@
+[application]
+name = "nexu"
+
+[bundle]
+identifier = "com.enekocm.nexu"
+publisher = "Eneko Cañedo"
+
