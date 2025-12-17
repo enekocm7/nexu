@@ -213,19 +213,20 @@ fn App() -> Element {
                             .await
                             .join_topic(&topic.id)
                             .await;
-            
+
                         match join_result {
                             Ok(ticket_str) => {
                                 let mut state = app_state.write();
                                 state.add_topic(topic);
-            
+
                                 if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                                     eprintln!("Failed to save topics to file");
                                 }
-            
+
                                 tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-            
-                                let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
+
+                                let ticket =
+                                    Ticket::from_str(&ticket_str).expect("Invalid ticket string");
                                 desktop_client
                                     .read()
                                     .lock()
