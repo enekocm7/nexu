@@ -1,9 +1,9 @@
 use dioxus::core::anyhow;
+use flume::Receiver;
 use p2p::{ChatClient, ChatMessage, Message, Ticket};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::sync::{Mutex, OnceCell};
-use flume::Receiver;
 
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
