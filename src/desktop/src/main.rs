@@ -197,11 +197,7 @@ fn App() -> Element {
 
             if let Ok(loaded_topics) = utils::load_topics_from_file() {
                 for topic in loaded_topics {
-                    if let Err(e) = client_ref.lock().await.join_topic(topic.id.as_str()).await {
-                        eprintln!("Failed to join topic {}: {}", topic.id, e);
-                        continue;
-                    };
-                    app_state.write().add_topic(topic);
+                    on_join_topic(topic.id);
                 }
             }
 
