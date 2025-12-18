@@ -1,7 +1,8 @@
-use bitcode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
     pub id: String,
     pub name: String,
@@ -37,9 +38,21 @@ impl Topic {
         }
     }
 
-    pub fn add_message(&mut self, message: Message) {
+    pub fn add_message(&mut self, message: ChatMessage) {
         self.last_message = Some(message.content.clone());
-        self.messages.push(message);
+        self.messages.push(Message::Chat(message));
+    }
+
+    pub fn add_leave_message(&mut self, message: LeaveMessage) {
+        self.messages.push(Message::Leave(message));
+    }
+
+    pub fn add_join_message(&mut self, message: JoinMessage) {
+        self.messages.push(Message::Join(message));
+    }
+
+    pub fn add_disconnect_message(&mut self, message: DisconnectMessage) {
+        self.messages.push(Message::Disconnect(message));
     }
 }
 
@@ -62,12 +75,14 @@ pub struct AppState {
     current_topic_id: Option<String>,
 }
 
+#[cfg(feature = "desktop-web")]
 impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "desktop-web")]
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -140,8 +155,16 @@ impl AppState {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Encode, Decode)]
-pub struct Message {
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Message {
+    Chat(ChatMessage),
+    Leave(LeaveMessage),
+    Join(JoinMessage),
+    Disconnect(DisconnectMessage),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChatMessage {
     pub sender_id: String,
     pub topic_id: String,
     pub content: String,
@@ -149,7 +172,7 @@ pub struct Message {
     pub is_sent: bool,
 }
 
-impl Message {
+impl ChatMessage {
     pub fn new(
         sender_id: String,
         topic_id: String,
@@ -165,4 +188,25 @@ impl Message {
             is_sent,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LeaveMessage {
+    pub sender_id: String,
+    pub topic_id: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct JoinMessage {
+    pub sender_id: String,
+    pub topic_id: String,
+    pub timestamp: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DisconnectMessage {
+    pub sender_id: String,
+    pub topic_id: String,
+    pub timestamp: u64,
 }
