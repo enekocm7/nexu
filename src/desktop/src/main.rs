@@ -7,7 +7,7 @@ use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
 use dioxus::desktop::{Config, WindowBuilder};
 use dioxus::prelude::*;
-use p2p::{Message, Ticket, TopicMetadataMessage};
+    use p2p::{Message, Ticket, TopicMetadataMessage};
 use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -48,6 +48,7 @@ async fn join_topic_internal(
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
             let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
+            
             desktop_client
                 .lock()
                 .await
@@ -207,36 +208,9 @@ fn App() -> Element {
             if let Ok(loaded_topics) = utils::load_topics_from_file() {
                 for topic in loaded_topics {
                     spawn(async move {
-                        let join_result = desktop_client
-                            .read()
-                            .lock()
-                            .await
-                            .join_topic(&topic.id)
-                            .await;
-
-                        match join_result {
-                            Ok(ticket_str) => {
-                                let mut state = app_state.write();
-                                state.add_topic(topic);
-
-                                if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
-                                    eprintln!("Failed to save topics to file");
-                                }
-
-                                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
-                                let ticket =
-                                    Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-                                desktop_client
-                                    .read()
-                                    .lock()
-                                    .await
-                                    .send(Message::JoinTopic(p2p::JoinMessage::new(ticket.topic)))
-                                    .await
-                                    .expect("Failed to send JoinTopic message");
-                            }
-                            Err(e) => eprintln!("Failed to join topic: {e}"),
-                        }
+                        let client_ref = desktop_client.read().clone();
+                        let mut state = app_state.write();
+                        let _ = join_topic_internal(&client_ref, &mut state, topic).await;
                     });
                 }
             }

@@ -27,8 +27,8 @@ impl Topic {
 
     pub fn new_placeholder(id: String) -> Self {
         Self {
-            id,
-            name: "Loading...".to_string(),
+            id: id.clone(),
+            name: id,
             avatar_url: None,
             last_connection: None,
             last_message: None,
