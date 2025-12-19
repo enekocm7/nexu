@@ -394,14 +394,10 @@ fn App() -> Element {
         if let dioxus::desktop::tao::event::Event::WindowEvent { event, .. } = event
             && event == &dioxus::desktop::tao::event::WindowEvent::CloseRequested
         {
-            eprintln!("Window close requested, sending DisconnectTopic messages");
             let client_ref = desktop_client.read().clone();
-            eprintln!("Got client reference");
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
-                    eprintln!("Enter spawn");
                     let client = client_ref.lock().await;
-                    eprintln!("Got client lock");
                     let id = client
                         .peer_id()
                         .await
@@ -413,7 +409,6 @@ fn App() -> Element {
                     let all_topics = state.lock().await.get_all_topics();
 
                     for topic in all_topics.iter() {
-                        eprintln!("Sending DisconnectTopic for topic {}", topic.id);
                         let ticket = Ticket::from_str(&topic.id).expect("Failed to parse topic_id");
 
                         let message = MessageTypes::DisconnectTopic(p2p::DisconnectMessage::new(
