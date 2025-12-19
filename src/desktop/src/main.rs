@@ -65,6 +65,7 @@ async fn join_topic_internal(
                 .send(MessageTypes::JoinTopic(p2p::JoinMessage::new(
                     ticket.topic,
                     id,
+                    Utc::now().timestamp_millis() as u64,
                 )))
                 .await
                 .expect("Failed to send JoinTopic message");
@@ -169,6 +170,7 @@ fn App() -> Element {
                 .send(MessageTypes::LeaveTopic(p2p::LeaveMessage::new(
                     ticket.topic,
                     id,
+                    Utc::now().timestamp_millis() as u64,
                 )))
                 .await
                 .expect("Failed to send LeaveTopic message");
@@ -417,6 +419,7 @@ fn App() -> Element {
                         let message = MessageTypes::DisconnectTopic(p2p::DisconnectMessage::new(
                             ticket.topic,
                             id,
+                            Utc::now().timestamp_millis() as u64,
                         ));
                         if let Err(e) = client.send(message).await {
                             eprintln!("Failed to send DisconnectTopic message: {}", e);

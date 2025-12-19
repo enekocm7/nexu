@@ -30,11 +30,16 @@ trait GossipMessage: Serialize {
 pub struct DisconnectMessage {
     pub topic: TopicId,
     pub endpoint: EndpointId,
+    pub timestamp: u64,
 }
 
 impl DisconnectMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
-        DisconnectMessage { topic, endpoint }
+    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        DisconnectMessage {
+            topic,
+            endpoint,
+            timestamp,
+        }
     }
 }
 
@@ -48,11 +53,16 @@ impl GossipMessage for DisconnectMessage {
 pub struct LeaveMessage {
     pub topic: TopicId,
     pub endpoint: EndpointId,
+    pub timestamp: u64,
 }
 
 impl LeaveMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
-        LeaveMessage { topic, endpoint }
+    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        LeaveMessage {
+            topic,
+            endpoint,
+            timestamp,
+        }
     }
 }
 
@@ -66,11 +76,16 @@ impl GossipMessage for LeaveMessage {
 pub struct JoinMessage {
     pub topic: TopicId,
     pub endpoint: EndpointId,
+    pub timestamp: u64,
 }
 
 impl JoinMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
-        JoinMessage { topic, endpoint }
+    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        JoinMessage {
+            topic,
+            endpoint,
+            timestamp,
+        }
     }
 }
 
@@ -171,6 +186,7 @@ pub struct ChatClient {
     _router: Router,
     gossip_sender: HashMap<TopicId, GossipSender>,
     gossip_receiver: HashMap<TopicId, GossipReceiver>,
+    listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
 }
 
 impl ChatClient {
@@ -194,6 +210,7 @@ impl ChatClient {
             _router: router,
             gossip_sender: HashMap::new(),
             gossip_receiver: HashMap::new(),
+            listen_tasks: HashMap::new(),
         })
     }
 
@@ -205,12 +222,13 @@ impl ChatClient {
 
         let (tx, rx) = flume::unbounded::<MessageTypes>();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             loop {
                 let event_option = receiver.next().await;
                 match event_option {
                     Some(Ok(Event::Received(msg))) => {
                         if let Ok(message) = postcard::from_bytes::<MessageTypes>(&msg.content) {
+                            eprintln!("Received message: {:?}", message);
                             tx.send(message).expect("Failed to send message");
                         }
                     }
@@ -222,6 +240,8 @@ impl ChatClient {
                 }
             }
         });
+
+        self.listen_tasks.insert(*topic_id, handle);
 
         Ok(rx)
     }
@@ -303,6 +323,9 @@ impl ChatClient {
     pub async fn leave_topic(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
         self.gossip_sender.remove(topic_id);
         self.gossip_receiver.remove(topic_id);
+        if let Some(handle) = self.listen_tasks.remove(topic_id) {
+            handle.abort();
+        }
         Ok(())
     }
 }
