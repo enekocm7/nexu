@@ -16,7 +16,8 @@ pub fn save_topics_to_file(topics: &Vec<Topic>) -> io::Result<()> {
 
 pub fn save_topics_to_file_with_path(topics: &Vec<Topic>, path: &PathBuf) -> io::Result<()> {
     fs::create_dir_all(path.parent().unwrap())?;
-    let encoded_topics = bitcode::encode(topics);
+    let encoded_topics =
+        postcard::to_stdvec(topics).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
     fs::write(path, encoded_topics)
 }
 
@@ -31,7 +32,7 @@ pub fn load_topics_from_file() -> io::Result<Vec<Topic>> {
 
 pub fn load_topics_from_file_with_path(path: &PathBuf) -> io::Result<Vec<Topic>> {
     let data = fs::read(path)?;
-    let topics: Vec<Topic> = bitcode::decode(&data).unwrap_or_default();
+    let topics: Vec<Topic> = postcard::from_bytes(&data).unwrap_or_default();
     Ok(topics)
 }
 
@@ -39,7 +40,7 @@ pub fn load_topics_from_file_with_path(path: &PathBuf) -> io::Result<Vec<Topic>>
 mod tests {
     use super::*;
     use tempfile::TempDir;
-    use ui::desktop::models::{Message, Topic};
+    use ui::desktop::models::{ChatMessage, Topic};
 
     fn create_test_topic(id: &str, name: &str) -> Topic {
         Topic::new(id.to_string(), name.to_string(), None)
@@ -47,7 +48,7 @@ mod tests {
 
     fn create_test_topic_with_message(id: &str, name: &str) -> Topic {
         let mut topic = create_test_topic(id, name);
-        let message = Message::new(
+        let message = ChatMessage::new(
             "sender123".to_string(),
             id.to_string(),
             "Hello, World!".to_string(),
@@ -100,8 +101,48 @@ mod tests {
         let topic1 = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
         assert_eq!(topic1.messages.len(), 1, "Message count mismatch");
         assert_eq!(topic1.last_message, Some("Hello, World!".to_string()));
-        assert_eq!(topic1.messages[0].content, "Hello, World!");
-        assert_eq!(topic1.messages[0].sender_id, "sender123");
+
+        if let ui::desktop::models::Message::Chat(chat_msg) = &topic1.messages[0] {
+            assert_eq!(chat_msg.content, "Hello, World!");
+            assert_eq!(chat_msg.sender_id, "sender123");
+        } else {
+            panic!("Expected ChatMessage variant");
+        }
+    }
+
+    #[test]
+    fn test_round_trip_preserves_all_topic_fields() {
+        let temp_dir = TempDir::new().unwrap();
+        let test_file_path = temp_dir.path().join("round_trip_test.json");
+
+        let mut topic = create_test_topic("topic1", "Topic One");
+        topic.avatar_url = Some("https://example.com/avatar.png".to_string());
+        topic.last_connection = Some(9876543210);
+
+        let message = ChatMessage::new(
+            "sender1".to_string(),
+            "topic1".to_string(),
+            "Test message".to_string(),
+            1234567890,
+            true,
+        );
+        topic.add_message(message);
+
+        let topics = vec![topic];
+
+        save_topics_to_file_with_path(&topics, &test_file_path).unwrap();
+        let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
+
+        let loaded_topic = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
+        assert_eq!(loaded_topic.id, "topic1");
+        assert_eq!(loaded_topic.name, "Topic One");
+        assert_eq!(
+            loaded_topic.avatar_url,
+            Some("https://example.com/avatar.png".to_string())
+        );
+        assert_eq!(loaded_topic.last_connection, Some(9876543210));
+        assert_eq!(loaded_topic.last_message, Some("Test message".to_string()));
+        assert_eq!(loaded_topic.messages.len(), 1);
     }
 
     #[test]
@@ -185,40 +226,5 @@ mod tests {
             loaded_topics.iter().any(|t| t.id == "topic3"),
             "topic3 should exist"
         );
-    }
-
-    #[test]
-    fn test_round_trip_preserves_all_topic_fields() {
-        let temp_dir = TempDir::new().unwrap();
-        let test_file_path = temp_dir.path().join("round_trip_test.json");
-
-        let mut topic = create_test_topic("topic1", "Topic One");
-        topic.avatar_url = Some("https://example.com/avatar.png".to_string());
-        topic.last_connection = Some(9876543210);
-
-        let message = Message::new(
-            "sender1".to_string(),
-            "topic1".to_string(),
-            "Test message".to_string(),
-            1234567890,
-            true,
-        );
-        topic.add_message(message);
-
-        let topics = vec![topic];
-
-        save_topics_to_file_with_path(&topics, &test_file_path).unwrap();
-        let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
-
-        let loaded_topic = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
-        assert_eq!(loaded_topic.id, "topic1");
-        assert_eq!(loaded_topic.name, "Topic One");
-        assert_eq!(
-            loaded_topic.avatar_url,
-            Some("https://example.com/avatar.png".to_string())
-        );
-        assert_eq!(loaded_topic.last_connection, Some(9876543210));
-        assert_eq!(loaded_topic.last_message, Some("Test message".to_string()));
-        assert_eq!(loaded_topic.messages.len(), 1);
     }
 }

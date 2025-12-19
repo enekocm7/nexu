@@ -3,11 +3,12 @@ mod utils;
 
 use crate::client::DesktopClient;
 use base64::Engine;
+use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
-use dioxus::desktop::{Config, WindowBuilder};
+use dioxus::desktop::{Config, WindowBuilder, use_wry_event_handler};
 use dioxus::prelude::*;
-    use p2p::{Message, Ticket, TopicMetadataMessage};
+use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
 use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -32,27 +33,39 @@ fn main() {
 
 async fn join_topic_internal(
     desktop_client: &Arc<Mutex<DesktopClient>>,
-    app_state: &mut AppState,
+    app_state: &Mutex<AppState>,
     topic: Topic,
 ) -> Result<(), Box<dyn Error>> {
     let join_result = desktop_client.lock().await.join_topic(&topic.id).await;
+    let mut state = app_state.lock().await;
 
     match join_result {
         Ok(ticket_str) => {
-            app_state.add_topic(topic);
+            state.add_topic(topic);
 
-            if utils::save_topics_to_file(&app_state.get_all_topics()).is_err() {
+            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
                 eprintln!("Failed to save topics to file");
             }
 
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
             let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-            
+
+            let id = desktop_client
+                .lock()
+                .await
+                .peer_id()
+                .await?
+                .parse()
+                .expect("Invalid peer id");
+
             desktop_client
                 .lock()
                 .await
-                .send(Message::JoinTopic(p2p::JoinMessage::new(ticket.topic)))
+                .send(MessageTypes::JoinTopic(p2p::JoinMessage::new(
+                    ticket.topic,
+                    id,
+                )))
                 .await
                 .expect("Failed to send JoinTopic message");
 
@@ -67,7 +80,7 @@ async fn join_topic_internal(
 
 #[component]
 fn App() -> Element {
-    let mut app_state = use_signal(AppState::new);
+    let mut app_state = use_signal(|| Mutex::new(AppState::new()));
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     let on_modify_topic = move |topic: Topic| {
@@ -85,8 +98,8 @@ fn App() -> Element {
                     }
                 }
             }
-
-            let mut state = app_state.write();
+            let writable_ref = app_state.write();
+            let mut state = writable_ref.lock().await;
             state.modify_topic_name(&topic.id, &topic.name);
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
             let time = state.set_last_changed_to_now(&topic.id);
@@ -97,7 +110,7 @@ fn App() -> Element {
                 .read()
                 .lock()
                 .await
-                .send(Message::TopicMetadata(update_message))
+                .send(MessageTypes::TopicMetadata(update_message))
                 .await
             {
                 eprintln!("Failed to send update topic message: {}", e);
@@ -113,7 +126,8 @@ fn App() -> Element {
             let ticket = desktop_client.read().lock().await.create_topic().await;
             match ticket {
                 Ok(ticket) => {
-                    let mut state = app_state.write();
+                    let writable_ref = app_state.write();
+                    let mut state = writable_ref.lock().await;
                     let topic = Topic::new(ticket.clone(), name, None);
                     state.add_topic(topic);
 
@@ -129,24 +143,39 @@ fn App() -> Element {
     let on_join_topic = move |topic_id: String| {
         spawn(async move {
             let client_ref = desktop_client.read().clone();
-            let mut state = app_state.write();
+            let state = app_state.write();
             let topic = Topic::new_placeholder(topic_id.clone());
-            let _ = join_topic_internal(&client_ref, &mut state, topic).await;
+            let _ = join_topic_internal(&client_ref, &state, topic).await;
         });
     };
 
     let on_leave_topic = move |topic_id: String| {
         spawn(async move {
-            let leave_result = desktop_client
-                .read()
-                .lock()
+            let client_ref = desktop_client.read().clone();
+            let mut client = client_ref.lock().await;
+            let id = client
+                .peer_id()
                 .await
-                .leave_topic(&topic_id)
-                .await;
+                .expect("Failed to get peer_id")
+                .parse()
+                .expect("Failed to parse peer_id");
+
+            let ticket = Ticket::from_str(&topic_id).expect("Failed to parse topic_id");
+
+            client
+                .send(MessageTypes::LeaveTopic(p2p::LeaveMessage::new(
+                    ticket.topic,
+                    id,
+                )))
+                .await
+                .expect("Failed to send LeaveTopic message");
+
+            let leave_result = client.leave_topic(&topic_id).await;
 
             match leave_result {
                 Ok(_) => {
-                    let mut state = app_state.write();
+                    let writable_ref = app_state.write();
+                    let mut state = writable_ref.lock().await;
                     state.remove_topic(&topic_id);
 
                     if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -159,7 +188,7 @@ fn App() -> Element {
     };
 
     let on_send_message = move |(ticket_id, message): (String, String)| {
-        let now = chrono::Utc::now().timestamp_millis() as u64;
+        let now = Utc::now().timestamp_millis() as u64;
         spawn(async move {
             let client_ref = desktop_client.read().clone();
             let (send_result, peer_id_result) = {
@@ -168,16 +197,17 @@ fn App() -> Element {
                     .get_chat_message(&ticket_id, &message)
                     .await
                     .expect("Failed to create chat message");
-                let send = client.send(Message::Chat(message)).await;
+                let send = client.send(MessageTypes::Chat(message)).await;
                 let peer = client.peer_id().await;
                 (send, peer)
             };
 
             match (send_result, peer_id_result) {
                 (Ok(_), Ok(peer_id)) => {
-                    let mut state = app_state.write();
+                    let writable_ref = app_state.write();
+                    let mut state = writable_ref.lock().await;
                     if let Some(topic) = state.get_topic(&ticket_id) {
-                        let msg = ui::desktop::models::Message::new(
+                        let msg = ui::desktop::models::ChatMessage::new(
                             peer_id, ticket_id, message, now, true,
                         );
                         topic.add_message(msg);
@@ -209,14 +239,14 @@ fn App() -> Element {
                 for topic in loaded_topics {
                     spawn(async move {
                         let client_ref = desktop_client.read().clone();
-                        let mut state = app_state.write();
-                        let _ = join_topic_internal(&client_ref, &mut state, topic).await;
+                        let state = app_state.write();
+                        let _ = join_topic_internal(&client_ref, &state, topic).await;
                     });
                 }
             }
 
             loop {
-                let messages: Vec<(String, Message)> = {
+                let messages: Vec<(String, MessageTypes)> = {
                     let mut client = client_ref.lock().await;
                     let mut msgs = Vec::new();
                     for (topic, receiver) in client.get_message_receiver() {
@@ -231,10 +261,11 @@ fn App() -> Element {
 
                 for (topic, message) in messages {
                     match message {
-                        Message::Chat(msg) => {
-                            let mut state = app_state.write();
+                        MessageTypes::Chat(msg) => {
+                            let writable_ref = app_state.write();
+                            let mut state = writable_ref.lock().await;
                             if let Some(topic_obj) = state.get_topic(&topic) {
-                                let message = ui::desktop::models::Message::new(
+                                let message = ui::desktop::models::ChatMessage::new(
                                     msg.sender.to_string(),
                                     topic_obj.id.clone(),
                                     msg.content,
@@ -244,10 +275,10 @@ fn App() -> Element {
                                 topic_obj.add_message(message);
                             }
                         }
-
-                        Message::TopicMetadata(metadata) => {
+                        MessageTypes::TopicMetadata(metadata) => {
                             let should_send = {
-                                let mut state = app_state.write();
+                                let writable_ref = app_state.write();
+                                let mut state = writable_ref.lock().await;
                                 if let Some(existing_topic) = state.get_topic(&topic) {
                                     if metadata.timestamp >= existing_topic.last_changed {
                                         state.modify_topic_name(&topic, &metadata.name);
@@ -268,21 +299,20 @@ fn App() -> Element {
                                     None
                                 }
                             };
-
                             if let Some(metadata) = should_send
                                 && let Err(e) = client_ref
                                     .lock()
                                     .await
-                                    .send(Message::TopicMetadata(metadata))
+                                    .send(MessageTypes::TopicMetadata(metadata))
                                     .await
                             {
                                 eprintln!("Failed to send TopicMetadataMessage: {}", e);
                             }
                         }
-
-                        Message::JoinTopic(join_message) => {
+                        MessageTypes::JoinTopic(join_message) => {
                             let metadata_to_send = {
-                                let state = app_state.read();
+                                let readable_ref = app_state.read();
+                                let state = readable_ref.lock().await;
                                 state.get_all_topics().iter().find_map(|topic| {
                                     let ticket = Ticket::from_str(&topic.id).ok()?;
                                     if ticket.topic == join_message.topic {
@@ -297,24 +327,60 @@ fn App() -> Element {
                                     }
                                 })
                             };
-
                             if let Some(message) = metadata_to_send
                                 && let Err(e) = client_ref
                                     .lock()
                                     .await
-                                    .send(Message::TopicMetadata(message))
+                                    .send(MessageTypes::TopicMetadata(message))
                                     .await
                             {
                                 eprintln!("Failed to send TopicMetadataMessage: {}", e);
                             }
-                        }
 
-                        Message::LeaveTopic => {}
+                            let writable_ref = app_state.write();
+                            let mut state = writable_ref.lock().await;
+                            if let Some(topic_obj) = state.get_topic(&topic) {
+                                let message = ui::desktop::models::JoinMessage {
+                                    sender_id: join_message.endpoint.to_string(),
+                                    topic_id: topic_obj.id.clone(),
+                                    timestamp: Utc::now().timestamp_millis() as u64,
+                                };
+
+                                topic_obj.add_join_message(message);
+                            }
+                        }
+                        MessageTypes::LeaveTopic(message) => {
+                            let writable_ref = app_state.write();
+                            let mut state = writable_ref.lock().await;
+                            if let Some(topic_obj) = state.get_topic(&topic) {
+                                let message = ui::desktop::models::LeaveMessage {
+                                    sender_id: message.endpoint.to_string(),
+                                    topic_id: topic_obj.id.clone(),
+                                    timestamp: Utc::now().timestamp_millis() as u64,
+                                };
+
+                                topic_obj.add_leave_message(message);
+                            }
+                        }
+                        MessageTypes::DisconnectTopic(message) => {
+                            let writable_ref = app_state.write();
+                            let mut state = writable_ref.lock().await;
+                            if let Some(topic_obj) = state.get_topic(&topic) {
+                                let message = ui::desktop::models::DisconnectMessage {
+                                    sender_id: message.endpoint.to_string(),
+                                    topic_id: topic_obj.id.clone(),
+                                    timestamp: Utc::now().timestamp_millis() as u64,
+                                };
+
+                                topic_obj.add_disconnect_message(message);
+                            }
+                        }
                     }
                 }
 
                 if had_messages
-                    && utils::save_topics_to_file(&app_state.read().get_all_topics()).is_err()
+                    && utils::save_topics_to_file(&app_state.read().lock().await.get_all_topics())
+                        .is_err()
                 {
                     eprintln!("Failed to save topics to file");
                 }
@@ -322,6 +388,40 @@ fn App() -> Element {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         });
+    });
+
+    use_wry_event_handler(move |event, _| {
+        if let dioxus::desktop::tao::event::Event::WindowEvent { event, .. } = event
+            && event == &dioxus::desktop::tao::event::WindowEvent::CloseRequested
+        {
+            let client_ref = desktop_client.read().clone();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    let client = client_ref.lock().await;
+                    let id = client
+                        .peer_id()
+                        .await
+                        .expect("Failed to get peer_id")
+                        .parse()
+                        .expect("Failed to parse peer_id");
+
+                    let state = app_state.read();
+                    let all_topics = state.lock().await.get_all_topics();
+
+                    for topic in all_topics.iter() {
+                        let ticket = Ticket::from_str(&topic.id).expect("Failed to parse topic_id");
+
+                        let message = MessageTypes::DisconnectTopic(p2p::DisconnectMessage::new(
+                            ticket.topic,
+                            id,
+                        ));
+                        if let Err(e) = client.send(message).await {
+                            eprintln!("Failed to send DisconnectTopic message: {}", e);
+                        }
+                    }
+                });
+            });
+        }
     });
 
     rsx! {

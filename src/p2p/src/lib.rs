@@ -9,25 +9,74 @@ use std::collections::HashMap;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
-    use std::str::FromStr;
-    use std::time::Duration;
-    use tokio::time::sleep;
-    
-pub enum Message {
+use std::str::FromStr;
+use std::time::Duration;
+use tokio::time::sleep;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum MessageTypes {
     Chat(ChatMessage),
     JoinTopic(JoinMessage),
-    LeaveTopic,
+    LeaveTopic(LeaveMessage),
+    DisconnectTopic(DisconnectMessage),
     TopicMetadata(TopicMetadataMessage),
+}
+
+trait GossipMessage: Serialize {
+    fn topic_id(&self) -> &TopicId;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DisconnectMessage {
+    pub topic: TopicId,
+    pub endpoint: EndpointId,
+}
+
+impl DisconnectMessage {
+    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
+        DisconnectMessage { topic, endpoint }
+    }
+}
+
+impl GossipMessage for DisconnectMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LeaveMessage {
+    pub topic: TopicId,
+    pub endpoint: EndpointId,
+}
+
+impl LeaveMessage {
+    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
+        LeaveMessage { topic, endpoint }
+    }
+}
+
+impl GossipMessage for LeaveMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JoinMessage {
     pub topic: TopicId,
+    pub endpoint: EndpointId,
 }
 
 impl JoinMessage {
-    pub fn new(topic: TopicId) -> Self {
-        JoinMessage { topic }
+    pub fn new(topic: TopicId, endpoint: EndpointId) -> Self {
+        JoinMessage { topic, endpoint }
+    }
+}
+
+impl GossipMessage for JoinMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
     }
 }
 
@@ -48,20 +97,11 @@ impl TopicMetadataMessage {
             timestamp,
         }
     }
+}
 
-    pub fn new_from_string(
-        topic: &str,
-        name: &str,
-        avatar_url: Option<String>,
-        timestamp: u64,
-    ) -> Self {
-        let topic = TopicId::from_str(topic).expect("Invalid topic ID string");
-        TopicMetadataMessage {
-            topic,
-            name: name.to_string(),
-            avatar_url,
-            timestamp,
-        }
+impl GossipMessage for TopicMetadataMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
     }
 }
 
@@ -81,6 +121,12 @@ impl ChatMessage {
             timestamp,
             topic_id,
         }
+    }
+}
+
+impl GossipMessage for ChatMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic_id
     }
 }
 
@@ -149,35 +195,23 @@ impl ChatClient {
             gossip_sender: HashMap::new(),
             gossip_receiver: HashMap::new(),
         })
-        }
-    
-        pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<Receiver<Message>> {
-            let mut receiver = self
-                .gossip_receiver
+    }
+
+    pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<Receiver<MessageTypes>> {
+        let mut receiver = self
+            .gossip_receiver
             .remove(topic_id)
-                .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
-    
-            let (tx, rx) = flume::unbounded::<Message>();
-    
-            tokio::spawn(async move {
+            .ok_or_else(|| anyhow::anyhow!("No gossip receiver for topic"))?;
+
+        let (tx, rx) = flume::unbounded::<MessageTypes>();
+
+        tokio::spawn(async move {
             loop {
                 let event_option = receiver.next().await;
                 match event_option {
                     Some(Ok(Event::Received(msg))) => {
-                        if let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content)
-                        {
-                            tx.send(Message::Chat(chat_message))
-                                .expect("Failed to send message");
-                        } else if let Ok(update_topic_message) =
-                            postcard::from_bytes::<TopicMetadataMessage>(&msg.content)
-                        {
-                            tx.send(Message::TopicMetadata(update_topic_message))
-                                .expect("Failed to send update topic message");
-                        } else if let Ok(join_message) =
-                            postcard::from_bytes::<JoinMessage>(&msg.content)
-                        {
-                            tx.send(Message::JoinTopic(join_message))
-                                .expect("Failed to send join message");
+                        if let Ok(message) = postcard::from_bytes::<MessageTypes>(&msg.content) {
+                            tx.send(message).expect("Failed to send message");
                         }
                     }
                     Some(Ok(Event::NeighborUp(_))) => continue,
@@ -208,49 +242,18 @@ impl ChatClient {
         Ok(())
     }
 
-    pub async fn send(&mut self, message: Message) -> anyhow::Result<()> {
-        match message {
-            Message::Chat(chat_message) => {
-                self.send_message(chat_message).await?;
-            }
-            Message::TopicMetadata(update_topic_message) => {
-                self.send_topic_metadata(update_topic_message).await?;
-            }
-            Message::JoinTopic(topic_id) => {
-                self.send_join_topic(topic_id).await?;
-            }
-            Message::LeaveTopic => {}
-        }
-        Ok(())
-    }
+    pub async fn send(&mut self, message: MessageTypes) -> anyhow::Result<()> {
+        let topic_id = match &message {
+            MessageTypes::Chat(msg) => msg.topic_id(),
+            MessageTypes::TopicMetadata(msg) => msg.topic_id(),
+            MessageTypes::JoinTopic(msg) => msg.topic_id(),
+            MessageTypes::LeaveTopic(msg) => msg.topic_id(),
+            MessageTypes::DisconnectTopic(msg) => msg.topic_id(),
+        };
 
-    async fn send_message(&mut self, message: ChatMessage) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
-            .get_mut(&message.topic_id)
-            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
-
-        let serialized = postcard::to_stdvec(&message)?;
-        sender.broadcast(serialized.into()).await?;
-
-        Ok(())
-    }
-
-    async fn send_topic_metadata(&mut self, message: TopicMetadataMessage) -> anyhow::Result<()> {
-        let sender = self
-            .gossip_sender
-            .get_mut(&message.topic)
-            .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
-
-        let serialized = postcard::to_stdvec(&message)?;
-        sender.broadcast(serialized.into()).await?;
-        Ok(())
-    }
-
-    async fn send_join_topic(&mut self, message: JoinMessage) -> anyhow::Result<()> {
-        let sender = self
-            .gossip_sender
-            .get_mut(&message.topic)
+            .get_mut(topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
         let serialized = postcard::to_stdvec(&message)?;
@@ -406,7 +409,7 @@ mod tests {
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send(Message::Chat(ChatMessage::new(
+            .send(MessageTypes::Chat(ChatMessage::new(
                 client1_id,
                 message1.to_string(),
                 timestamp1,
@@ -420,7 +423,7 @@ mod tests {
         let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send(Message::Chat(ChatMessage::new(
+            .send(MessageTypes::Chat(ChatMessage::new(
                 client2_id,
                 message2.to_string(),
                 timestamp2,
@@ -532,7 +535,7 @@ mod tests {
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
         client1
-            .send(Message::Chat(ChatMessage::new(
+            .send(MessageTypes::Chat(ChatMessage::new(
                 client1_id,
                 message1.to_string(),
                 timestamp1,
@@ -544,7 +547,7 @@ mod tests {
         let message2 = "Hello from client2";
         let timestamp2 = 1625247600001;
         client2
-            .send(Message::Chat(ChatMessage::new(
+            .send(MessageTypes::Chat(ChatMessage::new(
                 client2_id,
                 message2.to_string(),
                 timestamp2,
@@ -556,7 +559,7 @@ mod tests {
         let message3 = "Hello from client3";
         let timestamp3 = 1625247600002;
         client3
-            .send(Message::Chat(ChatMessage::new(
+            .send(MessageTypes::Chat(ChatMessage::new(
                 client3_id,
                 message3.to_string(),
                 timestamp3,
