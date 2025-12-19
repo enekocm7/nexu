@@ -6,7 +6,7 @@ use base64::Engine;
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
-use dioxus::desktop::{Config, WindowBuilder};
+use dioxus::desktop::{Config, WindowBuilder, use_wry_event_handler};
 use dioxus::prelude::*;
 use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
 use std::error::Error;
@@ -388,6 +388,45 @@ fn App() -> Element {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
             }
         });
+    });
+
+    use_wry_event_handler(move |event, _| {
+        if let dioxus::desktop::tao::event::Event::WindowEvent { event, .. } = event
+            && event == &dioxus::desktop::tao::event::WindowEvent::CloseRequested
+        {
+            eprintln!("Window close requested, sending DisconnectTopic messages");
+            let client_ref = desktop_client.read().clone();
+            eprintln!("Got client reference");
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    eprintln!("Enter spawn");
+                    let client = client_ref.lock().await;
+                    eprintln!("Got client lock");
+                    let id = client
+                        .peer_id()
+                        .await
+                        .expect("Failed to get peer_id")
+                        .parse()
+                        .expect("Failed to parse peer_id");
+
+                    let state = app_state.read();
+                    let all_topics = state.lock().await.get_all_topics();
+
+                    for topic in all_topics.iter() {
+                        eprintln!("Sending DisconnectTopic for topic {}", topic.id);
+                        let ticket = Ticket::from_str(&topic.id).expect("Failed to parse topic_id");
+
+                        let message = MessageTypes::DisconnectTopic(p2p::DisconnectMessage::new(
+                            ticket.topic,
+                            id,
+                        ));
+                        if let Err(e) = client.send(message).await {
+                            eprintln!("Failed to send DisconnectTopic message: {}", e);
+                        }
+                    }
+                });
+            });
+        }
     });
 
     rsx! {
