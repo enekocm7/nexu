@@ -244,16 +244,15 @@ fn App() -> Element {
                 return;
             }
 
-            /*if let Ok(loaded_topics) = utils::load_topics_from_file() {
+            if let Ok(loaded_topics) = utils::load_topics_from_file() {
                 for topic in loaded_topics {
                     spawn(async move {
                         let client_ref = desktop_client.read().clone();
-                        let writable_ref = app_state.write();
-                        let state = writable_ref.lock().await;
+                        let state = app_state.write();
                         let _ = join_topic_internal(&client_ref, &state, topic).await;
                     });
                 }
-            }*/
+            }
 
             loop {
                 let messages: Vec<(String, MessageTypes)> = {
