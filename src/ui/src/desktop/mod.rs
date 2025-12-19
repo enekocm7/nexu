@@ -7,7 +7,7 @@ pub mod desktop_web_components {
     use arboard::Clipboard;
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
-    use chrono::{DateTime, TimeDelta, Utc};
+    use chrono::{DateTime, Local, TimeDelta, Utc};
     use dioxus::prelude::*;
     use dioxus_primitives::context_menu::{
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
@@ -681,11 +681,11 @@ pub mod desktop_web_components {
     fn format_message_timestamp(timestamp: u64) -> String {
         let timestamp_secs = (timestamp / 1000) as i64;
         let datetime = match DateTime::from_timestamp(timestamp_secs, 0) {
-            Some(dt) => dt,
+            Some(dt) => dt.with_timezone(&Local),
             None => return String::from(""),
         };
 
-        let now = Utc::now();
+        let now = Local::now();
         let duration = now.signed_duration_since(datetime);
 
         if duration < TimeDelta::days(1) {
@@ -705,11 +705,11 @@ pub mod desktop_web_components {
 
     fn format_relative_time(timestamp: i64) -> String {
         let last_connection = match DateTime::from_timestamp(timestamp, 0) {
-            Some(dt) => dt,
+            Some(dt) => dt.with_timezone(&Local),
             None => return String::from(""),
         };
 
-        let now = Utc::now();
+        let now = Local::now();
         let duration = now.signed_duration_since(last_connection);
 
         if duration < TimeDelta::minutes(1) {
