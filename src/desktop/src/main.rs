@@ -144,6 +144,9 @@ fn App() -> Element {
         spawn(async move {
             let client_ref = desktop_client.read().clone();
             let state = app_state.write();
+            if state.lock().await.get_topic(&topic_id).is_some() {
+                return;
+            }
             let topic = Topic::new_placeholder(topic_id.clone());
             let _ = join_topic_internal(&client_ref, &state, topic).await;
         });
