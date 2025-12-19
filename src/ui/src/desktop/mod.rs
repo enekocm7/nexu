@@ -7,7 +7,7 @@ pub mod desktop_web_components {
     use arboard::Clipboard;
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
-    use chrono::{DateTime, Local, TimeDelta, Utc};
+    use chrono::{DateTime, Local, TimeDelta};
     use dioxus::prelude::*;
     use dioxus_primitives::context_menu::{
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
