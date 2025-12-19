@@ -13,6 +13,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::sleep;
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MessageTypes {
     Chat(ChatMessage),
     JoinTopic(JoinMessage),
@@ -209,20 +210,8 @@ impl ChatClient {
                 let event_option = receiver.next().await;
                 match event_option {
                     Some(Ok(Event::Received(msg))) => {
-                        if let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content)
-                        {
-                            tx.send(MessageTypes::Chat(chat_message))
-                                .expect("Failed to send message");
-                        } else if let Ok(update_topic_message) =
-                            postcard::from_bytes::<TopicMetadataMessage>(&msg.content)
-                        {
-                            tx.send(MessageTypes::TopicMetadata(update_topic_message))
-                                .expect("Failed to send update topic message");
-                        } else if let Ok(join_message) =
-                            postcard::from_bytes::<JoinMessage>(&msg.content)
-                        {
-                            tx.send(MessageTypes::JoinTopic(join_message))
-                                .expect("Failed to send join message");
+                        if let Ok(message) = postcard::from_bytes::<MessageTypes>(&msg.content) {
+                            tx.send(message).expect("Failed to send message");
                         }
                     }
                     Some(Ok(Event::NeighborUp(_))) => continue,
@@ -254,30 +243,17 @@ impl ChatClient {
     }
 
     pub async fn send(&mut self, message: MessageTypes) -> anyhow::Result<()> {
-        match message {
-            MessageTypes::Chat(chat_message) => {
-                self.send_message(chat_message).await?;
-            }
-            MessageTypes::TopicMetadata(update_topic_message) => {
-                self.send_message(update_topic_message).await?;
-            }
-            MessageTypes::JoinTopic(topic_id) => {
-                self.send_message(topic_id).await?;
-            }
-            MessageTypes::LeaveTopic(leave_message) => {
-                self.send_message(leave_message).await?;
-            }
-            MessageTypes::DisconnectTopic(disconnect_message) => {
-                self.send_message(disconnect_message).await?;
-            }
-        }
-        Ok(())
-    }
+        let topic_id = match &message {
+            MessageTypes::Chat(msg) => msg.topic_id(),
+            MessageTypes::TopicMetadata(msg) => msg.topic_id(),
+            MessageTypes::JoinTopic(msg) => msg.topic_id(),
+            MessageTypes::LeaveTopic(msg) => msg.topic_id(),
+            MessageTypes::DisconnectTopic(msg) => msg.topic_id(),
+        };
 
-    async fn send_message(&mut self, message: impl GossipMessage) -> anyhow::Result<()> {
         let sender = self
             .gossip_sender
-            .get_mut(message.topic_id())
+            .get_mut(topic_id)
             .ok_or_else(|| anyhow::anyhow!("Not subscribed to topic"))?;
 
         let serialized = postcard::to_stdvec(&message)?;

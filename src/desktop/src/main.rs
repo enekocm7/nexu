@@ -151,10 +151,9 @@ fn App() -> Element {
 
     let on_leave_topic = move |topic_id: String| {
         spawn(async move {
-            let id = desktop_client
-                .read()
-                .lock()
-                .await
+            let client_ref = desktop_client.read().clone();
+            let mut client = client_ref.lock().await;
+            let id = client
                 .peer_id()
                 .await
                 .expect("Failed to get peer_id")
@@ -163,10 +162,7 @@ fn App() -> Element {
 
             let ticket = Ticket::from_str(&topic_id).expect("Failed to parse topic_id");
 
-            desktop_client
-                .read()
-                .lock()
-                .await
+            client
                 .send(MessageTypes::LeaveTopic(p2p::LeaveMessage::new(
                     ticket.topic,
                     id,
@@ -174,12 +170,7 @@ fn App() -> Element {
                 .await
                 .expect("Failed to send LeaveTopic message");
 
-            let leave_result = desktop_client
-                .read()
-                .lock()
-                .await
-                .leave_topic(&topic_id)
-                .await;
+            let leave_result = client.leave_topic(&topic_id).await;
 
             match leave_result {
                 Ok(_) => {
