@@ -2,6 +2,7 @@ mod client;
 mod utils;
 
 use crate::client::DesktopClient;
+use crate::utils::file::{load_topics_from_file, save_topics_to_file};
 use base64::Engine;
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
@@ -43,7 +44,7 @@ async fn join_topic_internal(
         Ok(ticket_str) => {
             state.add_topic(topic);
 
-            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+            if save_topics_to_file(&state.get_all_topics()).is_err() {
                 eprintln!("Failed to save topics to file");
             }
 
@@ -116,7 +117,7 @@ fn App() -> Element {
             {
                 eprintln!("Failed to send update topic message: {}", e);
             }
-            if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+            if save_topics_to_file(&state.get_all_topics()).is_err() {
                 eprintln!("Failed to save topics to file");
             }
         });
@@ -132,7 +133,7 @@ fn App() -> Element {
                     let topic = Topic::new(ticket.clone(), name, None);
                     state.add_topic(topic);
 
-                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                    if save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
                     }
                 }
@@ -183,7 +184,7 @@ fn App() -> Element {
                     let mut state = writable_ref.lock().await;
                     state.remove_topic(&topic_id);
 
-                    if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                    if save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
                     }
                 }
@@ -217,7 +218,7 @@ fn App() -> Element {
                         );
                         topic.add_message(msg);
 
-                        if utils::save_topics_to_file(&state.get_all_topics()).is_err() {
+                        if save_topics_to_file(&state.get_all_topics()).is_err() {
                             eprintln!("Failed to save topics to file");
                         }
                     }
@@ -240,7 +241,7 @@ fn App() -> Element {
                 return;
             }
 
-            if let Ok(loaded_topics) = utils::load_topics_from_file() {
+            if let Ok(loaded_topics) = load_topics_from_file() {
                 for topic in loaded_topics {
                     spawn(async move {
                         let client_ref = desktop_client.read().clone();
@@ -384,8 +385,7 @@ fn App() -> Element {
                 }
 
                 if had_messages
-                    && utils::save_topics_to_file(&app_state.read().lock().await.get_all_topics())
-                        .is_err()
+                    && save_topics_to_file(&app_state.read().lock().await.get_all_topics()).is_err()
                 {
                     eprintln!("Failed to save topics to file");
                 }
