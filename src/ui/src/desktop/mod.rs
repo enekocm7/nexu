@@ -77,7 +77,7 @@ pub mod desktop_web_components {
                                 contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
                                 contacts
                             });
-                        
+
                             match &*contacts_resource.read_unchecked() {
                                 Some(contacts) => rsx! {
                                     ul {
@@ -142,7 +142,7 @@ pub mod desktop_web_components {
                     }
 
                     if let Some(topic) = show_topic_details() {
-                        ToastProvider { 
+                        ToastProvider {
                             TopicDetails { topic: topic.clone(), toggle: show_topic_details, on_modify_topic }
                         }
                     }
@@ -518,9 +518,16 @@ pub mod desktop_web_components {
             }
             Message::Join(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
+                let sender = message.sender_id.clone();
+                let text = if message.me {
+                    format!("{sender} joined the topic.")
+                } else {
+                    format!("{sender} has joined the topic.")
+                };
+
                 rsx! {
                     div { class: "chat-message system-message",
-                        p { class: "message-text", "{message.sender_id} has joined the topic." }
+                        p { class: "message-text", "{text}" }
                         p { class: "system-message-timestamp", "{timestamp_str}" }
                     }
                 }

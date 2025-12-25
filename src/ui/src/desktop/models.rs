@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -41,6 +42,7 @@ impl Topic {
     pub fn add_message(&mut self, message: ChatMessage) {
         self.last_message = Some(message.content.clone());
         self.messages.push(Message::Chat(message));
+        self.messages.sort()
     }
 
     pub fn add_leave_message(&mut self, message: LeaveMessage) {
@@ -91,8 +93,8 @@ impl AppState {
         }
     }
 
-    pub fn add_topic(&mut self, topic: Topic) {
-        self.topics.insert(topic.id.clone(), topic);
+    pub fn add_topic(&mut self, topic: &Topic) {
+        self.topics.insert(topic.id.clone(), topic.clone());
     }
 
     pub fn modify_topic_name(&mut self, topic_id: &str, new_name: &str) {
@@ -155,12 +157,60 @@ impl AppState {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Message {
     Chat(ChatMessage),
     Leave(LeaveMessage),
     Join(JoinMessage),
     Disconnect(DisconnectMessage),
+}
+
+impl PartialOrd for Message {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq<Self> for Message {
+    fn eq(&self, other: &Self) -> bool {
+        let self_timestamp = match self {
+            Message::Chat(msg) => msg.timestamp,
+            Message::Leave(msg) => msg.timestamp,
+            Message::Join(msg) => msg.timestamp,
+            Message::Disconnect(msg) => msg.timestamp,
+        };
+
+        let other_timestamp = match other {
+            Message::Chat(msg) => msg.timestamp,
+            Message::Leave(msg) => msg.timestamp,
+            Message::Join(msg) => msg.timestamp,
+            Message::Disconnect(msg) => msg.timestamp,
+        };
+
+        self_timestamp == other_timestamp
+    }
+}
+
+impl Eq for Message {}
+
+impl Ord for Message {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let self_timestamp = match self {
+            Message::Chat(msg) => msg.timestamp,
+            Message::Leave(msg) => msg.timestamp,
+            Message::Join(msg) => msg.timestamp,
+            Message::Disconnect(msg) => msg.timestamp,
+        };
+
+        let other_timestamp = match other {
+            Message::Chat(msg) => msg.timestamp,
+            Message::Leave(msg) => msg.timestamp,
+            Message::Join(msg) => msg.timestamp,
+            Message::Disconnect(msg) => msg.timestamp,
+        };
+
+        self_timestamp.cmp(&other_timestamp)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -193,20 +243,36 @@ impl ChatMessage {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LeaveMessage {
     pub sender_id: String,
-    pub topic_id: String,
     pub timestamp: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JoinMessage {
     pub sender_id: String,
-    pub topic_id: String,
+    pub me: bool,
     pub timestamp: u64,
+}
+
+impl JoinMessage {
+    pub fn new(sender_id: String, timestamp: u64) -> Self {
+        Self {
+            sender_id,
+            me: false,
+            timestamp,
+        }
+    }
+
+    pub fn new_me(timestamp: u64) -> Self {
+        Self {
+            sender_id: "You".to_string(),
+            me: true,
+            timestamp,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DisconnectMessage {
     pub sender_id: String,
-    pub topic_id: String,
     pub timestamp: u64,
 }

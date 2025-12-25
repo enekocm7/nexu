@@ -20,10 +20,36 @@ pub enum MessageTypes {
     LeaveTopic(LeaveMessage),
     DisconnectTopic(DisconnectMessage),
     TopicMetadata(TopicMetadataMessage),
+    TopicMessages(TopicMessagesMessage),
 }
 
 trait GossipMessage: Serialize {
     fn topic_id(&self) -> &TopicId;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TopicMessagesMessage {
+    pub topic: TopicId,
+    pub messages: Vec<ChatMessage>,
+}
+
+impl TopicMessagesMessage {
+    pub fn new(topic: TopicId, messages: Vec<ChatMessage>) -> Self {
+        TopicMessagesMessage { topic, messages }
+    }
+
+    pub fn new_empty(topic: TopicId) -> Self {
+        TopicMessagesMessage {
+            topic,
+            messages: Vec::new(),
+        }
+    }
+}
+
+impl GossipMessage for TopicMessagesMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -228,7 +254,6 @@ impl ChatClient {
                 match event_option {
                     Some(Ok(Event::Received(msg))) => {
                         if let Ok(message) = postcard::from_bytes::<MessageTypes>(&msg.content) {
-                            eprintln!("Received message: {:?}", message);
                             tx.send(message).expect("Failed to send message");
                         }
                     }
@@ -269,6 +294,7 @@ impl ChatClient {
             MessageTypes::JoinTopic(msg) => msg.topic_id(),
             MessageTypes::LeaveTopic(msg) => msg.topic_id(),
             MessageTypes::DisconnectTopic(msg) => msg.topic_id(),
+            MessageTypes::TopicMessages(msg) => msg.topic_id(),
         };
 
         let sender = self
@@ -422,12 +448,17 @@ mod tests {
             .await
             .expect("Failed to join topic");
 
+        let receiver1 = client1
+            .listen(&ticket.topic)
+            .expect("Failed to start listening on client1");
+        let receiver2 = client2
+            .listen(&ticket.topic)
+            .expect("Failed to start listening on client2");
+
         sleep(Duration::from_secs(2)).await;
 
         let client1_id = *client1.peer_id();
         let client2_id = *client2.peer_id();
-
-        sleep(Duration::from_secs(2)).await;
 
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
@@ -455,16 +486,6 @@ mod tests {
             .await
             .expect("Failed to send message from client2");
 
-        let receiver1 = client1
-            .gossip_receiver
-            .get_mut(&ticket.topic)
-            .expect("Failed to get gossip receiver for client1");
-
-        let receiver2 = client2
-            .gossip_receiver
-            .get_mut(&ticket.topic)
-            .expect("Failed to get gossip receiver for client2");
-
         let mut messages_received_by_client1 = Vec::new();
         let mut messages_received_by_client2 = Vec::new();
 
@@ -475,17 +496,14 @@ mod tests {
 
                 loop {
                     tokio::select! {
-                        result = receiver1.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
-                                    messages_received_by_client1.push(chat_message);
-                                }
+                        result = receiver1.recv_async() => {
+                            if let Ok(MessageTypes::Chat(chat_message)) = result {
+                                messages_received_by_client1.push(chat_message);
+                            }
                         }
-                        result = receiver2.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
-                                    messages_received_by_client2.push(chat_message);
-
+                        result = receiver2.recv_async() => {
+                            if let Ok(MessageTypes::Chat(chat_message)) = result {
+                                messages_received_by_client2.push(chat_message);
                             }
                         }
                         _ = sleep(Duration::from_millis(100)) => {
@@ -549,6 +567,16 @@ mod tests {
             .await
             .expect("Failed to join topic for client3");
 
+        let receiver1 = client1
+            .listen(&ticket.topic)
+            .expect("Failed to start listening on client1");
+        let receiver2 = client2
+            .listen(&ticket.topic)
+            .expect("Failed to start listening on client2");
+        let receiver3 = client3
+            .listen(&ticket.topic)
+            .expect("Failed to start listening on client3");
+
         sleep(Duration::from_secs(3)).await;
 
         let client1_id = *client1.peer_id();
@@ -591,19 +619,6 @@ mod tests {
             .await
             .expect("Failed to send message from client3");
 
-        let receiver1 = client1
-            .gossip_receiver
-            .get_mut(&ticket.topic)
-            .expect("Failed to get gossip receiver for client1");
-        let receiver2 = client2
-            .gossip_receiver
-            .get_mut(&ticket.topic)
-            .expect("Failed to get gossip receiver for client2");
-        let receiver3 = client3
-            .gossip_receiver
-            .get_mut(&ticket.topic)
-            .expect("Failed to get gossip receiver for client3");
-
         let mut messages_received_by_client1 = Vec::new();
         let mut messages_received_by_client2 = Vec::new();
         let mut messages_received_by_client3 = Vec::new();
@@ -615,23 +630,20 @@ mod tests {
 
                 loop {
                     tokio::select! {
-                        result = receiver1.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
-                                    messages_received_by_client1.push(chat_message);
-                                }
+                        result = receiver1.recv_async() => {
+                            if let Ok(MessageTypes::Chat(chat_message)) = result {
+                                messages_received_by_client1.push(chat_message);
+                            }
                         }
-                        result = receiver2.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
-                                    messages_received_by_client2.push(chat_message);
-                                }
+                        result = receiver2.recv_async() => {
+                            if let Ok(MessageTypes::Chat(chat_message)) = result {
+                                messages_received_by_client2.push(chat_message);
+                            }
                         }
-                        result = receiver3.try_next() => {
-                            if let Ok(Some(Event::Received(msg))) = result
-                                && let Ok(chat_message) = postcard::from_bytes::<ChatMessage>(&msg.content) {
-                                    messages_received_by_client3.push(chat_message);
-                                }
+                        result = receiver3.recv_async() => {
+                            if let Ok(MessageTypes::Chat(chat_message)) = result {
+                                messages_received_by_client3.push(chat_message);
+                            }
                         }
                         _ = sleep(Duration::from_millis(100)) => {
                             if start.elapsed() >= collection_duration {

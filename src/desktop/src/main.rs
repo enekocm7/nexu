@@ -15,7 +15,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, Topic};
+use ui::desktop::models::{AppState, ChatMessage, Message, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -35,22 +35,26 @@ fn main() {
 async fn join_topic_internal(
     desktop_client: &Arc<Mutex<DesktopClient>>,
     app_state: &Mutex<AppState>,
-    topic: Topic,
+    mut topic: Topic,
 ) -> Result<(), Box<dyn Error>> {
     let join_result = desktop_client.lock().await.join_topic(&topic.id).await;
     let mut state = app_state.lock().await;
 
     match join_result {
         Ok(ticket_str) => {
-            state.add_topic(topic);
+            let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
+
+            topic.add_join_message(ui::desktop::models::JoinMessage::new_me(
+                Utc::now().timestamp_millis() as u64,
+            ));
+
+            state.add_topic(&topic);
 
             if save_topics_to_file(&state.get_all_topics()).is_err() {
                 eprintln!("Failed to save topics to file");
             }
 
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
-            let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
 
             let id = desktop_client
                 .lock()
@@ -131,7 +135,7 @@ fn App() -> Element {
                     let writable_ref = app_state.write();
                     let mut state = writable_ref.lock().await;
                     let topic = Topic::new(ticket.clone(), name, None);
-                    state.add_topic(topic);
+                    state.add_topic(&topic);
 
                     if save_topics_to_file(&state.get_all_topics()).is_err() {
                         eprintln!("Failed to save topics to file");
@@ -213,9 +217,7 @@ fn App() -> Element {
                     let writable_ref = app_state.write();
                     let mut state = writable_ref.lock().await;
                     if let Some(topic) = state.get_topic(&ticket_id) {
-                        let msg = ui::desktop::models::ChatMessage::new(
-                            peer_id, ticket_id, message, now, true,
-                        );
+                        let msg = ChatMessage::new(peer_id, ticket_id, message, now, true);
                         topic.add_message(msg);
 
                         if save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -271,7 +273,7 @@ fn App() -> Element {
                             let writable_ref = app_state.write();
                             let mut state = writable_ref.lock().await;
                             if let Some(topic_obj) = state.get_topic(&topic) {
-                                let message = ui::desktop::models::ChatMessage::new(
+                                let message = ChatMessage::new(
                                     msg.sender.to_string(),
                                     topic_obj.id.clone(),
                                     msg.content,
@@ -343,15 +345,49 @@ fn App() -> Element {
                                 eprintln!("Failed to send TopicMetadataMessage: {}", e);
                             }
 
+                            let messages_to_send = {
+                                let readable_ref = app_state.read();
+                                let mut state = readable_ref.lock().await;
+                                if let Some(topic_obj) = state.get_topic(&topic) {
+                                    let chat_messages: Vec<p2p::ChatMessage> = topic_obj
+                                        .messages
+                                        .iter()
+                                        .filter_map(|msg| match msg {
+                                            Message::Chat(chat_msg) => Some(chat_msg.to_message()),
+                                            _ => None,
+                                        })
+                                        .collect();
+
+                                    if !chat_messages.is_empty() {
+                                        Some(p2p::TopicMessagesMessage::new(
+                                            join_message.topic,
+                                            chat_messages,
+                                        ))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            };
+
+                            if let Some(messages) = messages_to_send
+                                && let Err(e) = client_ref
+                                    .lock()
+                                    .await
+                                    .send(MessageTypes::TopicMessages(messages))
+                                    .await
+                            {
+                                eprintln!("Failed to send TopicMessagesMessage: {}", e);
+                            }
+
                             let writable_ref = app_state.write();
                             let mut state = writable_ref.lock().await;
                             if let Some(topic_obj) = state.get_topic(&topic) {
-                                let message = ui::desktop::models::JoinMessage {
-                                    sender_id: join_message.endpoint.to_string(),
-                                    topic_id: topic_obj.id.clone(),
-                                    timestamp: Utc::now().timestamp_millis() as u64,
-                                };
-
+                                let message = ui::desktop::models::JoinMessage::new(
+                                    join_message.endpoint.to_string(),
+                                    Utc::now().timestamp_millis() as u64,
+                                );
                                 topic_obj.add_join_message(message);
                             }
                         }
@@ -361,7 +397,6 @@ fn App() -> Element {
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ui::desktop::models::LeaveMessage {
                                     sender_id: message.endpoint.to_string(),
-                                    topic_id: topic_obj.id.clone(),
                                     timestamp: Utc::now().timestamp_millis() as u64,
                                 };
 
@@ -374,11 +409,66 @@ fn App() -> Element {
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ui::desktop::models::DisconnectMessage {
                                     sender_id: message.endpoint.to_string(),
-                                    topic_id: topic_obj.id.clone(),
                                     timestamp: Utc::now().timestamp_millis() as u64,
                                 };
 
                                 topic_obj.add_disconnect_message(message);
+                            }
+                        }
+                        MessageTypes::TopicMessages(message) => {
+                            if message.messages.is_empty() {
+                                continue;
+                            }
+
+                            let writable_ref = app_state.write();
+                            let mut state = writable_ref.lock().await;
+                            if let Some(topic_obj) = state.get_topic(&topic) {
+                                let received_messages = message
+                                    .messages
+                                    .iter()
+                                    .map(ChatMessage::from_message)
+                                    .collect::<Vec<ChatMessage>>();
+
+                                let existing_messages: Vec<ChatMessage> = topic_obj
+                                    .messages
+                                    .iter()
+                                    .cloned()
+                                    .filter_map(|msg| match msg {
+                                        Message::Chat(chat_msg) => Some(chat_msg),
+                                        _ => None,
+                                    })
+                                    .collect();
+
+                                for msg in &received_messages {
+                                    if !existing_messages.contains(msg) {
+                                        topic_obj.add_message(msg.clone());
+                                    }
+                                }
+
+                                let missing_messages: Vec<p2p::ChatMessage> = existing_messages
+                                    .iter()
+                                    .filter(|msg| !received_messages.contains(msg))
+                                    .map(|msg| msg.to_message())
+                                    .collect();
+
+                                if !missing_messages.is_empty() {
+                                    let client_ref = desktop_client.read().clone();
+                                    let sync_message = p2p::TopicMessagesMessage::new(
+                                        Ticket::from_str(&topic)
+                                            .expect("Failed to parse topic ID")
+                                            .topic,
+                                        missing_messages,
+                                    );
+
+                                    if let Err(e) = client_ref
+                                        .lock()
+                                        .await
+                                        .send(MessageTypes::TopicMessages(sync_message))
+                                        .await
+                                    {
+                                        eprintln!("Failed to send missing messages: {}", e);
+                                    }
+                                }
                             }
                         }
                     }
@@ -451,4 +541,31 @@ fn load_icon() -> Option<Icon> {
     let rgba = img.to_rgba8();
     let (width, height) = rgba.dimensions();
     Icon::from_rgba(rgba.into_raw(), width, height).ok()
+}
+
+trait FromP2PMessage {
+    fn from_message(msg: &p2p::ChatMessage) -> Self;
+    fn to_message(&self) -> p2p::ChatMessage;
+}
+
+impl FromP2PMessage for ChatMessage {
+    fn from_message(msg: &p2p::ChatMessage) -> Self {
+        ChatMessage::new(
+            msg.sender.to_string(),
+            msg.topic_id.to_string(),
+            msg.content.clone(),
+            msg.timestamp,
+            false,
+        )
+    }
+
+    fn to_message(&self) -> p2p::ChatMessage {
+        let ticket = Ticket::from_str(&self.topic_id).expect("Invalid topic ID");
+        p2p::ChatMessage::new(
+            self.sender_id.parse().expect("Invalid sender ID"),
+            self.content.clone(),
+            self.timestamp,
+            ticket.topic,
+        )
+    }
 }
