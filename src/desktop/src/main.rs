@@ -86,7 +86,7 @@ async fn join_topic_internal(
 
 #[component]
 fn App() -> Element {
-    let mut app_state = use_signal(|| Mutex::new(AppState::new()));
+    let mut app_state = use_signal(|| Mutex::new(AppState::new("temp")));
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     let on_modify_topic = move |topic: Topic| {
@@ -243,15 +243,31 @@ fn App() -> Element {
                 return;
             }
 
+            let peer_id = match client_ref.lock().await.peer_id().await {
+                Ok(id) => id,
+                Err(e) => {
+                    eprintln!("Failed to get peer_id: {}", e);
+                    return;
+                }
+            };
+
+            {
+                let writable_ref = app_state.write();
+                let mut state = writable_ref.lock().await;
+                state.set_profile_id(&peer_id);
+            }
+
+            
             if let Ok(loaded_topics) = load_topics_from_file() {
                 for topic in loaded_topics {
+                    let client_ref = desktop_client.read().clone();
                     spawn(async move {
-                        let client_ref = desktop_client.read().clone();
                         let state = app_state.write();
                         let _ = join_topic_internal(&client_ref, &state, topic).await;
                     });
                 }
             }
+            
 
             loop {
                 let messages: Vec<(String, MessageTypes)> = {

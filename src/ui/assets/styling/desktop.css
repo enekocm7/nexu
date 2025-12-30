@@ -98,13 +98,16 @@ body {
 
 .desktop-column-search:focus {
     background-color: #353535;
-    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.4),
-    0 4px 10px rgba(0, 0, 0, 0.25);
+    box-shadow:
+        0 0 0 2px rgba(100, 150, 255, 0.4),
+        0 4px 10px rgba(0, 0, 0, 0.25);
     transform: translateY(-1px);
 }
 
 .desktop-column-contacts {
-    flex: 1;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 .desktop-column-contacts ul {
@@ -399,8 +402,9 @@ body {
 
 .desktop-chat-input:focus {
     background-color: #353535;
-    box-shadow: 0 0 0 2px rgba(100, 150, 255, 0.4),
-    0 4px 10px rgba(0, 0, 0, 0.25);
+    box-shadow:
+        0 0 0 2px rgba(100, 150, 255, 0.4),
+        0 4px 10px rgba(0, 0, 0, 0.25);
 }
 
 .desktop-chat-send-button {
@@ -904,6 +908,256 @@ body {
     border-color: #5a7fb8;
 }
 
+.profile-details-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    animation: fadeIn 0.2s ease;
+}
+
+.profile-details {
+    background-color: #333333;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 500px;
+    padding: 24px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    animation: slideIn 0.3s ease;
+}
+
+.profile-details-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.profile-details-image-wrapper {
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.profile-details-image-wrapper::after {
+    content: "📷";
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    background-color: #5a7fb8;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.profile-details-image-wrapper:hover::after {
+    opacity: 1;
+}
+
+.profile-details-image {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: #666666;
+    border: 2px solid #555555;
+    transition: all 0.2s ease;
+}
+
+.profile-details-image-wrapper:hover .profile-details-image {
+    border-color: #5a7fb8;
+    box-shadow: 0 0 0 3px rgba(90, 127, 184, 0.2);
+}
+
+.profile-details-name {
+    flex: 1;
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #2a2a2a;
+    border: 2px solid #3a3a3a;
+    border-radius: 10px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.profile-details-name:focus {
+    border-color: #5a7fb8;
+    background-color: #353535;
+    box-shadow: 0 0 0 3px rgba(90, 127, 184, 0.2);
+}
+
+.profile-details-save-button {
+    padding: 12px 24px;
+    background-color: #5a7fb8;
+    color: #ffffff;
+    border: none;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.profile-details-save-button:hover {
+    background-color: #6a8fc8;
+    box-shadow: 0 4px 12px rgba(90, 127, 184, 0.3);
+}
+
+.profile-details-save-button:active {
+    transform: translateY(1px);
+}
+
+.profile-details hr {
+    border: none;
+    border-top: 1px solid #444444;
+    margin: 20px 0;
+}
+
+.profile-details-info-section {
+    margin-bottom: 16px;
+}
+
+.profile-details-info-section:last-child {
+    margin-bottom: 0;
+}
+
+.profile-details-section-title {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 500;
+    color: #aaaaaa;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.profile-details-profile-id {
+    margin: 0;
+    padding: 12px 16px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #ffffff;
+    font-family: monospace;
+    font-size: 14px;
+    word-break: break-all;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.profile-details-profile-id:hover {
+    background-color: #353535;
+    border-color: #5a7fb8;
+}
+
+.profile-details-last-connection {
+    margin: 0;
+    padding: 12px 16px;
+    background-color: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.profile-data {
+    background-color: #333333;
+    padding: 12px 15px;
+    border-top: 1px solid #444444;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    margin-top: auto;
+    flex-shrink: 0;
+}
+
+.profile-data:hover {
+    background-color: #3a3a3a;
+}
+
+.profile-data:active {
+    background-color: #2a2a2a;
+}
+
+.profile-img {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #555555;
+    background-color: #666666;
+    transition: border-color 0.2s ease;
+}
+
+.profile-data:hover .profile-img {
+    border-color: #5a7fb8;
+}
+
+.profile-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+}
+
+.profile-name {
+    margin: 0;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.profile-status {
+    margin: 0;
+    color: #aaaaaa;
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 @media (max-width: 1024px) {
     .desktop-column {
         width: clamp(250px, 30%, 350px);
@@ -1001,6 +1255,48 @@ body {
     .topic-dialog-body,
     .topic-dialog-footer {
         padding: 16px 20px;
+    }
+
+    .profile-details {
+        max-width: 90%;
+        padding: 20px;
+    }
+
+    .profile-details-header {
+        gap: 10px;
+    }
+
+    .profile-details-image {
+        width: 50px;
+        height: 50px;
+    }
+
+    .profile-details-name {
+        font-size: 20px;
+        padding: 10px 14px;
+    }
+
+    .profile-details-save-button {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+
+    .profile-data {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+
+    .profile-img {
+        width: 40px;
+        height: 40px;
+    }
+
+    .profile-name {
+        font-size: 15px;
+    }
+
+    .profile-status {
+        font-size: 12px;
     }
 }
 
@@ -1126,6 +1422,61 @@ body {
         width: 100%;
         padding: 12px;
     }
+
+    .profile-details {
+        width: 95%;
+        border-radius: 12px;
+        padding: 16px;
+    }
+
+    .profile-details-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+    }
+
+    .profile-details-image-wrapper {
+        align-self: center;
+    }
+
+    .profile-details-image {
+        width: 80px;
+        height: 80px;
+    }
+
+    .profile-details-name {
+        font-size: 18px;
+        padding: 12px;
+    }
+
+    .profile-details-save-button {
+        width: 100%;
+        padding: 12px;
+    }
+
+    .profile-details-profile-id,
+    .profile-details-last-connection {
+        font-size: 13px;
+        padding: 10px 12px;
+    }
+
+    .profile-data {
+        padding: 8px 10px;
+        gap: 8px;
+    }
+
+    .profile-img {
+        width: 36px;
+        height: 36px;
+    }
+
+    .profile-name {
+        font-size: 14px;
+    }
+
+    .profile-status {
+        font-size: 11px;
+    }
 }
 
 @media (max-width: 400px) {
@@ -1151,6 +1502,32 @@ body {
     .topic-dialog-body {
         padding: 12px;
     }
+
+    .profile-details-header {
+        padding: 12px 0;
+    }
+
+    .profile-details-info-section {
+        margin-bottom: 12px;
+    }
+
+    .profile-data {
+        padding: 8px;
+        gap: 8px;
+    }
+
+    .profile-img {
+        width: 34px;
+        height: 34px;
+    }
+
+    .profile-name {
+        font-size: 13px;
+    }
+
+    .profile-status {
+        font-size: 11px;
+    }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1160,7 +1537,8 @@ body {
 
     .desktop-column-search:focus {
         background-color: #303030;
-        box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.5),
-        0 4px 10px rgba(0, 0, 0, 0.3);
+        box-shadow:
+            0 0 0 2px rgba(120, 170, 255, 0.5),
+            0 4px 10px rgba(0, 0, 0, 0.3);
     }
 }

@@ -3,7 +3,7 @@ pub mod models;
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
     use crate::components::toast::ToastProvider;
-    use crate::desktop::models::{AppState, Message, Topic, TopicCreationMode};
+    use crate::desktop::models::{AppState, Message, Profile, Topic, TopicCreationMode};
     use arboard::Clipboard;
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
@@ -32,6 +32,7 @@ pub mod desktop_web_components {
         let mut show_topic_dialog = use_signal(|| false);
         let mut selected_topic = use_signal::<Option<String>>(|| None);
         let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
+        let mut show_profile_details = use_signal::<Option<Profile>>(|| None);
         let mut search_query = use_signal(String::new);
         let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
 
@@ -64,22 +65,22 @@ pub mod desktop_web_components {
                             }
                         }
                     }
-                    div { class: "desktop-column-contacts",
-                        {
-                            let contacts_resource = use_resource(move || async move {
-                                let mut contacts = app_state
-                                    .read()
-                                    .lock()
-                                    .await
-                                    .get_all_topics()
-                                    .into_iter()
-                                    .collect::<Vec<Topic>>();
-                                contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-                                contacts
-                            });
+                    {
+                        let combined_data = use_resource(move || async move {
+                            let binding = app_state.read();
+                            let state = binding.lock().await;
+                            let mut contacts = state
+                                .get_all_topics()
+                                .into_iter()
+                                .collect::<Vec<Topic>>();
+                            contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
+                            let profile = state.get_profile();
+                            (contacts, profile)
+                        });
 
-                            match &*contacts_resource.read_unchecked() {
-                                Some(contacts) => rsx! {
+                        match &*combined_data.read_unchecked() {
+                            Some((contacts, profile)) => rsx! {
+                                div { class: "desktop-column-contacts",
                                     ul {
                                         {
                                             contacts
@@ -135,8 +136,78 @@ pub mod desktop_web_components {
                                                 })
                                         }
                                     }
-                                },
-                                None => rsx! { div { "Loading..." } }
+                                }
+
+                                {
+                                    let avatar_url = if let Some(url) = &profile.avatar
+                                        && !url.is_empty()
+                                    {
+                                        url.clone()
+                                    } else {
+                                        DEFAULT_AVATAR.to_string()
+                                    };
+
+                                    let profile_clone = profile.clone();
+                                    rsx!{
+                                        div {
+                                            class: "profile-data",
+                                            onclick: move |_| {
+                                                show_profile_details.set(Some(profile_clone.clone()));
+                                            },
+                                            img {
+                                                class: "profile-img",
+                                                src: "{avatar_url}",
+                                                alt: "Profile Avatar"
+                                            }
+                                            div {
+                                                class: "profile-info",
+                                                h2 {
+                                                    class: "profile-name",
+                                                    "{profile.name}"
+                                                }
+                                                p {
+                                                    class: "profile-status",
+                                                    "Online"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            None => rsx! {
+                                div { class: "desktop-column-contacts",
+                                    div { "Loading..." }
+                                }
+                                div {
+                                    class: "profile-data",
+                                    img {
+                                        class: "profile-img",
+                                        src: "{DEFAULT_AVATAR}",
+                                        alt: "Profile Avatar"
+                                    }
+                                    div {
+                                        class: "profile-info",
+                                        h2 {
+                                            class: "profile-name",
+                                            "Loading..."
+                                        }
+                                        p {
+                                            class: "profile-status",
+                                            "..."
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+                    if let Some(profile) = show_profile_details() {
+                        ToastProvider {
+                            ProfileDetails {
+                                profile: profile,
+                                toggle: show_profile_details,
+                                on_modify_profile: EventHandler::default()
                             }
                         }
                     }
@@ -685,6 +756,158 @@ pub mod desktop_web_components {
         }
     }
 
+    #[component]
+    fn ProfileDetails(
+        profile: Profile,
+        mut toggle: Signal<Option<Profile>>,
+        on_modify_profile: EventHandler<Profile>,
+    ) -> Element {
+        let toast = use_toast();
+        let mut edited_name = use_signal(|| profile.name.clone());
+
+        let handle_copy_profile_id = {
+            let profile_id = profile.id.clone();
+            move |_event: Event<MouseData>| match copy_to_clipboard(&profile_id) {
+                Ok(_) => {
+                    toast.success(
+                        "Profile ID copied to clipboard!".to_owned(),
+                        ToastOptions::default(),
+                    );
+                }
+                Err(error) => {
+                    toast.error(error, ToastOptions::default());
+                }
+            }
+        };
+
+        let profile_clone = profile.clone();
+        let handle_save = move |_event: Event<MouseData>| {
+            let mut updated_profile = profile_clone.clone();
+            updated_profile.name = edited_name().trim().to_string();
+            on_modify_profile.call(updated_profile);
+            toast.success(
+                "Profile updated successfully".to_owned(),
+                ToastOptions::default(),
+            );
+            toggle.set(None);
+        };
+
+        let profile_clone_for_image = profile.clone();
+        let handle_image_change = move |event: Event<FormData>| {
+            let files = event.files();
+            if let Some(file) = files.first() {
+                let file = file.clone();
+                let profile_clone = profile_clone_for_image.clone();
+                spawn(async move {
+                    match file.read_bytes().await {
+                        Ok(bytes) => {
+                            const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
+                            if bytes.len() > MAX_SIZE {
+                                toast.error(
+                                    "Image size must be less than 512 KB".to_owned(),
+                                    ToastOptions::default(),
+                                );
+                                return;
+                            }
+
+                            let base64 = BASE64_STANDARD.encode(&bytes);
+                            let url = format!(
+                                "data:{};base64,{}",
+                                file.content_type().unwrap_or("image/png".to_string()),
+                                base64
+                            );
+
+                            let mut updated_profile = profile_clone.clone();
+                            updated_profile.avatar = Some(url);
+                            on_modify_profile.call(updated_profile);
+                            toggle.set(None);
+
+                            toast.success(
+                                "Profile avatar updated successfully".to_owned(),
+                                ToastOptions::default(),
+                            );
+                        }
+                        Err(e) => {
+                            toast.error(
+                                format!("Failed to read file: {}", e),
+                                ToastOptions::default(),
+                            );
+                        }
+                    }
+                });
+            } else {
+                toast.error("No file selected.".to_owned(), ToastOptions::default());
+            }
+        };
+
+        let avatar_url = if let Some(url) = &profile.avatar
+            && !url.is_empty()
+        {
+            url.clone()
+        } else {
+            DEFAULT_AVATAR.to_string()
+        };
+
+        let last_connection_text = if profile.last_connection > 0 {
+            format_relative_time((profile.last_connection / 1000) as i64)
+        } else {
+            "Never".to_string()
+        };
+
+        rsx! {
+            div {
+                class: "profile-details-overlay",
+                onclick: move |_| toggle.set(None),
+                div {
+                    class: "profile-details",
+                    onclick: move |e| e.stop_propagation(),
+                    div { class: "profile-details-header",
+                        label { class: "profile-details-image-wrapper",
+                            img { class: "profile-details-image", src: avatar_url }
+                            input {
+                                r#type: "file",
+                                accept: "image/*",
+                                style: "display: none;",
+                                onchange: handle_image_change
+                            }
+                        }
+                        input {
+                            class: "profile-details-name",
+                            r#type: "text",
+                            value: "{edited_name}",
+                            placeholder: "Display Name",
+                            oninput: move |e| edited_name.set(e.value())
+                        }
+                        button {
+                            class: "profile-details-save-button",
+                            onclick: handle_save,
+                            "Save"
+                        }
+                    }
+                    hr {}
+
+                    div { class: "profile-details-info-section",
+                        p { class: "profile-details-section-title", "Profile ID" }
+                        p {
+                            class: "profile-details-profile-id",
+                            title: "Click to copy",
+                            onclick: handle_copy_profile_id,
+                            "{profile.id}"
+                        }
+                    }
+
+                    div { class: "profile-details-info-section",
+                        p { class: "profile-details-section-title", "Last Active" }
+                        p {
+                            class: "profile-details-last-connection",
+                            "{last_connection_text}"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     fn format_message_timestamp(timestamp: u64) -> String {
         let timestamp_secs = (timestamp / 1000) as i64;
         let datetime = match DateTime::from_timestamp(timestamp_secs, 0) {
@@ -743,5 +966,15 @@ pub mod desktop_web_components {
         }
 
         last_connection.format("%m/%d/%Y").to_string()
+    }
+
+    fn copy_to_clipboard(text: &str) -> Result<(), String> {
+        match Clipboard::new() {
+            Ok(mut clipboard) => match clipboard.set_text(text) {
+                Ok(_) => Ok(()),
+                Err(_) => Err("Failed to copy to clipboard".to_owned()),
+            },
+            Err(_) => Err("Failed to access clipboard".to_owned()),
+        }
     }
 }

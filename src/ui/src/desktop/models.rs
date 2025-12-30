@@ -75,21 +75,16 @@ pub enum TopicCreationMode {
 pub struct AppState {
     topics: HashMap<String, Topic>,
     current_topic_id: Option<String>,
-}
-
-#[cfg(feature = "desktop-web")]
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
-    }
+    profile: Profile,
 }
 
 #[cfg(feature = "desktop-web")]
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(profile_id: &str) -> Self {
         Self {
             topics: HashMap::new(),
             current_topic_id: None,
+            profile: Profile::new_with_id(profile_id),
         }
     }
 
@@ -154,6 +149,24 @@ impl AppState {
 
     pub fn get_all_topics(&self) -> Vec<Topic> {
         self.topics.values().cloned().collect()
+    }
+    
+    pub fn get_profile(&self) -> Profile {
+        self.profile.clone()
+    }
+    
+    pub fn set_profile_id(&mut self, id: &str) {
+        self.profile.id = id.to_string()
+    }
+
+    pub fn set_profile_name(&mut self, name: &str) {
+        self.profile.name = name.to_string()
+    }
+    pub fn set_profile_avatar(&mut self, avatar_url: Option<String>) {
+        self.profile.avatar = avatar_url
+    }
+    pub fn set_profile_last_connection_to_now(&mut self) {
+        self.profile.last_connection = chrono::Utc::now().timestamp_millis() as u64
     }
 }
 
@@ -277,7 +290,7 @@ pub struct DisconnectMessage {
     pub timestamp: u64,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Profile {
     pub id: String,
     pub name: String,
@@ -290,6 +303,15 @@ impl Profile {
             id: id.to_string(),
             name: name.to_string(),
             avatar: Some(avatar.to_string()),
+            last_connection: chrono::Utc::now().timestamp_millis() as u64,
+        }
+    }
+
+    pub fn new_with_id(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: id.to_string(),
+            avatar: None,
             last_connection: chrono::Utc::now().timestamp_millis() as u64,
         }
     }
