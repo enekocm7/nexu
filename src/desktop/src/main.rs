@@ -2,6 +2,7 @@ mod client;
 mod utils;
 
 use crate::client::DesktopClient;
+use crate::utils::contacts::load_profile;
 use crate::utils::topics::{load_topics_from_file, save_topics_to_file};
 use base64::Engine;
 use chrono::Utc;
@@ -15,7 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, ChatMessage, Message, Topic};
+use ui::desktop::models::{AppState, ChatMessage, Message, Profile, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -230,6 +231,15 @@ fn App() -> Element {
         });
     };
 
+    let on_modify_profile = move |profile: Profile| {
+        let mut state = app_state.write();
+        state.set_profile_name(&profile.name);
+        state.set_profile_avatar(&profile.avatar);
+        if let Err(e) = utils::contacts::save_profile(&profile) {
+            eprintln!("Failed to save profile: {e}")
+        }
+    };
+
     use_effect(move || {
         let client_ref = desktop_client.read().clone();
         spawn(async move {
@@ -246,7 +256,12 @@ fn App() -> Element {
                 }
             };
 
-            {
+            if let Ok(profile) = load_profile() {
+                let mut state = app_state.write();
+                state.set_profile_name(&profile.name);
+                state.set_profile_avatar(&profile.avatar);
+                state.set_profile_last_connection_to_now();
+            } else {
                 let mut state = app_state.write();
                 state.set_profile_id(&peer_id);
                 state.set_profile_name(&peer_id);
@@ -527,7 +542,8 @@ fn App() -> Element {
             on_join_topic,
             on_leave_topic,
             on_send_message,
-            on_modify_topic
+            on_modify_topic,
+            on_modify_profile,
         }
     }
 }

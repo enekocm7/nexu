@@ -27,6 +27,7 @@ pub mod desktop_web_components {
         on_leave_topic: EventHandler<String>,
         on_modify_topic: EventHandler<Topic>,
         on_send_message: EventHandler<(String, String)>,
+        on_modify_profile: EventHandler<Profile>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
         let mut selected_topic = use_signal::<Option<String>>(|| None);
@@ -205,7 +206,7 @@ pub mod desktop_web_components {
                             ProfileDetails {
                                 profile: profile,
                                 toggle: show_profile_details,
-                                on_modify_profile: EventHandler::default()
+                                on_modify_profile
                             }
                         }
                     }

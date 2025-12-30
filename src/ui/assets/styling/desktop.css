@@ -994,6 +994,7 @@ body {
     border-radius: 10px;
     outline: none;
     transition: all 0.2s ease;
+    min-width: 0;
 }
 
 .profile-details-name:focus {

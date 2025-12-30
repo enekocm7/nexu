@@ -162,8 +162,8 @@ impl AppState {
     pub fn set_profile_name(&mut self, name: &str) {
         self.profile.name = name.to_string()
     }
-    pub fn set_profile_avatar(&mut self, avatar_url: Option<String>) {
-        self.profile.avatar = avatar_url
+    pub fn set_profile_avatar(&mut self, avatar_url: &Option<String>) {
+        self.profile.avatar = avatar_url.to_owned()
     }
     pub fn set_profile_last_connection_to_now(&mut self) {
         self.profile.last_connection = chrono::Utc::now().timestamp_millis() as u64
