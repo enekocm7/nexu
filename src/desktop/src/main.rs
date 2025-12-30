@@ -34,11 +34,11 @@ fn main() {
 
 async fn join_topic_internal(
     desktop_client: &Arc<Mutex<DesktopClient>>,
-    app_state: &Mutex<AppState>,
+    mut app_state: Signal<AppState>,
     mut topic: Topic,
 ) -> Result<(), Box<dyn Error>> {
     let join_result = desktop_client.lock().await.join_topic(&topic.id).await;
-    let mut state = app_state.lock().await;
+    let mut state = app_state.write();
 
     match join_result {
         Ok(ticket_str) => {
@@ -86,7 +86,7 @@ async fn join_topic_internal(
 
 #[component]
 fn App() -> Element {
-    let mut app_state = use_signal(|| Mutex::new(AppState::new("temp")));
+    let mut app_state = use_signal(|| AppState::new("temp"));
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     let on_modify_topic = move |topic: Topic| {
@@ -104,8 +104,7 @@ fn App() -> Element {
                     }
                 }
             }
-            let writable_ref = app_state.write();
-            let mut state = writable_ref.lock().await;
+            let mut state = app_state.write();
             state.modify_topic_name(&topic.id, &topic.name);
             state.modify_topic_avatar(&topic.id, topic.avatar_url.clone());
             let time = state.set_last_changed_to_now(&topic.id);
@@ -132,8 +131,7 @@ fn App() -> Element {
             let ticket = desktop_client.read().lock().await.create_topic().await;
             match ticket {
                 Ok(ticket) => {
-                    let writable_ref = app_state.write();
-                    let mut state = writable_ref.lock().await;
+                    let mut state = app_state.write();
                     let topic = Topic::new(ticket.clone(), name, None);
                     state.add_topic(&topic);
 
@@ -149,12 +147,11 @@ fn App() -> Element {
     let on_join_topic = move |topic_id: String| {
         spawn(async move {
             let client_ref = desktop_client.read().clone();
-            let state = app_state.write();
-            if state.lock().await.get_topic(&topic_id).is_some() {
+            if app_state.read().get_topic_immutable(&topic_id).is_some() {
                 return;
             }
             let topic = Topic::new_placeholder(topic_id.clone());
-            let _ = join_topic_internal(&client_ref, &state, topic).await;
+            let _ = join_topic_internal(&client_ref, app_state, topic).await;
         });
     };
 
@@ -184,8 +181,7 @@ fn App() -> Element {
 
             match leave_result {
                 Ok(_) => {
-                    let writable_ref = app_state.write();
-                    let mut state = writable_ref.lock().await;
+                    let mut state = app_state.write();
                     state.remove_topic(&topic_id);
 
                     if save_topics_to_file(&state.get_all_topics()).is_err() {
@@ -214,8 +210,7 @@ fn App() -> Element {
 
             match (send_result, peer_id_result) {
                 (Ok(_), Ok(peer_id)) => {
-                    let writable_ref = app_state.write();
-                    let mut state = writable_ref.lock().await;
+                    let mut state = app_state.write();
                     if let Some(topic) = state.get_topic(&ticket_id) {
                         let msg = ChatMessage::new(peer_id, ticket_id, message, now, true);
                         topic.add_message(msg);
@@ -252,22 +247,19 @@ fn App() -> Element {
             };
 
             {
-                let writable_ref = app_state.write();
-                let mut state = writable_ref.lock().await;
+                let mut state = app_state.write();
                 state.set_profile_id(&peer_id);
+                state.set_profile_name(&peer_id);
             }
 
-            
             if let Ok(loaded_topics) = load_topics_from_file() {
                 for topic in loaded_topics {
                     let client_ref = desktop_client.read().clone();
                     spawn(async move {
-                        let state = app_state.write();
-                        let _ = join_topic_internal(&client_ref, &state, topic).await;
+                        let _ = join_topic_internal(&client_ref, app_state, topic).await;
                     });
                 }
             }
-            
 
             loop {
                 let messages: Vec<(String, MessageTypes)> = {
@@ -286,8 +278,7 @@ fn App() -> Element {
                 for (topic, message) in messages {
                     match message {
                         MessageTypes::Chat(msg) => {
-                            let writable_ref = app_state.write();
-                            let mut state = writable_ref.lock().await;
+                            let mut state = app_state.write();
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ChatMessage::new(
                                     msg.sender.to_string(),
@@ -301,8 +292,7 @@ fn App() -> Element {
                         }
                         MessageTypes::TopicMetadata(metadata) => {
                             let should_send = {
-                                let writable_ref = app_state.write();
-                                let mut state = writable_ref.lock().await;
+                                let mut state = app_state.write();
                                 if let Some(existing_topic) = state.get_topic(&topic) {
                                     if metadata.timestamp >= existing_topic.last_changed {
                                         state.modify_topic_name(&topic, &metadata.name);
@@ -335,8 +325,7 @@ fn App() -> Element {
                         }
                         MessageTypes::JoinTopic(join_message) => {
                             let metadata_to_send = {
-                                let readable_ref = app_state.read();
-                                let state = readable_ref.lock().await;
+                                let state = app_state.read();
                                 state.get_all_topics().iter().find_map(|topic| {
                                     let ticket = Ticket::from_str(&topic.id).ok()?;
                                     if ticket.topic == join_message.topic {
@@ -362,9 +351,8 @@ fn App() -> Element {
                             }
 
                             let messages_to_send = {
-                                let readable_ref = app_state.read();
-                                let mut state = readable_ref.lock().await;
-                                if let Some(topic_obj) = state.get_topic(&topic) {
+                                let state = app_state.read();
+                                if let Some(topic_obj) = state.get_topic_immutable(&topic) {
                                     let chat_messages: Vec<p2p::ChatMessage> = topic_obj
                                         .messages
                                         .iter()
@@ -397,8 +385,7 @@ fn App() -> Element {
                                 eprintln!("Failed to send TopicMessagesMessage: {}", e);
                             }
 
-                            let writable_ref = app_state.write();
-                            let mut state = writable_ref.lock().await;
+                            let mut state = app_state.write();
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ui::desktop::models::JoinMessage::new(
                                     join_message.endpoint.to_string(),
@@ -408,8 +395,7 @@ fn App() -> Element {
                             }
                         }
                         MessageTypes::LeaveTopic(message) => {
-                            let writable_ref = app_state.write();
-                            let mut state = writable_ref.lock().await;
+                            let mut state = app_state.write();
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ui::desktop::models::LeaveMessage {
                                     sender_id: message.endpoint.to_string(),
@@ -420,8 +406,7 @@ fn App() -> Element {
                             }
                         }
                         MessageTypes::DisconnectTopic(message) => {
-                            let writable_ref = app_state.write();
-                            let mut state = writable_ref.lock().await;
+                            let mut state = app_state.write();
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let message = ui::desktop::models::DisconnectMessage {
                                     sender_id: message.endpoint.to_string(),
@@ -436,8 +421,7 @@ fn App() -> Element {
                                 continue;
                             }
 
-                            let writable_ref = app_state.write();
-                            let mut state = writable_ref.lock().await;
+                            let mut state = app_state.write();
                             if let Some(topic_obj) = state.get_topic(&topic) {
                                 let received_messages = message
                                     .messages
@@ -490,8 +474,7 @@ fn App() -> Element {
                     }
                 }
 
-                if had_messages
-                    && save_topics_to_file(&app_state.read().lock().await.get_all_topics()).is_err()
+                if had_messages && save_topics_to_file(&app_state.read().get_all_topics()).is_err()
                 {
                     eprintln!("Failed to save topics to file");
                 }
@@ -516,8 +499,7 @@ fn App() -> Element {
                         .parse()
                         .expect("Failed to parse peer_id");
 
-                    let state = app_state.read();
-                    let all_topics = state.lock().await.get_all_topics();
+                    let all_topics = app_state.read().get_all_topics();
 
                     for topic in all_topics.iter() {
                         let ticket = Ticket::from_str(&topic.id).expect("Failed to parse topic_id");

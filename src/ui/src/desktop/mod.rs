@@ -13,7 +13,6 @@ pub mod desktop_web_components {
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
     };
     use dioxus_primitives::toast::{ToastOptions, use_toast};
-    use tokio::sync::Mutex;
 
     static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
@@ -22,7 +21,7 @@ pub mod desktop_web_components {
 
     #[component]
     pub fn Desktop(
-        app_state: Signal<Mutex<AppState>>,
+        app_state: Signal<AppState>,
         on_create_topic: EventHandler<String>,
         on_join_topic: EventHandler<String>,
         on_leave_topic: EventHandler<String>,
@@ -67,8 +66,7 @@ pub mod desktop_web_components {
                     }
                     {
                         let combined_data = use_resource(move || async move {
-                            let binding = app_state.read();
-                            let state = binding.lock().await;
+                            let state = app_state.read();
                             let mut contacts = state
                                 .get_all_topics()
                                 .into_iter()
@@ -470,21 +468,14 @@ pub mod desktop_web_components {
 
     #[component]
     fn Chat(
-        app_state: Signal<Mutex<AppState>>,
+        app_state: Signal<AppState>,
         topic_id: String,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
         let topic_id_clone = topic_id.clone();
         let topic_opt = use_resource(move || {
             let tid = topic_id_clone.clone();
-            async move {
-                app_state
-                    .read()
-                    .lock()
-                    .await
-                    .get_topic_immutable(&tid)
-                    .cloned()
-            }
+            async move { app_state.read().get_topic_immutable(&tid).cloned() }
         });
 
         match &*topic_opt.read_unchecked() {
