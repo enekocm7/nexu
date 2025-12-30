@@ -276,3 +276,21 @@ pub struct DisconnectMessage {
     pub sender_id: String,
     pub timestamp: u64,
 }
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Profile {
+    pub id: String,
+    pub name: String,
+    pub avatar: Option<String>,
+    pub last_connection: u64,
+}
+impl Profile {
+    pub fn new(id: &str, name: &str, avatar: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: name.to_string(),
+            avatar: Some(avatar.to_string()),
+            last_connection: chrono::Utc::now().timestamp_millis() as u64,
+        }
+    }
+}

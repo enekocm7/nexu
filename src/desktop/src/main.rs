@@ -2,7 +2,7 @@ mod client;
 mod utils;
 
 use crate::client::DesktopClient;
-use crate::utils::file::{load_topics_from_file, save_topics_to_file};
+use crate::utils::topics::{load_topics_from_file, save_topics_to_file};
 use base64::Engine;
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;

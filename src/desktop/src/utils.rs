@@ -1,15 +1,18 @@
-pub mod file {
+const DIR_NAME: &str = "nexu";
+
+pub mod topics {
     use std::path::PathBuf;
     use std::{fs, io};
     use ui::desktop::models::Topic;
 
-    const TOPICS_DIR_NAME: &str = "nexu";
+    use crate::utils::DIR_NAME;
+
     const TOPICS_FILE_PATH: &str = "topics_data.bin";
 
     pub fn save_topics_to_file(topics: &Vec<Topic>) -> io::Result<()> {
         let path = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(TOPICS_DIR_NAME)
+            .join(DIR_NAME)
             .join(TOPICS_FILE_PATH);
         fs::create_dir_all(path.parent().unwrap())?;
         save_topics_to_file_with_path(topics, &path)
@@ -25,9 +28,8 @@ pub mod file {
     pub fn load_topics_from_file() -> io::Result<Vec<Topic>> {
         let path = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join(TOPICS_DIR_NAME)
+            .join(DIR_NAME)
             .join(TOPICS_FILE_PATH);
-        println!("Loading topics from file, path: {:?}", path);
         load_topics_from_file_with_path(&path)
     }
 
@@ -227,6 +229,341 @@ pub mod file {
                 loaded_topics.iter().any(|t| t.id == "topic3"),
                 "topic3 should exist"
             );
+        }
+    }
+}
+pub mod contacts {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    use tokio::io;
+    use ui::desktop::models::Profile;
+
+    use crate::utils::DIR_NAME;
+
+    const CONTACTS_NAME_FILE: &str = "contacts.bin";
+    const MY_PROFILE_NAME_FILE: &str = "profile.bin";
+
+    pub fn save_profile(profile: &Profile) -> io::Result<()> {
+        let path = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(DIR_NAME)
+            .join(MY_PROFILE_NAME_FILE);
+        fs::create_dir_all(path.parent().unwrap())?;
+        save_profile_to_path(profile, &path)
+    }
+
+    pub fn save_profile_to_path(profile: &Profile, path: &Path) -> io::Result<()> {
+        fs::create_dir_all(path.parent().unwrap())?;
+        let encoded_profile = postcard::to_stdvec(profile)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        fs::write(path, encoded_profile)
+    }
+
+    pub fn load_profile() -> io::Result<Profile> {
+        let path = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(DIR_NAME)
+            .join(MY_PROFILE_NAME_FILE);
+        load_profile_from_path(&path)
+    }
+
+    pub fn load_profile_from_path(path: &Path) -> io::Result<Profile> {
+        let data = fs::read(path)?;
+        let profile: Profile = postcard::from_bytes(&data)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Ok(profile)
+    }
+
+    pub fn save_contacts(contacts: &[Profile]) -> io::Result<()> {
+        let path = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(DIR_NAME)
+            .join(CONTACTS_NAME_FILE);
+        fs::create_dir_all(path.parent().unwrap())?;
+        save_contacts_to_path(contacts, &path)
+    }
+
+    pub fn save_contacts_to_path(contacts: &[Profile], path: &Path) -> io::Result<()> {
+        fs::create_dir_all(path.parent().unwrap())?;
+        let encoded_contacts = postcard::to_stdvec(contacts)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        fs::write(path, encoded_contacts)
+    }
+
+    pub fn load_contacts() -> io::Result<Vec<Profile>> {
+        let path = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(DIR_NAME)
+            .join(CONTACTS_NAME_FILE);
+        load_contacts_from_path(&path)
+    }
+
+    pub fn load_contacts_from_path(path: &Path) -> io::Result<Vec<Profile>> {
+        let data = fs::read(path)?;
+        let contacts: Vec<Profile> = postcard::from_bytes(&data)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        Ok(contacts)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use tempfile::TempDir;
+        use ui::desktop::models::Profile;
+
+        fn create_test_profile(id: &str, name: &str, avatar: Option<&str>) -> Profile {
+            Profile {
+                id: id.to_string(),
+                name: name.to_string(),
+                avatar: avatar.map(|s| s.to_string()),
+                last_connection: 1234567890,
+            }
+        }
+
+        #[test]
+        fn test_save_and_load_profile_with_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("test_profile.bin");
+
+            let profile = create_test_profile("user123", "John Doe", Some("https://example.com/avatar.png"));
+
+            let save_result = save_profile_to_path(&profile, &test_file_path);
+            assert!(save_result.is_ok(), "Failed to save profile");
+
+            let load_result = load_profile_from_path(&test_file_path);
+            assert!(load_result.is_ok(), "Failed to load profile");
+
+            let loaded_profile = load_result.unwrap();
+            assert_eq!(loaded_profile.id, "user123");
+            assert_eq!(loaded_profile.name, "John Doe");
+            assert_eq!(loaded_profile.avatar, Some("https://example.com/avatar.png".to_string()));
+            assert_eq!(loaded_profile.last_connection, 1234567890);
+        }
+
+        #[test]
+        fn test_save_and_load_profile_without_avatar() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("test_profile_no_avatar.bin");
+
+            let profile = create_test_profile("user456", "Jane Smith", None);
+
+            save_profile_to_path(&profile, &test_file_path).unwrap();
+            let loaded_profile = load_profile_from_path(&test_file_path).unwrap();
+
+            assert_eq!(loaded_profile.id, "user456");
+            assert_eq!(loaded_profile.name, "Jane Smith");
+            assert_eq!(loaded_profile.avatar, None);
+        }
+
+        #[test]
+        fn test_save_and_load_contacts_with_path() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("test_contacts.bin");
+
+            let contacts = vec![
+                create_test_profile("contact1", "Alice", Some("https://example.com/alice.png")),
+                create_test_profile("contact2", "Bob", Some("https://example.com/bob.png")),
+                create_test_profile("contact3", "Charlie", None),
+            ];
+
+            let save_result = save_contacts_to_path(&contacts, &test_file_path);
+            assert!(save_result.is_ok(), "Failed to save contacts");
+
+            let load_result = load_contacts_from_path(&test_file_path);
+            assert!(load_result.is_ok(), "Failed to load contacts");
+
+            let loaded_contacts = load_result.unwrap();
+            assert_eq!(loaded_contacts.len(), 3, "Loaded contacts count mismatch");
+
+            let contact1 = loaded_contacts.iter().find(|c| c.id == "contact1").unwrap();
+            assert_eq!(contact1.name, "Alice");
+            assert_eq!(contact1.avatar, Some("https://example.com/alice.png".to_string()));
+
+            let contact2 = loaded_contacts.iter().find(|c| c.id == "contact2").unwrap();
+            assert_eq!(contact2.name, "Bob");
+
+            let contact3 = loaded_contacts.iter().find(|c| c.id == "contact3").unwrap();
+            assert_eq!(contact3.name, "Charlie");
+            assert_eq!(contact3.avatar, None);
+        }
+
+        #[test]
+        fn test_save_empty_contacts() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("empty_contacts.bin");
+
+            let contacts: Vec<Profile> = Vec::new();
+
+            let save_result = save_contacts_to_path(&contacts, &test_file_path);
+            assert!(save_result.is_ok(), "Failed to save empty contacts");
+
+            let loaded_contacts = load_contacts_from_path(&test_file_path).unwrap();
+            assert_eq!(loaded_contacts.len(), 0, "Expected empty contacts");
+        }
+
+        #[test]
+        fn test_load_nonexistent_profile() {
+            let temp_dir = TempDir::new().unwrap();
+            let nonexistent_path = temp_dir.path().join("nonexistent_profile.bin");
+
+            let result = load_profile_from_path(&nonexistent_path);
+            assert!(
+                result.is_err(),
+                "Expected error when loading nonexistent profile"
+            );
+        }
+
+        #[test]
+        fn test_load_nonexistent_contacts() {
+            let temp_dir = TempDir::new().unwrap();
+            let nonexistent_path = temp_dir.path().join("nonexistent_contacts.bin");
+
+            let result = load_contacts_from_path(&nonexistent_path);
+            assert!(
+                result.is_err(),
+                "Expected error when loading nonexistent contacts"
+            );
+        }
+
+        #[test]
+        fn test_save_profile_to_invalid_path() {
+            let invalid_path = PathBuf::from("/nonexistent/directory/test_profile.bin");
+            let profile = create_test_profile("user123", "John Doe", None);
+
+            let result = save_profile_to_path(&profile, &invalid_path);
+            assert!(
+                result.is_err(),
+                "Expected error when saving to invalid path"
+            );
+        }
+
+        #[test]
+        fn test_save_contacts_to_invalid_path() {
+            let invalid_path = PathBuf::from("/nonexistent/directory/test_contacts.bin");
+            let contacts = vec![create_test_profile("contact1", "Alice", None)];
+
+            let result = save_contacts_to_path(&contacts, &invalid_path);
+            assert!(
+                result.is_err(),
+                "Expected error when saving to invalid path"
+            );
+        }
+
+        #[test]
+        fn test_load_corrupted_profile() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("corrupted_profile.bin");
+
+            fs::write(&test_file_path, b"corrupted data").unwrap();
+
+            let result = load_profile_from_path(&test_file_path);
+            assert!(
+                result.is_err(),
+                "Expected error when loading corrupted profile"
+            );
+        }
+
+        #[test]
+        fn test_load_corrupted_contacts() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("corrupted_contacts.bin");
+
+            fs::write(&test_file_path, b"corrupted data").unwrap();
+
+            let result = load_contacts_from_path(&test_file_path);
+            assert!(
+                result.is_err(),
+                "Expected error when loading corrupted contacts"
+            );
+        }
+
+        #[test]
+        fn test_save_profile_overwrites_existing() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("overwrite_profile.bin");
+
+            let profile1 = create_test_profile("user123", "John Doe", None);
+            save_profile_to_path(&profile1, &test_file_path).unwrap();
+
+            let profile2 = create_test_profile("user456", "Jane Smith", Some("https://example.com/avatar.png"));
+            save_profile_to_path(&profile2, &test_file_path).unwrap();
+
+            let loaded_profile = load_profile_from_path(&test_file_path).unwrap();
+            assert_eq!(loaded_profile.id, "user456", "Profile should be overwritten");
+            assert_eq!(loaded_profile.name, "Jane Smith");
+        }
+
+        #[test]
+        fn test_save_contacts_overwrites_existing() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("overwrite_contacts.bin");
+
+            let contacts1 = vec![create_test_profile("contact1", "Alice", None)];
+            save_contacts_to_path(&contacts1, &test_file_path).unwrap();
+
+            let contacts2 = vec![
+                create_test_profile("contact2", "Bob", None),
+                create_test_profile("contact3", "Charlie", None),
+            ];
+            save_contacts_to_path(&contacts2, &test_file_path).unwrap();
+
+            let loaded_contacts = load_contacts_from_path(&test_file_path).unwrap();
+            assert_eq!(loaded_contacts.len(), 2, "Expected 2 contacts after overwrite");
+            assert!(
+                !loaded_contacts.iter().any(|c| c.id == "contact1"),
+                "contact1 should be gone"
+            );
+            assert!(
+                loaded_contacts.iter().any(|c| c.id == "contact2"),
+                "contact2 should exist"
+            );
+            assert!(
+                loaded_contacts.iter().any(|c| c.id == "contact3"),
+                "contact3 should exist"
+            );
+        }
+
+        #[test]
+        fn test_round_trip_preserves_all_profile_fields() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("round_trip_profile.bin");
+
+            let profile = Profile {
+                id: "user789".to_string(),
+                name: "Test User".to_string(),
+                avatar: Some("https://example.com/test.png".to_string()),
+                last_connection: 9876543210,
+            };
+
+            save_profile_to_path(&profile, &test_file_path).unwrap();
+            let loaded_profile = load_profile_from_path(&test_file_path).unwrap();
+
+            assert_eq!(loaded_profile.id, "user789");
+            assert_eq!(loaded_profile.name, "Test User");
+            assert_eq!(loaded_profile.avatar, Some("https://example.com/test.png".to_string()));
+            assert_eq!(loaded_profile.last_connection, 9876543210);
+        }
+
+        #[test]
+        fn test_contacts_preserve_order() {
+            let temp_dir = TempDir::new().unwrap();
+            let test_file_path = temp_dir.path().join("ordered_contacts.bin");
+
+            let contacts = vec![
+                create_test_profile("contact1", "Alice", None),
+                create_test_profile("contact2", "Bob", None),
+                create_test_profile("contact3", "Charlie", None),
+            ];
+
+            save_contacts_to_path(&contacts, &test_file_path).unwrap();
+            let loaded_contacts = load_contacts_from_path(&test_file_path).unwrap();
+
+            assert_eq!(loaded_contacts[0].id, "contact1");
+            assert_eq!(loaded_contacts[1].id, "contact2");
+            assert_eq!(loaded_contacts[2].id, "contact3");
         }
     }
 }
