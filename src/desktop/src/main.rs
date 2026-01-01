@@ -258,6 +258,7 @@ fn App() -> Element {
 
             if let Ok(profile) = load_profile() {
                 let mut state = app_state.write();
+                state.set_profile_id(&profile.id);
                 state.set_profile_name(&profile.name);
                 state.set_profile_avatar(&profile.avatar);
                 state.set_profile_last_connection_to_now();

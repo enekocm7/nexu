@@ -30,11 +30,33 @@ pub mod desktop_web_components {
         on_modify_profile: EventHandler<Profile>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
-        let mut selected_topic = use_signal::<Option<String>>(|| None);
+        let mut selected_topic = use_signal::<Option<Topic>>(|| None);
         let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut show_profile_details = use_signal::<Option<Profile>>(|| None);
         let mut search_query = use_signal(String::new);
         let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
+
+        let contacts_list: Vec<Topic> = {
+            let state = app_state.read();
+            let mut contacts = state.get_all_topics().into_iter().collect::<Vec<Topic>>();
+            contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
+            contacts
+        };
+
+        let profile_data: Profile = {
+            let state = app_state.read();
+            state.get_profile()
+        };
+
+        let avatar_url = if let Some(url) = &profile_data.avatar
+            && !url.is_empty()
+        {
+            url.clone()
+        } else {
+            DEFAULT_AVATAR.to_string()
+        };
+
+        let profile_for_click = profile_data.clone();
 
         rsx! {
             link { rel: "stylesheet", href: DESKTOP_CSS }
@@ -62,163 +84,111 @@ pub mod desktop_web_components {
                             placeholder: "Search",
                             oninput: move |value| {
                                 search_query.set(value.value());
-                            }
-                        }
-                    }
-                    {
-                        let combined_data = use_resource(move || async move {
-                            let state = app_state.read();
-                            let mut contacts = state
-                                .get_all_topics()
-                                .into_iter()
-                                .collect::<Vec<Topic>>();
-                            contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-                            let profile = state.get_profile();
-                            (contacts, profile)
-                        });
-
-                        match &*combined_data.read_unchecked() {
-                            Some((contacts, profile)) => rsx! {
-                                div { class: "desktop-column-contacts",
-                                    ul {
-                                        {
-                                            contacts
-                                                .iter()
-                                                .filter(|contact| {
-                                                    contact.name.to_lowercase().contains(&search_query().to_lowercase())
-                                                })
-                                                .map(|contact| {
-                                                    let contact_id = contact.id.clone();
-                                                    let contact_name = contact.name.clone();
-                                                    let contact_for_details = contact.clone();
-                                                    let contact_clone = contact.clone();
-                                                    rsx!{
-                                                        ContextMenu{
-                                                            ContextMenuTrigger {
-                                                                TopicItem { contact: Signal::new(contact_clone), on_select: selected_topic }
-                                                            }
-                                                            ContextMenuContent { class: "context-menu-content",
-                                                                ContextMenuItem { class: "context-menu-item",
-                                                                    value: "Open Chat".to_string(),
-                                                                    index: 0usize,
-                                                                    on_select: {
-                                                                        let contact_id = contact_id.clone();
-                                                                        move |_| {
-                                                                            selected_topic.set(Some(contact_id.clone()));
-                                                                        }
-                                                                    },
-                                                                    "Open Chat"
-                                                                }
-                                                                ContextMenuItem { class: "context-menu-item",
-                                                                    value: "Open Details".to_string(),
-                                                                    index: 1usize,
-                                                                    on_select:  move |_| {
-                                                                        show_topic_details.set(Some(contact_for_details.clone()));
-                                                                    },
-                                                                    "Open Details"
-                                                                }
-                                                                ContextMenuItem { class: "context-menu-item context-menu-item-danger",
-                                                                    value: "Leave Topic".to_string(),
-                                                                    index: 2usize,
-                                                                    on_select:  {
-                                                                        let contact_id = contact_id.clone();
-                                                                        let contact_name = contact_name.clone();
-                                                                        move |_| {
-                                                                            show_leave_confirmation.set(Some((contact_id.clone(), contact_name.clone())))
-                                                                        }
-                                                                    },
-                                                                    "Leave Topic"
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                })
-                                        }
-                                    }
-                                }
-
-                                {
-                                    let avatar_url = if let Some(url) = &profile.avatar
-                                        && !url.is_empty()
-                                    {
-                                        url.clone()
-                                    } else {
-                                        DEFAULT_AVATAR.to_string()
-                                    };
-
-                                    let profile_clone = profile.clone();
-                                    rsx!{
-                                        div {
-                                            class: "profile-data",
-                                            onclick: move |_| {
-                                                show_profile_details.set(Some(profile_clone.clone()));
-                                            },
-                                            img {
-                                                class: "profile-img",
-                                                src: "{avatar_url}",
-                                                alt: "Profile Avatar"
-                                            }
-                                            div {
-                                                class: "profile-info",
-                                                h2 {
-                                                    class: "profile-name",
-                                                    "{profile.name}"
-                                                }
-                                                p {
-                                                    class: "profile-status",
-                                                    "Online"
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
                             },
-                            None => rsx! {
-                                div { class: "desktop-column-contacts",
-                                    div { "Loading..." }
-                                }
-                                div {
-                                    class: "profile-data",
-                                    img {
-                                        class: "profile-img",
-                                        src: "{DEFAULT_AVATAR}",
-                                        alt: "Profile Avatar"
-                                    }
-                                    div {
-                                        class: "profile-info",
-                                        h2 {
-                                            class: "profile-name",
-                                            "Loading..."
+                        }
+                    }
+                    div { class: "desktop-column-contacts",
+                        ul {
+                            {
+                                contacts_list
+                                    .iter()
+                                    .filter(|contact| {
+                                        contact.name.to_lowercase().contains(&search_query().to_lowercase())
+                                    })
+                                    .map(|contact| {
+                                        let contact_id = contact.id.clone();
+                                        let contact_name = contact.name.clone();
+                                        let contact_for_details = contact.clone();
+                                        let contact_clone = contact.clone();
+                                        let contact_for_select = contact.clone();
+                                        rsx! {
+                                            ContextMenu {
+                                                ContextMenuTrigger {
+                                                    TopicItem { contact: Signal::new(contact_clone), on_select: selected_topic }
+                                                }
+                                                ContextMenuContent { class: "context-menu-content",
+                                                    ContextMenuItem {
+                                                        class: "context-menu-item",
+                                                        value: "Open Chat".to_string(),
+                                                        index: 0usize,
+                                                        on_select: {
+                                                            move |_| {
+                                                                selected_topic.set(Some(contact_for_select.clone()));
+                                                            }
+                                                        },
+                                                        "Open Chat"
+                                                    }
+                                                    ContextMenuItem {
+                                                        class: "context-menu-item",
+                                                        value: "Open Details".to_string(),
+                                                        index: 1usize,
+                                                        on_select: move |_| {
+                                                            show_topic_details.set(Some(contact_for_details.clone()));
+                                                        },
+                                                        "Open Details"
+                                                    }
+                                                    ContextMenuItem {
+                                                        class: "context-menu-item context-menu-item-danger",
+                                                        value: "Leave Topic".to_string(),
+                                                        index: 2usize,
+                                                        on_select: {
+                                                            let contact_id = contact_id.clone();
+                                                            let contact_name = contact_name.clone();
+                                                            move |_| {
+                                                                show_leave_confirmation.set(Some((contact_id.clone(), contact_name.clone())))
+                                                            }
+                                                        },
+                                                        "Leave Topic"
+                                                    }
+                                                }
+                                            }
                                         }
-                                        p {
-                                            class: "profile-status",
-                                            "..."
-                                        }
-                                    }
-                                }
+                                    })
                             }
                         }
                     }
-
+                    div {
+                        class: "profile-data",
+                        onclick: move |_| {
+                            show_profile_details.set(Some(profile_for_click.clone()));
+                        },
+                        img {
+                            class: "profile-img",
+                            src: "{avatar_url}",
+                            alt: "Profile Avatar",
+                        }
+                        div { class: "profile-info",
+                            h2 { class: "profile-name", "{profile_data.name}" }
+                            p { class: "profile-status", "Online" }
+                        }
+                    }
 
                     if let Some(profile) = show_profile_details() {
                         ToastProvider {
                             ProfileDetails {
-                                profile: profile,
+                                profile,
                                 toggle: show_profile_details,
-                                on_modify_profile
+                                on_modify_profile,
                             }
                         }
                     }
 
                     if let Some(topic) = show_topic_details() {
                         ToastProvider {
-                            TopicDetails { topic: topic.clone(), toggle: show_topic_details, on_modify_topic }
+                            TopicDetails {
+                                topic: topic.clone(),
+                                toggle: show_topic_details,
+                                on_modify_topic,
+                            }
                         }
                     }
 
                     if show_topic_dialog() {
-                        TopicDialog { toggle: show_topic_dialog, on_create: on_create_topic, on_join: on_join_topic }
+                        TopicDialog {
+                            toggle: show_topic_dialog,
+                            on_create: on_create_topic,
+                            on_join: on_join_topic,
+                        }
                     }
 
                     if let Some((topic_id, topic_name)) = show_leave_confirmation() {
@@ -236,16 +206,15 @@ pub mod desktop_web_components {
                                 on_leave_topic.call(topic_id.clone());
                                 show_leave_confirmation.set(None);
                                 selected_topic.set(None);
-                            }
+                            },
                         }
                     }
                 }
-                if let Some(topic_id) = selected_topic() {
-                    Chat { app_state, topic_id: topic_id.clone(), on_send_message }
-                } else {
-                    div { class: "desktop-chat-placeholder",
-                        h2 { "Select a topic to start chatting" }
-                    }
+
+                Chat {
+                    app_state,
+                    topic: selected_topic,
+                    on_send_message,
                 }
             }
         }
@@ -300,20 +269,12 @@ pub mod desktop_web_components {
                     div { class: "topic-dialog-body",
                         div { class: "topic-mode-tabs",
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Create {
-                                    "topic-mode-tab active"
-                                } else {
-                                    "topic-mode-tab"
-                                },
+                                class: if *selected_mode.read() == TopicCreationMode::Create { "topic-mode-tab active" } else { "topic-mode-tab" },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Create),
                                 "Create Topic"
                             }
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Join {
-                                    "topic-mode-tab active"
-                                } else {
-                                    "topic-mode-tab"
-                                },
+                                class: if *selected_mode.read() == TopicCreationMode::Join { "topic-mode-tab active" } else { "topic-mode-tab" },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Join),
                                 "Join Topic"
                             }
@@ -330,12 +291,8 @@ pub mod desktop_web_components {
                                 class: "topic-input",
                                 r#type: "text",
                                 value: "{topic_name}",
-                                placeholder: if *selected_mode.read() == TopicCreationMode::Create {
-                                    "Enter topic name..."
-                                } else {
-                                    "Enter topic ID or paste invite link..."
-                                },
-                                oninput: move |e| topic_name.set(e.value())
+                                placeholder: if *selected_mode.read() == TopicCreationMode::Create { "Enter topic name..." } else { "Enter topic ID or paste invite link..." },
+                                oninput: move |e| topic_name.set(e.value()),
                             }
                         }
                         p { class: "topic-dialog-description",
@@ -423,9 +380,8 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn TopicItem(contact: Signal<Topic>, on_select: Signal<Option<String>>) -> Element {
+    fn TopicItem(contact: Signal<Topic>, on_select: Signal<Option<Topic>>) -> Element {
         let topic = contact.read().clone();
-        let topic_id = topic.id.clone();
         let topic_name = topic.name.clone();
         let last_message = topic.last_message.clone().unwrap_or_default();
 
@@ -447,7 +403,7 @@ pub mod desktop_web_components {
             div {
                 class: "desktop-contact-item",
                 onclick: move |_| {
-                    on_select.set(Some(topic_id.clone()));
+                    on_select.set(Some(topic.clone()));
                 },
                 oncontextmenu: move |e| {
                     e.prevent_default();
@@ -456,7 +412,7 @@ pub mod desktop_web_components {
                     class: "desktop-contact-avatar",
                     src: "{avatar_url}",
                     alt: "{topic_name}",
-                    draggable: "false"
+                    draggable: "false",
                 }
                 div { class: "desktop-contact-info",
                     h3 { class: "desktop-contact-name", "{topic_name}" }
@@ -470,88 +426,79 @@ pub mod desktop_web_components {
     #[component]
     fn Chat(
         app_state: Signal<AppState>,
-        topic_id: String,
+        topic: Signal<Option<Topic>>,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
-        let topic_id_clone = topic_id.clone();
-        let topic_opt = use_resource(move || {
-            let tid = topic_id_clone.clone();
-            async move { app_state.read().get_topic_immutable(&tid).cloned() }
-        });
+        if let Some(topic) = topic.read().cloned() {
+            let messages = topic.messages;
+            let topic_name = topic.name;
 
-        match &*topic_opt.read_unchecked() {
-            Some(Some(topic_read)) => {
-                let messages = topic_read.messages.clone();
-                let topic_name = topic_read.name.clone();
+            let avatar_url = if let Some(url) = &topic.avatar_url {
+                url.to_string()
+            } else {
+                DEFAULT_AVATAR.to_string()
+            };
 
-                let avatar_url = if let Some(url) = &topic_read.avatar_url {
-                    url.clone()
-                } else {
-                    DEFAULT_AVATAR.to_string()
-                };
+            let mut message_input = use_signal(String::new);
 
-                let mut message_input = use_signal(String::new);
+            let send_message = use_callback({
+                let topic_id = topic.id.clone();
+                move |_| {
+                    let content = message_input().trim().to_string();
+                    if !content.is_empty() {
+                        on_send_message.call((topic_id.clone(), content));
+                        message_input.set(String::new());
+                    }
+                }
+            });
 
-                let send_message = use_callback({
-                    let topic_id = topic_id.clone();
-                    move |_| {
-                        let content = message_input().trim().to_string();
-                        if !content.is_empty() {
-                            on_send_message.call((topic_id.clone(), content));
-                            message_input.set(String::new());
+            rsx! {
+                div { class: "desktop-chat-window",
+                    div { class: "desktop-chat-header",
+                        img {
+                            class: "desktop-contact-avatar",
+                            src: "{avatar_url}",
+                        }
+                        h2 {
+                            class: "desktop-contact-name",
+                            title: "{topic_name}",
+                            "{topic_name}"
                         }
                     }
-                });
-
-                rsx! {
-                    div { class: "desktop-chat-window",
-                        div { class: "desktop-chat-header",
-                            img {
-                                class: "desktop-contact-avatar",
-                                src: "{avatar_url}"
-                            }
-                            h2 {
-                                class: "desktop-contact-name",
-                                title: "{topic_name}",
-                                "{topic_name}"
-                            }
+                    div { class: "desktop-chat-messages",
+                        for message in messages.iter() {
+                            ChatMessageComponent { message: message.clone() }
                         }
-                        div { class: "desktop-chat-messages",
-                            for message in messages.iter() {
-                                ChatMessageComponent { message: message.clone() }
-                            }
-                        }
-                        div { class: "desktop-chat-input-area",
-                            input {
-                                class: "desktop-chat-input",
-                                r#type: "text",
-                                placeholder: "Type a message...",
-                                value: "{message_input()}",
-                                oninput: move |e| {
-                                    message_input.set(e.value());
-                                },
-                                onkeypress: move |e| {
-                                    if e.key() == Key::Enter {
-                                        send_message(());
-                                    }
-                                }
-                            }
-                            button {
-                                class: "desktop-chat-send-button",
-                                onclick: move |_| {
+                    }
+                    div { class: "desktop-chat-input-area",
+                        input {
+                            class: "desktop-chat-input",
+                            r#type: "text",
+                            placeholder: "Type a message...",
+                            value: "{message_input()}",
+                            oninput: move |e| {
+                                message_input.set(e.value());
+                            },
+                            onkeypress: move |e| {
+                                if e.key() == Key::Enter {
                                     send_message(());
-                                },
-                                "Send"
-                            }
+                                }
+                            },
+                        }
+                        button {
+                            class: "desktop-chat-send-button",
+                            onclick: move |_| {
+                                send_message(());
+                            },
+                            "Send"
                         }
                     }
                 }
             }
-            _ => {
-                rsx! {
-                    div { class: "desktop-chat-placeholder",
-                        h2 { "Loading..." }
-                    }
+        } else {
+            rsx! {
+                div { class: "desktop-chat-placeholder",
+                    h2 { "Select a topic to start chatting" }
                 }
             }
         }
@@ -720,14 +667,14 @@ pub mod desktop_web_components {
                             input {
                                 r#type: "file",
                                 style: "display: none;",
-                                onchange: handle_image_change
+                                onchange: handle_image_change,
                             }
                         }
                         input {
                             class: "topic-details-title",
                             r#type: "text",
                             value: "{edited_title}",
-                            oninput: move |e| edited_title.set(e.value())
+                            oninput: move |e| edited_title.set(e.value()),
                         }
                         button {
                             class: "topic-details-save-button",
@@ -855,12 +802,15 @@ pub mod desktop_web_components {
                     onclick: move |e| e.stop_propagation(),
                     div { class: "profile-details-header",
                         label { class: "profile-details-image-wrapper",
-                            img { class: "profile-details-image", src: avatar_url }
+                            img {
+                                class: "profile-details-image",
+                                src: avatar_url,
+                            }
                             input {
                                 r#type: "file",
                                 accept: "image/*",
                                 style: "display: none;",
-                                onchange: handle_image_change
+                                onchange: handle_image_change,
                             }
                         }
                         input {
@@ -868,7 +818,7 @@ pub mod desktop_web_components {
                             r#type: "text",
                             value: "{edited_name}",
                             placeholder: "Display Name",
-                            oninput: move |e| edited_name.set(e.value())
+                            oninput: move |e| edited_name.set(e.value()),
                         }
                         button {
                             class: "profile-details-save-button",
@@ -890,10 +840,7 @@ pub mod desktop_web_components {
 
                     div { class: "profile-details-info-section",
                         p { class: "profile-details-section-title", "Last Active" }
-                        p {
-                            class: "profile-details-last-connection",
-                            "{last_connection_text}"
-                        }
+                        p { class: "profile-details-last-connection", "{last_connection_text}" }
                     }
                 }
             }
