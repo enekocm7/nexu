@@ -134,7 +134,7 @@ pub mod desktop_web_components {
                                                         index: 1usize,
                                                         on_select: move |_| {
                                                             let state = app_state.read();
-                                                            if let Some(topic) = state.get_topic_immutable(&id_for_details) {
+                                                            if let Some(topic) = state.get_topic(&id_for_details) {
                                                                 show_topic_details.set(Some(topic.clone()));
                                                             }
                                                         },
@@ -449,7 +449,7 @@ pub mod desktop_web_components {
         let state = app_state.read();
 
         let topic = if let Some(id) = topic_id {
-            state.get_topic_immutable(&id)
+            state.get_topic(&id)
         } else {
             None
         };
@@ -465,6 +465,35 @@ pub mod desktop_web_components {
             };
 
             let mut message_input = use_signal(String::new);
+
+            let topic_id_str = topic.id.clone();
+            let mut tracked_topic_id = use_signal(|| topic_id_str.clone());
+            let mut last_msg_count = use_signal(|| 0);
+
+            if *tracked_topic_id.read() != topic_id_str {
+                tracked_topic_id.set(topic_id_str.clone());
+                last_msg_count.set(0);
+            }
+
+            use_effect(move || {
+                let state = app_state.read();
+                let current_topic_id = tracked_topic_id.read();
+
+                if let Some(t) = state.get_topic(&*current_topic_id) {
+                    let count = t.messages.len();
+                    if count != *last_msg_count.read() {
+                        last_msg_count.set(count);
+                        document::eval(r#"
+                            requestAnimationFrame(() => {
+                                const element = document.getElementById("chat-messages-container");
+                                if (element) {
+                                    element.scrollTop = element.scrollHeight;
+                                }
+                            });
+                        "#);
+                    }
+                }
+            });
 
             let send_message = use_callback({
                 let topic_id = topic.id.clone();
@@ -491,6 +520,7 @@ pub mod desktop_web_components {
                         }
                     }
                     div { class: "desktop-chat-messages",
+                        id: "chat-messages-container",
                         for message in messages.iter() {
                             ChatMessageComponent { message: message.clone() }
                         }
