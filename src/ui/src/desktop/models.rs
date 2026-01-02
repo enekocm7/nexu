@@ -178,6 +178,17 @@ pub enum Message {
     Disconnect(DisconnectMessage),
 }
 
+impl Message {
+    fn get_timestamp(&self) -> u64 {
+        match self {
+            Message::Chat(msg) => msg.timestamp,
+            Message::Leave(msg) => msg.timestamp,
+            Message::Join(msg) => msg.timestamp,
+            Message::Disconnect(msg) => msg.timestamp,
+        }
+    }
+}
+
 impl PartialOrd for Message {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -186,19 +197,9 @@ impl PartialOrd for Message {
 
 impl PartialEq<Self> for Message {
     fn eq(&self, other: &Self) -> bool {
-        let self_timestamp = match self {
-            Message::Chat(msg) => msg.timestamp,
-            Message::Leave(msg) => msg.timestamp,
-            Message::Join(msg) => msg.timestamp,
-            Message::Disconnect(msg) => msg.timestamp,
-        };
+        let self_timestamp = self.get_timestamp();
 
-        let other_timestamp = match other {
-            Message::Chat(msg) => msg.timestamp,
-            Message::Leave(msg) => msg.timestamp,
-            Message::Join(msg) => msg.timestamp,
-            Message::Disconnect(msg) => msg.timestamp,
-        };
+        let other_timestamp = other.get_timestamp();
 
         self_timestamp == other_timestamp
     }
@@ -208,19 +209,9 @@ impl Eq for Message {}
 
 impl Ord for Message {
     fn cmp(&self, other: &Self) -> Ordering {
-        let self_timestamp = match self {
-            Message::Chat(msg) => msg.timestamp,
-            Message::Leave(msg) => msg.timestamp,
-            Message::Join(msg) => msg.timestamp,
-            Message::Disconnect(msg) => msg.timestamp,
-        };
+        let self_timestamp = self.get_timestamp();
 
-        let other_timestamp = match other {
-            Message::Chat(msg) => msg.timestamp,
-            Message::Leave(msg) => msg.timestamp,
-            Message::Join(msg) => msg.timestamp,
-            Message::Disconnect(msg) => msg.timestamp,
-        };
+        let other_timestamp = other.get_timestamp();
 
         self_timestamp.cmp(&other_timestamp)
     }
