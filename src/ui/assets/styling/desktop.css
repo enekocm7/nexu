@@ -375,9 +375,8 @@ body {
 }
 
 .desktop-chat-input-area {
-    background-color: #333333;
+    background-color: #212020;
     padding: 15px 20px;
-    border-top: 1px solid #3a3a3a;
     display: flex;
     gap: 12px;
     align-items: center;
