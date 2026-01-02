@@ -139,11 +139,11 @@ impl AppState {
         }
     }
 
-    pub fn get_topic(&mut self, topic_id: &str) -> Option<&mut Topic> {
+    pub fn get_topic_mutable(&mut self, topic_id: &str) -> Option<&mut Topic> {
         self.topics.get_mut(topic_id)
     }
 
-    pub fn get_topic_immutable(&self, topic_id: &str) -> Option<&Topic> {
+    pub fn get_topic(&self, topic_id: &str) -> Option<&Topic> {
         self.topics.get(topic_id)
     }
 

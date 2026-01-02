@@ -148,7 +148,7 @@ fn App() -> Element {
     let on_join_topic = move |topic_id: String| {
         spawn(async move {
             let client_ref = desktop_client.read().clone();
-            if app_state.read().get_topic_immutable(&topic_id).is_some() {
+            if app_state.read().get_topic(&topic_id).is_some() {
                 return;
             }
             let topic = Topic::new_placeholder(topic_id.clone());
@@ -212,7 +212,7 @@ fn App() -> Element {
             match (send_result, peer_id_result) {
                 (Ok(_), Ok(peer_id)) => {
                     let mut state = app_state.write();
-                    if let Some(topic) = state.get_topic(&ticket_id) {
+                    if let Some(topic) = state.get_topic_mutable(&ticket_id) {
                         let msg = ChatMessage::new(peer_id, ticket_id, message, now, true);
                         topic.add_message(msg);
 
@@ -295,7 +295,7 @@ fn App() -> Element {
                     match message {
                         MessageTypes::Chat(msg) => {
                             let mut state = app_state.write();
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic_mutable(&topic) {
                                 let message = ChatMessage::new(
                                     msg.sender.to_string(),
                                     topic_obj.id.clone(),
@@ -368,7 +368,7 @@ fn App() -> Element {
 
                             let messages_to_send = {
                                 let state = app_state.read();
-                                if let Some(topic_obj) = state.get_topic_immutable(&topic) {
+                                if let Some(topic_obj) = state.get_topic(&topic) {
                                     let chat_messages: Vec<p2p::ChatMessage> = topic_obj
                                         .messages
                                         .iter()
@@ -402,7 +402,7 @@ fn App() -> Element {
                             }
 
                             let mut state = app_state.write();
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic_mutable(&topic) {
                                 let message = ui::desktop::models::JoinMessage::new(
                                     join_message.endpoint.to_string(),
                                     Utc::now().timestamp_millis() as u64,
@@ -412,7 +412,7 @@ fn App() -> Element {
                         }
                         MessageTypes::LeaveTopic(message) => {
                             let mut state = app_state.write();
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic_mutable(&topic) {
                                 let message = ui::desktop::models::LeaveMessage {
                                     sender_id: message.endpoint.to_string(),
                                     timestamp: Utc::now().timestamp_millis() as u64,
@@ -423,7 +423,7 @@ fn App() -> Element {
                         }
                         MessageTypes::DisconnectTopic(message) => {
                             let mut state = app_state.write();
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic_mutable(&topic) {
                                 let message = ui::desktop::models::DisconnectMessage {
                                     sender_id: message.endpoint.to_string(),
                                     timestamp: Utc::now().timestamp_millis() as u64,
@@ -438,7 +438,7 @@ fn App() -> Element {
                             }
 
                             let mut state = app_state.write();
-                            if let Some(topic_obj) = state.get_topic(&topic) {
+                            if let Some(topic_obj) = state.get_topic_mutable(&topic) {
                                 let received_messages = message
                                     .messages
                                     .iter()
