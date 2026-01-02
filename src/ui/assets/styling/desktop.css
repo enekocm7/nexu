@@ -822,6 +822,17 @@ body {
     margin-bottom: 20px;
 }
 
+.topic-details-image-wrapper {
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.topic-details-image-wrapper:hover .topic-details-image {
+    border-color: #5a7fb8;
+    box-shadow: 0 0 0 3px rgba(90, 127, 184, 0.2);
+}
+
 .topic-details-image {
     width: 60px;
     height: 60px;
@@ -829,7 +840,7 @@ body {
     object-fit: cover;
     background-color: #666666;
     border: 2px solid #555555;
-    flex-shrink: 0;
+    transition: all 0.2s ease;
 }
 
 .topic-details-title {
@@ -844,6 +855,7 @@ body {
     border-radius: 10px;
     outline: none;
     transition: all 0.2s ease;
+    min-width: 0;
 }
 
 .topic-details-title:focus {
@@ -945,28 +957,6 @@ body {
     flex-shrink: 0;
 }
 
-.profile-details-image-wrapper::after {
-    content: "📷";
-    position: absolute;
-    bottom: 0;
-    right: 0;
-    background-color: #5a7fb8;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-}
-
-.profile-details-image-wrapper:hover::after {
-    opacity: 1;
-}
-
 .profile-details-image {
     width: 60px;
     height: 60px;
@@ -1015,6 +1005,7 @@ body {
     transition: all 0.2s ease;
     white-space: nowrap;
 }
+
 
 .profile-details-save-button:hover {
     background-color: #6a8fc8;
