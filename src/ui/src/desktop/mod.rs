@@ -30,7 +30,7 @@ pub mod desktop_web_components {
         on_modify_profile: EventHandler<Profile>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
-        let mut selected_topic = use_signal::<Option<Topic>>(|| None);
+        let mut selected_topic_id = use_signal::<Option<String>>(|| None);
         let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut show_profile_details = use_signal::<Option<Profile>>(|| None);
         let mut search_query = use_signal(String::new);
@@ -91,30 +91,40 @@ pub mod desktop_web_components {
                         ul {
                             {
                                 contacts_list
-                                    .iter()
+                                    .into_iter()
                                     .filter(|contact| {
                                         contact.name.to_lowercase().contains(&search_query().to_lowercase())
                                     })
                                     .map(|contact| {
-                                        let contact_id = contact.id.clone();
-                                        let contact_name = contact.name.clone();
-                                        let contact_for_details = contact.clone();
-                                        let contact_clone = contact.clone();
-                                        let contact_for_select = contact.clone();
+                                        let topic_id = contact.id;
+                                        let topic_name = contact.name;
+                                        let avatar_url = contact.avatar_url;
+                                        let last_message = contact.last_message;
+                                        let last_connection = contact.last_connection;
+
+                                        let id_for_chat = topic_id.clone();
+                                        let id_for_details = topic_id.clone();
+                                        let id_for_leave = topic_id.clone();
+                                        let name_for_leave = topic_name.clone();
                                         rsx! {
                                             ContextMenu {
                                                 ContextMenuTrigger {
-                                                    TopicItem { contact: Signal::new(contact_clone), on_select: selected_topic }
+                                                    TopicItem {
+                                                        id: topic_id.clone(),
+                                                        name: topic_name.clone(),
+                                                        avatar_url,
+                                                        last_message,
+                                                        last_connection,
+                                                        on_select: selected_topic_id,
+                                                    }
                                                 }
                                                 ContextMenuContent { class: "context-menu-content",
                                                     ContextMenuItem {
                                                         class: "context-menu-item",
                                                         value: "Open Chat".to_string(),
                                                         index: 0usize,
-                                                        on_select: {
-                                                            move |_| {
-                                                                selected_topic.set(Some(contact_for_select.clone()));
-                                                            }
+                                                        on_select: move |_| {
+                                                            selected_topic_id.set(Some(id_for_chat.clone()));
                                                         },
                                                         "Open Chat"
                                                     }
@@ -123,7 +133,10 @@ pub mod desktop_web_components {
                                                         value: "Open Details".to_string(),
                                                         index: 1usize,
                                                         on_select: move |_| {
-                                                            show_topic_details.set(Some(contact_for_details.clone()));
+                                                            let state = app_state.read();
+                                                            if let Some(topic) = state.get_topic_immutable(&id_for_details) {
+                                                                show_topic_details.set(Some(topic.clone()));
+                                                            }
                                                         },
                                                         "Open Details"
                                                     }
@@ -132,10 +145,9 @@ pub mod desktop_web_components {
                                                         value: "Leave Topic".to_string(),
                                                         index: 2usize,
                                                         on_select: {
-                                                            let contact_id = contact_id.clone();
-                                                            let contact_name = contact_name.clone();
                                                             move |_| {
-                                                                show_leave_confirmation.set(Some((contact_id.clone(), contact_name.clone())))
+                                                                show_leave_confirmation
+                                                                    .set(Some((id_for_leave.clone(), name_for_leave.clone())))
                                                             }
                                                         },
                                                         "Leave Topic"
@@ -205,7 +217,7 @@ pub mod desktop_web_components {
                             on_confirm: move |_| {
                                 on_leave_topic.call(topic_id.clone());
                                 show_leave_confirmation.set(None);
-                                selected_topic.set(None);
+                                selected_topic_id.set(None);
                             },
                         }
                     }
@@ -213,7 +225,7 @@ pub mod desktop_web_components {
 
                 Chat {
                     app_state,
-                    topic: selected_topic,
+                    topic_id: selected_topic_id(),
                     on_send_message,
                 }
             }
@@ -380,12 +392,17 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn TopicItem(contact: Signal<Topic>, on_select: Signal<Option<Topic>>) -> Element {
-        let topic = contact.read().clone();
-        let topic_name = topic.name.clone();
-        let last_message = topic.last_message.clone().unwrap_or_default();
+    fn TopicItem(
+        id: String,
+        name: String,
+        avatar_url: Option<String>,
+        last_message: Option<String>,
+        last_connection: Option<u64>,
+        on_select: Signal<Option<String>>,
+    ) -> Element {
+        let last_message_display = last_message.unwrap_or_default();
 
-        let avatar_url = if let Some(url) = &topic.avatar_url
+        let avatar_display = if let Some(url) = &avatar_url
             && !url.is_empty()
         {
             url.clone()
@@ -393,7 +410,7 @@ pub mod desktop_web_components {
             DEFAULT_AVATAR.to_string()
         };
 
-        let time_display = if let Some(timestamp) = topic.last_connection {
+        let time_display = if let Some(timestamp) = last_connection {
             format_relative_time(timestamp as i64)
         } else {
             String::from("")
@@ -403,20 +420,20 @@ pub mod desktop_web_components {
             div {
                 class: "desktop-contact-item",
                 onclick: move |_| {
-                    on_select.set(Some(topic.clone()));
+                    on_select.set(Some(id.clone()));
                 },
                 oncontextmenu: move |e| {
                     e.prevent_default();
                 },
                 img {
                     class: "desktop-contact-avatar",
-                    src: "{avatar_url}",
-                    alt: "{topic_name}",
+                    src: "{avatar_display}",
+                    alt: "{name}",
                     draggable: "false",
                 }
                 div { class: "desktop-contact-info",
-                    h3 { class: "desktop-contact-name", "{topic_name}" }
-                    p { class: "desktop-contact-last-message", "{last_message}" }
+                    h3 { class: "desktop-contact-name", "{name}" }
+                    p { class: "desktop-contact-last-message", "{last_message_display}" }
                 }
                 h3 { class: "desktop-contact-last-connection", "{time_display}" }
             }
@@ -426,12 +443,20 @@ pub mod desktop_web_components {
     #[component]
     fn Chat(
         app_state: Signal<AppState>,
-        topic: Signal<Option<Topic>>,
+        topic_id: Option<String>,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
-        if let Some(topic) = topic.read().cloned() {
-            let messages = topic.messages;
-            let topic_name = topic.name;
+        let state = app_state.read();
+
+        let topic = if let Some(id) = topic_id {
+            state.get_topic_immutable(&id)
+        } else {
+            None
+        };
+
+        if let Some(topic) = topic {
+            let messages = &topic.messages;
+            let topic_name = &topic.name;
 
             let avatar_url = if let Some(url) = &topic.avatar_url {
                 url.to_string()
