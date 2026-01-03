@@ -48,6 +48,9 @@ async fn join_topic_internal(
             topic.add_join_message(ui::desktop::models::JoinMessage::new_me(
                 Utc::now().timestamp_millis() as u64,
             ));
+            let profile = state.get_profile();
+
+            topic.add_member(&profile.id);
 
             state.add_topic(&topic);
 
@@ -87,7 +90,7 @@ async fn join_topic_internal(
 
 #[component]
 fn App() -> Element {
-    let mut app_state = use_signal(|| AppState::new("temp"));
+    let mut app_state = use_signal(|| AppState::new("Error"));
     let desktop_client = use_signal(|| Arc::new(Mutex::new(DesktopClient::new())));
 
     let on_modify_topic = move |topic: Topic| {
@@ -133,7 +136,9 @@ fn App() -> Element {
             match ticket {
                 Ok(ticket) => {
                     let mut state = app_state.write();
-                    let topic = Topic::new(ticket.clone(), name, None);
+                    let mut topic = Topic::new(ticket.clone(), name, None);
+                    let profile = state.get_profile();
+                    topic.add_member(&profile.id);
                     state.add_topic(&topic);
 
                     if save_topics_to_file(&state.get_all_topics()).is_err() {

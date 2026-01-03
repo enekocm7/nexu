@@ -178,9 +178,10 @@ pub mod desktop_web_components {
                     if let Some(profile) = show_profile_details() {
                         ToastProvider {
                             ProfileDetails {
-                                profile,
+                                profile: profile.clone(),
                                 toggle: show_profile_details,
                                 on_modify_profile,
+                                readonly: profile.id != profile_data.id,
                             }
                         }
                     }
@@ -191,6 +192,8 @@ pub mod desktop_web_components {
                                 topic: topic.clone(),
                                 toggle: show_topic_details,
                                 on_modify_topic,
+                                view_profile: show_profile_details,
+                                app_state,
                             }
                         }
                     }
@@ -519,7 +522,8 @@ pub mod desktop_web_components {
                             "{topic_name}"
                         }
                     }
-                    div { class: "desktop-chat-messages",
+                    div {
+                        class: "desktop-chat-messages",
                         id: "chat-messages-container",
                         for message in messages.iter() {
                             ChatMessageComponent { message: message.clone() }
@@ -614,6 +618,8 @@ pub mod desktop_web_components {
         topic: Topic,
         mut toggle: Signal<Option<Topic>>,
         on_modify_topic: EventHandler<Topic>,
+        mut view_profile: Signal<Option<Profile>>,
+        app_state: Signal<AppState>,
     ) -> Element {
         let toast = use_toast();
         let mut edited_title = use_signal(|| topic.name.clone());
@@ -745,6 +751,47 @@ pub mod desktop_web_components {
                         onclick: handle_copy_topic_id,
                         "{topic.id}"
                     }
+                    div { class: "topic-details-info-section",
+                        p { class: "topic-details-section-title", "Members" }
+                        ul {
+                            {
+                                let members: Vec<Profile> = {
+                                    let state = app_state.read();
+                                    let own_profile = state.get_profile();
+                                    topic.members.iter().map(|member_id| {
+                                        if let Some(contact) = state.get_contact(member_id) {
+                                            contact.clone()
+                                        } else if member_id == &own_profile.id {
+                                            own_profile.clone()
+                                        } else {
+                                            Profile::new_with_id(member_id)
+                                        }
+                                    }).collect()
+                                };
+                                members.into_iter().map(|member| {
+                                    let avatar = if let Some(url) = &member.avatar && !url.is_empty() {
+                                        url.clone()
+                                    } else {
+                                        DEFAULT_AVATAR.to_string()
+                                    };
+                                    let last_seen = format_relative_time((member.last_connection / 1000) as i64);
+                                    let member_clone = member.clone();
+                                    rsx! {
+                                        li { class: "topic-member-card",
+                                            onclick: move |_| {
+                                                view_profile.set(Some(member_clone.clone()));
+                                            },
+                                            img { class: "topic-member-avatar", src: "{avatar}" }
+                                            div { class: "topic-member-info",
+                                                h3 { class: "topic-member-name", "{member.name}" }
+                                                p { class: "topic-member-status", "{last_seen}" }
+                                            }
+                                        }
+                                    }
+                                })
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -755,6 +802,7 @@ pub mod desktop_web_components {
         profile: Profile,
         mut toggle: Signal<Option<Profile>>,
         on_modify_profile: EventHandler<Profile>,
+        readonly: bool,
     ) -> Element {
         let toast = use_toast();
         let mut edited_name = use_signal(|| profile.name.clone());
@@ -861,11 +909,13 @@ pub mod desktop_web_components {
                                 class: "profile-details-image",
                                 src: avatar_url,
                             }
-                            input {
-                                r#type: "file",
-                                accept: "image/*",
-                                style: "display: none;",
-                                onchange: handle_image_change,
+                            if !readonly {
+                                input {
+                                    r#type: "file",
+                                    accept: "image/*",
+                                    style: "display: none;",
+                                    onchange: handle_image_change,
+                                }
                             }
                         }
                         input {
@@ -873,12 +923,15 @@ pub mod desktop_web_components {
                             r#type: "text",
                             value: "{edited_name}",
                             placeholder: "Display Name",
+                            readonly: "{readonly}",
                             oninput: move |e| edited_name.set(e.value()),
                         }
-                        button {
-                            class: "profile-details-save-button",
-                            onclick: handle_save,
-                            "Save"
+                        if !readonly {
+                            button {
+                                class: "profile-details-save-button",
+                                onclick: handle_save,
+                                "Save"
+                            }
                         }
                     }
                     hr {}

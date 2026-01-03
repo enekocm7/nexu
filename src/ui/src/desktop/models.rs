@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -12,6 +13,7 @@ pub struct Topic {
     pub last_message: Option<String>,
     pub messages: Vec<Message>,
     pub last_changed: u64,
+    pub members: HashSet<String>,
 }
 
 impl Topic {
@@ -24,6 +26,7 @@ impl Topic {
             last_message: None,
             messages: Vec::new(),
             last_changed: chrono::Utc::now().timestamp_millis() as u64,
+            members: HashSet::new(),
         }
     }
 
@@ -36,6 +39,7 @@ impl Topic {
             last_message: None,
             messages: Vec::new(),
             last_changed: 0,
+            members: HashSet::new(),
         }
     }
 
@@ -56,6 +60,26 @@ impl Topic {
     pub fn add_disconnect_message(&mut self, message: DisconnectMessage) {
         self.messages.push(Message::Disconnect(message));
     }
+
+    pub fn add_member(&mut self, profile_id: &str) {
+        self.members.insert(profile_id.to_string());
+    }
+
+    pub fn remove_member(&mut self, profile_id: &str) {
+        self.members.remove(profile_id);
+    }
+
+    pub fn get_member_ids(&self) -> Vec<&str> {
+        self.members.iter().map(|s| s.as_str()).collect()
+    }
+
+    pub fn has_member(&self, profile_id: &str) -> bool {
+        self.members.contains(profile_id)
+    }
+
+    pub fn update_member(&mut self, profile_id: &str) {
+        self.members.replace(profile_id.to_string());
+    }
 }
 
 impl PartialEq for Topic {
@@ -75,6 +99,7 @@ pub enum TopicCreationMode {
 pub struct AppState {
     topics: HashMap<String, Topic>,
     current_topic_id: Option<String>,
+    contacts: HashMap<String, Profile>,
     profile: Profile,
 }
 
@@ -84,6 +109,7 @@ impl AppState {
         Self {
             topics: HashMap::new(),
             current_topic_id: None,
+            contacts: HashMap::new(),
             profile: Profile::new_with_id(profile_id),
         }
     }
@@ -167,6 +193,25 @@ impl AppState {
     }
     pub fn set_profile_last_connection_to_now(&mut self) {
         self.profile.last_connection = chrono::Utc::now().timestamp_millis() as u64
+    }
+    pub fn add_contact(&mut self, profile: Profile) {
+        self.contacts.insert(profile.id.clone(), profile);
+    }
+    pub fn get_contact(&self, profile_id: &str) -> Option<&Profile> {
+        self.contacts.get(profile_id)
+    }
+    pub fn get_all_contacts(&self) -> Vec<Profile> {
+        self.contacts.values().cloned().collect()
+    }
+    pub fn remove_contact(&mut self, profile_id: &str) {
+        self.contacts.remove(profile_id);
+    }
+    pub fn modify_contact(&mut self, profile: Profile) {
+        if let Some(existing_profile) = self.contacts.get_mut(&profile.id) {
+            existing_profile.name = profile.name;
+            existing_profile.avatar = profile.avatar;
+            existing_profile.last_connection = profile.last_connection;
+        }
     }
 }
 
@@ -281,7 +326,7 @@ pub struct DisconnectMessage {
     pub timestamp: u64,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq)]
 pub struct Profile {
     pub id: String,
     pub name: String,
@@ -307,3 +352,16 @@ impl Profile {
         }
     }
 }
+
+impl PartialEq<Self> for Profile {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Hash for Profile {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
