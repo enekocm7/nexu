@@ -256,9 +256,15 @@ fn App() -> Element {
                 }
             };
 
-            if let Ok(profile) = load_profile() {
+            if let Ok(mut profile) = load_profile() {
+                if peer_id != profile.id {
+                    profile.id = peer_id.clone();
+                    utils::contacts::save_profile(&profile).unwrap_or_else(|e| {
+                        eprintln!("Failed to update profile ID: {e}");
+                    });
+                }
                 let mut state = app_state.write();
-                state.set_profile_id(&profile.id);
+                state.set_profile_id(&peer_id);
                 state.set_profile_name(&profile.name);
                 state.set_profile_avatar(&profile.avatar);
                 state.set_profile_last_connection_to_now();
