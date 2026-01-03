@@ -277,8 +277,8 @@ fn App() -> Element {
             if let Ok(loaded_topics) = load_topics_from_file() {
                 for topic in loaded_topics {
                     let client_ref = desktop_client.read().clone();
-                    spawn(async move {
-                        let _ = join_topic_internal(&client_ref, app_state, topic).await;
+                    join_topic_internal(&client_ref, app_state, topic).await.unwrap_or_else(|e| {
+                        eprintln!("Failed to join topic during initialization: {e}");
                     });
                 }
             }
