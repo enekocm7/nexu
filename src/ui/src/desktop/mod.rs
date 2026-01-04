@@ -36,7 +36,7 @@ pub mod desktop_web_components {
         let mut search_query = use_signal(String::new);
         let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
 
-        let contacts_list: Vec<Topic> = {
+        let mut contacts_list: Vec<Topic> = {
             let state = app_state.read();
             let mut contacts = state.get_all_topics().into_iter().collect::<Vec<Topic>>();
             contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
@@ -90,6 +90,7 @@ pub mod desktop_web_components {
                     div { class: "desktop-column-contacts",
                         ul {
                             {
+                                contacts_list.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
                                 contacts_list
                                     .into_iter()
                                     .filter(|contact| {
@@ -101,7 +102,6 @@ pub mod desktop_web_components {
                                         let avatar_url = contact.avatar_url;
                                         let last_message = contact.last_message;
                                         let last_connection = contact.last_connection;
-
                                         let id_for_chat = topic_id.clone();
                                         let id_for_details = topic_id.clone();
                                         let id_for_leave = topic_id.clone();
@@ -482,18 +482,20 @@ pub mod desktop_web_components {
                 let state = app_state.read();
                 let current_topic_id = tracked_topic_id.read();
 
-                if let Some(t) = state.get_topic(&*current_topic_id) {
+                if let Some(t) = state.get_topic(&current_topic_id) {
                     let count = t.messages.len();
                     if count != *last_msg_count.read() {
                         last_msg_count.set(count);
-                        document::eval(r#"
+                        document::eval(
+                            r#"
                             requestAnimationFrame(() => {
                                 const element = document.getElementById("chat-messages-container");
                                 if (element) {
                                     element.scrollTop = element.scrollHeight;
                                 }
                             });
-                        "#);
+                        "#,
+                        );
                     }
                 }
             });
@@ -758,37 +760,46 @@ pub mod desktop_web_components {
                                 let members: Vec<Profile> = {
                                     let state = app_state.read();
                                     let own_profile = state.get_profile();
-                                    topic.members.iter().map(|member_id| {
-                                        if let Some(contact) = state.get_contact(member_id) {
-                                            contact.clone()
-                                        } else if member_id == &own_profile.id {
-                                            own_profile.clone()
-                                        } else {
-                                            Profile::new_with_id(member_id)
-                                        }
-                                    }).collect()
+                                    topic
+                                        .members
+                                        .iter()
+                                        .map(|member_id| {
+                                            if let Some(contact) = state.get_contact(member_id) {
+                                                contact.clone()
+                                            } else if member_id == &own_profile.id {
+                                                own_profile.clone()
+                                            } else {
+                                                Profile::new_with_id(member_id)
+                                            }
+                                        })
+                                        .collect()
                                 };
-                                members.into_iter().map(|member| {
-                                    let avatar = if let Some(url) = &member.avatar && !url.is_empty() {
-                                        url.clone()
-                                    } else {
-                                        DEFAULT_AVATAR.to_string()
-                                    };
-                                    let last_seen = format_relative_time((member.last_connection / 1000) as i64);
-                                    let member_clone = member.clone();
-                                    rsx! {
-                                        li { class: "topic-member-card",
-                                            onclick: move |_| {
-                                                view_profile.set(Some(member_clone.clone()));
-                                            },
-                                            img { class: "topic-member-avatar", src: "{avatar}" }
-                                            div { class: "topic-member-info",
-                                                h3 { class: "topic-member-name", "{member.name}" }
-                                                p { class: "topic-member-status", "{last_seen}" }
+                                members
+                                    .into_iter()
+                                    .map(|member| {
+                                        let avatar = if let Some(url) = &member.avatar && !url.is_empty() {
+                                            url.clone()
+                                        } else {
+                                            DEFAULT_AVATAR.to_string()
+                                        };
+                                        let last_seen = format_relative_time(
+                                            (member.last_connection / 1000) as i64,
+                                        );
+                                        let member_clone = member.clone();
+                                        rsx! {
+                                            li {
+                                                class: "topic-member-card",
+                                                onclick: move |_| {
+                                                    view_profile.set(Some(member_clone.clone()));
+                                                },
+                                                img { class: "topic-member-avatar", src: "{avatar}" }
+                                                div { class: "topic-member-info",
+                                                    h3 { class: "topic-member-name", "{member.name}" }
+                                                    p { class: "topic-member-status", "{last_seen}" }
+                                                }
                                             }
                                         }
-                                    }
-                                })
+                                    })
                             }
                         }
                     }
