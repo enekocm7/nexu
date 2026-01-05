@@ -171,7 +171,6 @@ pub mod desktop_web_components {
                         }
                         div { class: "profile-info",
                             h2 { class: "profile-name", "{profile_data.name}" }
-                            p { class: "profile-status", "Online" }
                         }
                     }
 
