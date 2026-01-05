@@ -3,25 +3,25 @@
 @source "./src/**/*.{rs,html,css}";
 
 @theme {
-    --color-bg-dark: #18181b;
-    --color-bg-panel: #27272a;
-    --color-bg-subtle: #3f3f46;
-    --color-bg-input: #18181b;
-    --color-bg-hover: #3f3f46;
-    --color-bg-active: #52525b;
+    --color-bg-dark: hsl(240 5.9% 16%);
+    --color-bg-panel: hsl(240 3.7% 14%);
+    --color-bg-subtle: hsl(240 5.3% 26.1%);
+    --color-bg-input: hsl(240 5.9% 16%);
+    --color-bg-hover: hsl(240 5.3% 26.1%);
+    --color-bg-active: hsl(240 5.2% 33.9%);
 
-    --color-text-primary: #f4f4f5;
-    --color-text-secondary: #a1a1aa;
-    --color-text-muted: #71717a;
+    --color-text-primary: hsl(240 4.8% 95.9%);
+    --color-text-secondary: hsl(240 5% 64.9%);
+    --color-text-muted: hsl(240 3.8% 46.1%);
 
-    --color-accent: #3b82f6;
-    --color-accent-hover: #2563eb;
-    --color-accent-text: #ffffff;
+    --color-accent: hsl(217.2 91.2% 59.8%);
+    --color-accent-hover: hsl(221.2 83.2% 53.3%);
+    --color-accent-text: hsl(0 0% 100%);
 
-    --color-danger: #ef4444;
-    --color-danger-hover: #dc2626;
+    --color-danger: hsl(0 84.2% 60.2%);
+    --color-danger-hover: hsl(0 72.2% 50.6%);
 
-    --color-border: #3f3f46;
+    --color-border: hsl(240 5.3% 26.1%);
 }
 
 .btn,
