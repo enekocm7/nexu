@@ -1,3 +1,96 @@
 @import "tailwindcss";
 
 @source "./src/**/*.{rs,html,css}";
+
+@theme {
+    --color-bg-dark: #18181b;
+    --color-bg-panel: #27272a;
+    --color-bg-subtle: #3f3f46;
+    --color-bg-input: #18181b;
+    --color-bg-hover: #3f3f46;
+    --color-bg-active: #52525b;
+
+    --color-text-primary: #f4f4f5;
+    --color-text-secondary: #a1a1aa;
+    --color-text-muted: #71717a;
+
+    --color-accent: #3b82f6;
+    --color-accent-hover: #2563eb;
+    --color-accent-text: #ffffff;
+
+    --color-danger: #ef4444;
+    --color-danger-hover: #dc2626;
+
+    --color-border: #3f3f46;
+}
+
+.btn,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-icon {
+    @apply cursor-pointer transition-all duration-200 rounded-lg font-medium flex items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-dark;
+}
+
+.btn-primary {
+    @apply bg-accent text-accent-text hover:bg-accent-hover shadow-md hover:shadow-lg active:translate-y-0 active:shadow-sm;
+}
+
+.btn-secondary {
+    @apply bg-bg-subtle text-text-primary hover:bg-bg-active;
+}
+
+.btn-danger {
+    @apply bg-danger text-white hover:bg-danger-hover shadow-md hover:shadow-lg;
+}
+
+.btn-icon {
+    @apply bg-transparent text-text-secondary hover:bg-bg-hover hover:text-text-primary p-1;
+}
+
+.input-field {
+    @apply w-full py-3 px-4 bg-bg-input border border-border rounded-xl text-text-primary text-[15px] outline-none transition-all duration-200 shadow-sm placeholder:text-text-muted focus:border-accent focus:ring-1 focus:ring-accent;
+}
+
+.scrollbar-custom {
+    @apply [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-bg-subtle [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-text-muted;
+}
+
+.avatar {
+    @apply rounded-full object-cover bg-bg-subtle border border-border;
+}
+
+.card {
+    @apply bg-bg-panel rounded-2xl shadow-2xl border border-border overflow-hidden;
+}
+
+.list-item {
+    @apply flex items-center py-3 px-4 gap-3 border-b border-border cursor-pointer transition-all duration-200 hover:bg-bg-hover active:bg-bg-active;
+}
+
+.message-bubble,
+.message-bubble-sent,
+.message-bubble-received {
+    @apply max-w-[75%] py-2 px-4 rounded-2xl wrap-break-word flex flex-col gap-1 text-sm shadow-sm;
+}
+
+.message-bubble-sent {
+    @apply self-end bg-accent text-accent-text rounded-br-sm [&>.message-sender-id]:hidden;
+}
+
+.message-bubble-received {
+    @apply self-start bg-bg-subtle text-text-primary rounded-bl-sm [&>.message-sender-id]:text-left [&>.message-sender-id]:text-text-secondary;
+}
+
+.context-menu {
+    @apply bg-bg-panel border border-border rounded-lg shadow-xl p-1 min-w-45 z-1000;
+}
+
+.context-menu-item,
+.context-menu-item-danger {
+    @apply py-2 px-3 cursor-pointer rounded text-sm text-text-primary transition-colors duration-200 hover:bg-bg-hover active:bg-bg-active;
+}
+
+.context-menu-item-danger {
+    @apply text-danger;
+}

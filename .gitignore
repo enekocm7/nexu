@@ -5,6 +5,7 @@
 Cargo.lock
 bun.lock
 /node_modules
+package-lock.json
 
 # Generated Tailwind CSS files
 src/ui/assets/tailwind.css
