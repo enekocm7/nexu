@@ -16,7 +16,6 @@ pub mod desktop_web_components {
     };
     use dioxus_primitives::toast::{ToastOptions, use_toast};
 
-    static DESKTOP_CSS: Asset = asset!("/assets/styling/desktop.css");
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
     static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
@@ -61,26 +60,26 @@ pub mod desktop_web_components {
         let profile_for_click = profile_data.clone();
 
         rsx! {
-            link { rel: "stylesheet", href: DESKTOP_CSS }
+            link { rel: "stylesheet", href: asset!("/assets/tailwind.css") }
             link { rel: "stylesheet", href: COMPONENTS_CSS }
             div {
-                class: "desktop-body",
+                class: "font-[Segoe_UI,Tahoma,Geneva,Verdana,sans-serif] m-0 bg-[#212020] text-[#333333] flex flex-row h-screen overflow-hidden",
                 oncontextmenu: move |e| {
                     e.prevent_default();
                 },
-                div { class: "desktop-column",
-                    div { class: "desktop-column-header",
-                        div { class: "desktop-column-top-bar",
-                            h2 { class: "desktop-column-title", "Messages" }
+                div { class: "flex flex-col h-full bg-[#444444] w-[clamp(280px,25%,400px)] transition-[width] duration-300 ease-in-out relative",
+                    div { class: "bg-[#333333] py-5 px-[15px] shadow-[0_2px_8px_rgba(0,0,0,0.3)]",
+                        div { class: "flex justify-between items-center mb-5",
+                            h2 { class: "text-[ghostwhite] pl-[5px] m-0 text-[clamp(1.2rem,4vw,1.6rem)] font-semibold", "Messages" }
                             button {
-                                class: "desktop-column-new-message-button",
+                                class: "w-[45px] h-[45px] text-[28px] bg-[#4a4a4a] text-[whitesmoke] border-none rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 ease-in-out shadow-[0_2px_5px_rgba(0,0,0,0.2)] hover:bg-[#5a5a5a] hover:-translate-y-0.5 hover:shadow-[0_4px_8px_rgba(0,0,0,0.3)] active:translate-y-0 active:shadow-[0_2px_4px_rgba(0,0,0,0.2)]",
                                 title: "New Topic",
                                 onclick: move |_| show_topic_dialog.set(true),
                                 "+"
                             }
                         }
                         input {
-                            class: "desktop-column-search",
+                            class: "w-full py-3 pr-4 pl-[45px] border-none rounded-xl bg-[#2a2a2a] bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.35-4.35'%3E%3C/path%3E%3C/svg%3E\")] bg-no-repeat bg-[position:15px_center] bg-[length:18px] text-white text-[15px] outline-none transition-all duration-300 ease-in-out shadow-[0_2px_5px_rgba(0,0,0,0.15)] box-border placeholder:text-[#888888] placeholder:font-normal focus:bg-[#353535] focus:shadow-[0_0_0_2px_rgba(100,150,255,0.4),0_4px_10px_rgba(0,0,0,0.25)] focus:-translate-y-px",
                             r#type: "text",
                             icon: "search",
                             placeholder: "Search",
@@ -89,7 +88,7 @@ pub mod desktop_web_components {
                             },
                         }
                     }
-                    div { class: "desktop-column-contacts",
+                    div { class: "flex-1 overflow-y-auto overflow-x-hidden min-h-0 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#333333] [&::-webkit-scrollbar-thumb]:bg-[#666666] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb:hover]:bg-[#777777]",
                         ul {
                             {
                                 contacts_list.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
@@ -108,7 +107,7 @@ pub mod desktop_web_components {
                                         let id_for_details = topic_id.clone();
                                         let id_for_leave = topic_id.clone();
                                         let name_for_leave = topic_name.clone();
-                                        rsx! {
+                                            rsx! {
                                             ContextMenu {
                                                 ContextMenuTrigger {
                                                     TopicItem {
@@ -120,9 +119,9 @@ pub mod desktop_web_components {
                                                         on_select: selected_topic_id,
                                                     }
                                                 }
-                                                ContextMenuContent { class: "context-menu-content",
+                                                ContextMenuContent { class: "bg-white border border-[#e0e0e0] rounded-lg shadow-[0_4px_12px_rgba(0,0,0,0.15)] p-1 min-w-[180px] z-[1000]",
                                                     ContextMenuItem {
-                                                        class: "context-menu-item",
+                                                        class: "py-2 px-3 cursor-pointer rounded text-sm text-[#333333] transition-colors duration-200 hover:bg-[#f5f5f5] active:bg-[#eeeeee]",
                                                         value: "Open Chat".to_string(),
                                                         index: 0usize,
                                                         on_select: move |_| {
@@ -131,7 +130,7 @@ pub mod desktop_web_components {
                                                         "Open Chat"
                                                     }
                                                     ContextMenuItem {
-                                                        class: "context-menu-item",
+                                                        class: "py-2 px-3 cursor-pointer rounded text-sm text-[#333333] transition-colors duration-200 hover:bg-[#f5f5f5] active:bg-[#eeeeee]",
                                                         value: "Open Details".to_string(),
                                                         index: 1usize,
                                                         on_select: move |_| {
@@ -143,7 +142,7 @@ pub mod desktop_web_components {
                                                         "Open Details"
                                                     }
                                                     ContextMenuItem {
-                                                        class: "context-menu-item context-menu-item-danger",
+                                                        class: "py-2 px-3 cursor-pointer rounded text-sm text-[#d9534f] transition-colors duration-200 hover:bg-[#f5f5f5] active:bg-[#eeeeee]",
                                                         value: "Leave Topic".to_string(),
                                                         index: 2usize,
                                                         on_select: {
@@ -162,17 +161,17 @@ pub mod desktop_web_components {
                         }
                     }
                     div {
-                        class: "profile-data",
+                        class: "bg-[#333333] py-3 px-[15px] border-t border-[#444444] flex items-center gap-3 cursor-pointer transition-colors duration-200 mt-auto shrink-0 hover:bg-[#3a3a3a] active:bg-[#2a2a2a] group",
                         onclick: move |_| {
                             show_profile_details.set(Some(profile_for_click.clone()));
                         },
                         img {
-                            class: "profile-img",
+                            class: "w-[45px] h-[45px] rounded-full object-cover border-2 border-[#555555] bg-[#666666] transition-colors duration-200 group-hover:border-[#5a7fb8]",
                             src: "{avatar_url}",
                             alt: "Profile Avatar",
                         }
-                        div { class: "profile-info",
-                            h2 { class: "profile-name", "{profile_data.name}" }
+                        div { class: "flex-1 flex flex-col gap-1 overflow-hidden",
+                            h2 { class: "m-0 text-white text-base font-semibold whitespace-nowrap overflow-hidden text-ellipsis", "{profile_data.name}" }
                         }
                     }
 
@@ -261,20 +260,20 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "topic-dialog-overlay",
+                class: "fixed top-0 left-0 right-0 bottom-0 bg-black/60 flex items-center justify-center z-[1000] animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| {
                     toggle.set(false);
                     topic_name.set(String::new());
                 },
                 div {
-                    class: "topic-dialog",
+                    class: "bg-[#333333] rounded-2xl w-[90%] max-w-[500px] shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-[slideIn_0.3s_ease] overflow-hidden",
                     onclick: move |e| {
                         e.stop_propagation();
                     },
-                    div { class: "topic-dialog-header",
-                        h3 { class: "topic-dialog-title", "New Topic" }
+                    div { class: "flex justify-between items-center py-5 px-6 border-b border-[#444444]",
+                        h3 { class: "m-0 text-xl font-semibold text-white", "New Topic" }
                         button {
-                            class: "topic-dialog-close",
+                            class: "bg-transparent border-none cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 leading-none hover:bg-[#444444] [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-[73%] [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-[88%] [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-[7500%] [&:hover>img]:hue-rotate-[324deg] [&:hover>img]:brightness-[103%] [&:hover>img]:contrast-[103%]",
                             onclick: move |_| {
                                 toggle.set(false);
                                 topic_name.set(String::new());
@@ -282,21 +281,21 @@ pub mod desktop_web_components {
                             img { src: CLOSE_ICON }
                         }
                     }
-                    div { class: "topic-dialog-body",
-                        div { class: "topic-mode-tabs",
+                    div { class: "p-6",
+                        div { class: "flex gap-2 mb-6 bg-[#2a2a2a] p-1 rounded-[10px]",
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Create { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                class: if *selected_mode.read() == TopicCreationMode::Create { "flex-1 py-2.5 px-4 bg-[#4a4a4a] border-none rounded-lg text-white text-sm font-medium cursor-pointer transition-all duration-200 shadow-[0_2px_4px_rgba(0,0,0,0.2)]" } else { "flex-1 py-2.5 px-4 bg-transparent border-none rounded-lg text-[#aaaaaa] text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-[#353535] hover:text-white" },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Create),
                                 "Create Topic"
                             }
                             button {
-                                class: if *selected_mode.read() == TopicCreationMode::Join { "topic-mode-tab active" } else { "topic-mode-tab" },
+                                class: if *selected_mode.read() == TopicCreationMode::Join { "flex-1 py-2.5 px-4 bg-[#4a4a4a] border-none rounded-lg text-white text-sm font-medium cursor-pointer transition-all duration-200 shadow-[0_2px_4px_rgba(0,0,0,0.2)]" } else { "flex-1 py-2.5 px-4 bg-transparent border-none rounded-lg text-[#aaaaaa] text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-[#353535] hover:text-white" },
                                 onclick: move |_| selected_mode.set(TopicCreationMode::Join),
                                 "Join Topic"
                             }
                         }
-                        div { class: "topic-input-group",
-                            label { class: "topic-input-label",
+                        div { class: "mb-5",
+                            label { class: "block text-[#cccccc] text-sm font-medium mb-2",
                                 if *selected_mode.read() == TopicCreationMode::Create {
                                     "Topic Name"
                                 } else {
@@ -304,14 +303,14 @@ pub mod desktop_web_components {
                                 }
                             }
                             input {
-                                class: "topic-input",
+                                class: "w-full py-3 px-4 bg-[#2a2a2a] border-2 border-[#3a3a3a] rounded-[10px] text-white text-[15px] outline-none transition-all duration-200 box-border placeholder:text-[#777777] focus:border-[#5a7fb8] focus:bg-[#353535] focus:shadow-[0_0_0_3px_rgba(90,127,184,0.2)]",
                                 r#type: "text",
                                 value: "{topic_name}",
                                 placeholder: if *selected_mode.read() == TopicCreationMode::Create { "Enter topic name..." } else { "Enter topic ID or paste invite link..." },
                                 oninput: move |e| topic_name.set(e.value()),
                             }
                         }
-                        p { class: "topic-dialog-description",
+                        p { class: "m-0 text-[#999999] text-[13px] leading-relaxed",
                             if *selected_mode.read() == TopicCreationMode::Create {
                                 "Create a new topic to start chatting with others. You can share the topic ID with your friends."
                             } else {
@@ -319,9 +318,9 @@ pub mod desktop_web_components {
                             }
                         }
                     }
-                    div { class: "topic-dialog-footer",
+                    div { class: "flex gap-3 justify-end py-5 px-6 border-t border-[#444444] bg-[#2a2a2a]",
                         button {
-                            class: "topic-dialog-button topic-dialog-button-cancel",
+                            class: "py-2.5 px-6 border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 bg-[#3a3a3a] text-[#cccccc] hover:bg-[#454545] hover:text-white",
                             onclick: move |_| {
                                 toggle.set(false);
                                 topic_name.set(String::new());
@@ -329,7 +328,7 @@ pub mod desktop_web_components {
                             "Cancel"
                         }
                         button {
-                            class: "topic-dialog-button topic-dialog-button-primary",
+                            class: "py-2.5 px-6 border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 bg-[#5a7fb8] text-white hover:bg-[#6a8fc8] hover:shadow-[0_4px_12px_rgba(90,127,184,0.3)] disabled:bg-[#3a3a3a] disabled:text-[#666666] disabled:cursor-not-allowed disabled:shadow-none",
                             disabled: topic_name().trim().is_empty(),
                             onclick: handle_submit,
                             if *selected_mode.read() == TopicCreationMode::Create {
@@ -355,32 +354,32 @@ pub mod desktop_web_components {
         on_confirm: EventHandler<()>,
     ) -> Element {
         let button_class = if is_danger {
-            "confirmation-dialog-button confirmation-dialog-button-danger"
+            "py-2.5 px-6 border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 bg-[#d9534f] text-white hover:bg-[#e76460] hover:shadow-[0_4px_12px_rgba(217,83,79,0.4)]"
         } else {
-            "confirmation-dialog-button confirmation-dialog-button-primary"
+            "py-2.5 px-6 border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 bg-[#5a7fb8] text-white hover:bg-[#6a8fc8] hover:shadow-[0_4px_12px_rgba(90,127,184,0.3)]"
         };
 
         rsx! {
             div {
-                class: "confirmation-dialog-overlay",
+                class: "fixed top-0 left-0 right-0 bottom-0 bg-black/70 flex items-center justify-center z-[1001] animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "confirmation-dialog",
+                    class: "bg-[#333333] rounded-2xl w-[90%] max-w-[450px] shadow-[0_10px_40px_rgba(0,0,0,0.6)] animate-[slideIn_0.3s_ease] overflow-hidden",
                     onclick: move |e| e.stop_propagation(),
-                    div { class: "confirmation-dialog-header",
-                        h3 { class: "confirmation-dialog-title", "{title}" }
+                    div { class: "flex justify-between items-center py-5 px-6 border-b border-[#444444]",
+                        h3 { class: "m-0 text-xl font-semibold text-white", "{title}" }
                         button {
-                            class: "confirmation-dialog-close",
+                            class: "bg-transparent border-none cursor-pointer p-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-200 hover:bg-[#444444] [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-[73%] [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-[88%] [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-[7500%] [&:hover>img]:hue-rotate-[324deg] [&:hover>img]:brightness-[103%] [&:hover>img]:contrast-[103%]",
                             onclick: move |_| toggle.set(None),
                             img { src: CLOSE_ICON }
                         }
                     }
-                    div { class: "confirmation-dialog-body",
-                        p { class: "confirmation-dialog-message", "{message}" }
+                    div { class: "p-6",
+                        p { class: "m-0 text-[#cccccc] text-[15px] leading-relaxed", "{message}" }
                     }
-                    div { class: "confirmation-dialog-footer",
+                    div { class: "flex gap-3 justify-end py-5 px-6 border-t border-[#444444] bg-[#2a2a2a]",
                         button {
-                            class: "confirmation-dialog-button confirmation-dialog-button-cancel",
+                            class: "py-2.5 px-6 border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 bg-[#3a3a3a] text-[#cccccc] hover:bg-[#454545] hover:text-white",
                             onclick: move |_| toggle.set(None),
                             "{cancel_text}"
                         }
@@ -422,7 +421,7 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "desktop-contact-item",
+                class: "flex items-center py-3 px-[15px] gap-3 bg-[#444444] border-b border-[#3a3a3a] cursor-pointer transition-all duration-200 hover:bg-[#505050] hover:translate-x-[3px] active:bg-[#4a4a4a] group",
                 onclick: move |_| {
                     on_select.set(Some(id.clone()));
                 },
@@ -430,16 +429,16 @@ pub mod desktop_web_components {
                     e.prevent_default();
                 },
                 img {
-                    class: "desktop-contact-avatar",
+                    class: "w-[50px] h-[50px] rounded-full object-cover shrink-0 bg-[#666666] border-2 border-[#555555] transition-colors duration-200 group-hover:border-[#777777]",
                     src: "{avatar_display}",
                     alt: "{name}",
                     draggable: "false",
                 }
-                div { class: "desktop-contact-info",
-                    h3 { class: "desktop-contact-name", "{name}" }
-                    p { class: "desktop-contact-last-message", "{last_message_display}" }
+                div { class: "flex-1 min-w-0 flex flex-col gap-1",
+                    h3 { class: "m-0 text-[clamp(14px,2vw,16px)] font-semibold text-white whitespace-nowrap overflow-hidden text-ellipsis", "{name}" }
+                    p { class: "m-0 text-[clamp(12px,1.8vw,14px)] text-[#aaaaaa] whitespace-nowrap overflow-hidden text-ellipsis", "{last_message_display}" }
                 }
-                h3 { class: "desktop-contact-last-connection", "{time_display}" }
+                h3 { class: "m-0 text-[clamp(11px,1.5vw,12px)] font-normal text-[#888888] shrink-0 self-start", "{time_display}" }
             }
         }
     }
@@ -513,28 +512,28 @@ pub mod desktop_web_components {
             });
 
             rsx! {
-                div { class: "desktop-chat-window",
-                    div { class: "desktop-chat-header",
+                div { class: "flex-1 flex flex-col bg-[#2a2a2a] h-full",
+                    div { class: "bg-[#333333] py-[15px] px-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] flex items-center gap-[15px] border-b border-[#3a3a3a]",
                         img {
-                            class: "desktop-contact-avatar",
+                            class: "w-[45px] h-[45px] rounded-full object-cover bg-[#666666] border-2 border-[#555555]",
                             src: "{avatar_url}",
                         }
                         h2 {
-                            class: "desktop-contact-name",
+                            class: "m-0 text-[clamp(1.1rem,2.5vw,1.4rem)] font-semibold text-white max-w-[400px] overflow-hidden text-ellipsis whitespace-nowrap",
                             title: "{topic_name}",
                             "{topic_name}"
                         }
                     }
                     div {
-                        class: "desktop-chat-messages",
+                        class: "flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-[#212020] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-[#1a1a1a] [&::-webkit-scrollbar-thumb]:bg-[#4a4a4a] [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb:hover]:bg-[#5a5a5a]",
                         id: "chat-messages-container",
                         for message in messages.iter() {
                             ChatMessageComponent { message: message.clone() }
                         }
                     }
-                    div { class: "desktop-chat-input-area",
+                    div { class: "bg-[#212020] py-[15px] px-5 flex gap-3 items-center",
                         input {
-                            class: "desktop-chat-input",
+                            class: "flex-1 py-3 px-4 border-none rounded-xl bg-[#2a2a2a] text-white text-[15px] outline-none transition-all duration-300 ease-in-out shadow-[0_2px_5px_rgba(0,0,0,0.15)] placeholder:text-[#888888] focus:bg-[#353535] focus:shadow-[0_0_0_2px_rgba(100,150,255,0.4),0_4px_10px_rgba(0,0,0,0.25)]",
                             r#type: "text",
                             placeholder: "Type a message...",
                             value: "{message_input()}",
@@ -548,7 +547,7 @@ pub mod desktop_web_components {
                             },
                         }
                         button {
-                            class: "desktop-chat-send-button",
+                            class: "py-3 px-6 bg-[#5a7fb8] text-white border-none rounded-xl text-[15px] font-medium cursor-pointer transition-all duration-300 ease-in-out shadow-[0_2px_5px_rgba(0,0,0,0.2)] hover:bg-[#6a8fc8] hover:-translate-y-0.5 hover:shadow-[0_4px_8px_rgba(90,127,184,0.3)] active:translate-y-0 active:shadow-[0_2px_4px_rgba(0,0,0,0.2)]",
                             onclick: move |_| {
                                 send_message(());
                             },
@@ -559,8 +558,8 @@ pub mod desktop_web_components {
             }
         } else {
             rsx! {
-                div { class: "desktop-chat-placeholder",
-                    h2 { "Select a topic to start chatting" }
+                div { class: "flex-1 flex items-center justify-center bg-[#2a2a2a] text-[#888888]",
+                    h2 { class: "text-[clamp(1.2rem,3vw,1.8rem)] font-medium m-0", "Select a topic to start chatting" }
                 }
             }
         }
@@ -572,19 +571,19 @@ pub mod desktop_web_components {
             Message::Chat(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
                 rsx! {
-                    div { class: if message.is_sent { "chat-message sent" } else { "chat-message received" },
-                        p { class: "message-sender-id", "{message.sender_id}" }
-                        p { class: "message-text", "{message.content}" }
-                        p { class: "chat-message-timestamp", "{timestamp_str}" }
+                    div { class: if message.is_sent { "max-w-[70%] py-2.5 px-3.5 rounded-xl break-words flex flex-col gap-1 self-end bg-[#5a7fb8] text-white [&>.message-sender-id]:hidden" } else { "max-w-[70%] py-2.5 px-3.5 rounded-xl break-words flex flex-col gap-1 self-start bg-[#3a3a3a] text-white [&>.message-sender-id]:text-left [&>.message-sender-id]:text-[#c0c0c0]" },
+                        p { class: "message-sender-id m-0 mb-1 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-[#e0e0e0] whitespace-nowrap overflow-hidden text-ellipsis", "{message.sender_id}" }
+                        p { class: "m-0 text-[clamp(14px,2vw,15px)] leading-snug", "{message.content}" }
+                        p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 self-end", "{timestamp_str}" }
                     }
                 }
             }
             Message::Leave(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
                 rsx! {
-                    div { class: "chat-message system-message",
-                        p { class: "message-text", "{message.sender_id} has left the topic." }
-                        p { class: "system-message-timestamp", "{timestamp_str}" }
+                    div { class: "max-w-full self-center bg-transparent text-[#888888] py-2 px-3 text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-[#888888]", "{message.sender_id} has left the topic." }
+                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-[#777777]", "{timestamp_str}" }
                     }
                 }
             }
@@ -598,18 +597,18 @@ pub mod desktop_web_components {
                 };
 
                 rsx! {
-                    div { class: "chat-message system-message",
-                        p { class: "message-text", "{text}" }
-                        p { class: "system-message-timestamp", "{timestamp_str}" }
+                    div { class: "max-w-full self-center bg-transparent text-[#888888] py-2 px-3 text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-[#888888]", "{text}" }
+                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-[#777777]", "{timestamp_str}" }
                     }
                 }
             }
             Message::Disconnect(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
                 rsx! {
-                    div { class: "chat-message system-message",
-                        p { class: "message-text", "{message.sender_id} has disconnected." }
-                        p { class: "system-message-timestamp", "{timestamp_str}" }
+                    div { class: "max-w-full self-center bg-transparent text-[#888888] py-2 px-3 text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-[#888888]", "{message.sender_id} has disconnected." }
+                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-[#777777]", "{timestamp_str}" }
                     }
                 }
             }
@@ -720,14 +719,14 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "topic-details-overlay",
+                class: "fixed top-0 left-0 right-0 bottom-0 bg-black/60 flex items-center justify-center z-[1000] animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "topic-details",
+                    class: "bg-[#333333] rounded-2xl w-[90%] max-w-[500px] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
-                    div { class: "topic-details-header",
-                        label { class: "topic-details-image-wrapper",
-                            img { class: "topic-details-image", src: avatar_url }
+                    div { class: "flex items-center gap-3 mb-5",
+                        label { class: "cursor-pointer relative shrink-0 group",
+                            img { class: "w-[60px] h-[60px] rounded-full object-cover bg-[#666666] border-2 border-[#555555] transition-all duration-200 group-hover:border-[#5a7fb8] group-hover:shadow-[0_0_0_3px_rgba(90,127,184,0.2)]", src: avatar_url }
                             input {
                                 r#type: "file",
                                 style: "display: none;",
@@ -735,27 +734,27 @@ pub mod desktop_web_components {
                             }
                         }
                         input {
-                            class: "topic-details-title",
+                            class: "flex-1 m-0 py-3 px-4 text-2xl font-semibold text-white bg-[#2a2a2a] border-2 border-[#3a3a3a] rounded-[10px] outline-none transition-all duration-200 min-w-0 max-w-[90%] overflow-hidden text-ellipsis whitespace-nowrap focus:border-[#5a7fb8] focus:bg-[#353535] focus:shadow-[0_0_0_3px_rgba(90,127,184,0.2)]",
                             r#type: "text",
                             value: "{edited_title}",
                             oninput: move |e| edited_title.set(e.value()),
                         }
                         button {
-                            class: "topic-details-save-button",
+                            class: "py-3 px-6 bg-[#5a7fb8] text-white border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 whitespace-nowrap hover:bg-[#6a8fc8] hover:shadow-[0_4px_12px_rgba(90,127,184,0.3)] active:translate-y-px",
                             onclick: handle_save,
                             "Save"
                         }
                     }
-                    hr {}
-                    p { class: "topic-details-section-title", "Topic ID" }
+                    hr { class: "border-none border-t border-[#444444] my-5" }
+                    p { class: "my-4 mb-2 text-sm font-medium text-[#aaaaaa] uppercase tracking-wider", "Topic ID" }
                     p {
-                        class: "topic-details-topic-id",
+                        class: "m-0 py-3 px-4 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-white font-mono text-sm break-all cursor-pointer transition-all duration-200 hover:bg-[#353535] hover:border-[#5a7fb8]",
                         title: "Click to copy",
                         onclick: handle_copy_topic_id,
                         "{topic.id}"
                     }
-                    div { class: "topic-details-info-section",
-                        p { class: "topic-details-section-title", "Members" }
+                    div { class: "mb-4",
+                        p { class: "my-4 mb-2 text-sm font-medium text-[#aaaaaa] uppercase tracking-wider", "Members" }
                         ul {
                             {
                                 let members: Vec<Profile> = {
@@ -793,14 +792,14 @@ pub mod desktop_web_components {
                                         let member_clone = member.clone();
                                         rsx! {
                                             li {
-                                                class: "topic-member-card",
+                                                class: "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors duration-200 hover:bg-[#3a3a3a] list-none",
                                                 onclick: move |_| {
                                                     view_profile.set(Some(member_clone.clone()));
                                                 },
-                                                img { class: "topic-member-avatar", src: "{avatar}" }
-                                                div { class: "topic-member-info",
-                                                    h3 { class: "topic-member-name", "{member.name}" }
-                                                    p { class: "topic-member-status", "{last_seen}" }
+                                                img { class: "w-10 h-10 rounded-full object-cover bg-[#666666] border-2 border-[#555555]", src: "{avatar}" }
+                                                div { class: "flex-1 flex flex-col gap-0.5 overflow-hidden",
+                                                    h3 { class: "m-0 text-sm font-medium text-white whitespace-nowrap overflow-hidden text-ellipsis", "{member.name}" }
+                                                    p { class: "m-0 text-xs text-[#aaaaaa] whitespace-nowrap overflow-hidden text-ellipsis", "{last_seen}" }
                                                 }
                                             }
                                         }
@@ -913,15 +912,15 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "profile-details-overlay",
+                class: "fixed top-0 left-0 right-0 bottom-0 bg-black/70 flex justify-center items-center z-[2000] animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "profile-details",
+                    class: "bg-[#333333] rounded-2xl w-[90%] max-w-[500px] p-6 shadow-[0_10px_40px_rgba(0,0,0,0.5)] animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
-                    div { class: "profile-details-header",
-                        label { class: "profile-details-image-wrapper",
+                    div { class: "flex items-center gap-3 mb-5",
+                        label { class: "cursor-pointer relative shrink-0 group",
                             img {
-                                class: "profile-details-image",
+                                class: "w-[60px] h-[60px] rounded-full object-cover bg-[#666666] border-2 border-[#555555] transition-all duration-200 group-hover:border-[#5a7fb8] group-hover:shadow-[0_0_0_3px_rgba(90,127,184,0.2)]",
                                 src: avatar_url,
                             }
                             if !readonly {
@@ -934,7 +933,7 @@ pub mod desktop_web_components {
                             }
                         }
                         input {
-                            class: "profile-details-name",
+                            class: "flex-1 m-0 py-3 px-4 text-2xl font-semibold text-white bg-[#2a2a2a] border-2 border-[#3a3a3a] rounded-[10px] outline-none transition-all duration-200 min-w-0 focus:border-[#5a7fb8] focus:bg-[#353535] focus:shadow-[0_0_0_3px_rgba(90,127,184,0.2)]",
                             r#type: "text",
                             value: "{edited_name}",
                             placeholder: "Display Name",
@@ -943,27 +942,27 @@ pub mod desktop_web_components {
                         }
                         if !readonly {
                             button {
-                                class: "profile-details-save-button",
+                                class: "py-3 px-6 bg-[#5a7fb8] text-white border-none rounded-[10px] text-[15px] font-medium cursor-pointer transition-all duration-200 whitespace-nowrap hover:bg-[#6a8fc8] hover:shadow-[0_4px_12px_rgba(90,127,184,0.3)] active:translate-y-px",
                                 onclick: handle_save,
                                 "Save"
                             }
                         }
                     }
-                    hr {}
+                    hr { class: "border-none border-t border-[#444444] my-5" }
 
-                    div { class: "profile-details-info-section",
-                        p { class: "profile-details-section-title", "Profile ID" }
+                    div { class: "mb-4",
+                        p { class: "m-0 mb-2 text-sm font-medium text-[#aaaaaa] uppercase tracking-wider", "Profile ID" }
                         p {
-                            class: "profile-details-profile-id",
+                            class: "m-0 py-3 px-4 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-white font-mono text-sm break-all cursor-pointer transition-all duration-200 hover:bg-[#353535] hover:border-[#5a7fb8]",
                             title: "Click to copy",
                             onclick: handle_copy_profile_id,
                             "{profile.id}"
                         }
                     }
 
-                    div { class: "profile-details-info-section",
-                        p { class: "profile-details-section-title", "Last Active" }
-                        p { class: "profile-details-last-connection", "{last_connection_text}" }
+                    div { class: "mb-0",
+                        p { class: "m-0 mb-2 text-sm font-medium text-[#aaaaaa] uppercase tracking-wider", "Last Active" }
+                        p { class: "m-0 py-3 px-4 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg text-white text-sm", "{last_connection_text}" }
                     }
                 }
             }
