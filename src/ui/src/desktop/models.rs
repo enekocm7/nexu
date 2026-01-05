@@ -1,7 +1,9 @@
+use crate::desktop::models::ConnectionStatus::Online;
+use ConnectionStatus::Offline;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -176,11 +178,11 @@ impl AppState {
     pub fn get_all_topics(&self) -> Vec<Topic> {
         self.topics.values().cloned().collect()
     }
-    
+
     pub fn get_profile(&self) -> Profile {
         self.profile.clone()
     }
-    
+
     pub fn set_profile_id(&mut self, id: &str) {
         self.profile.id = id.to_string()
     }
@@ -188,29 +190,46 @@ impl AppState {
     pub fn set_profile_name(&mut self, name: &str) {
         self.profile.name = name.to_string()
     }
+
     pub fn set_profile_avatar(&mut self, avatar_url: &Option<String>) {
         self.profile.avatar = avatar_url.to_owned()
     }
+
     pub fn set_profile_last_connection_to_now(&mut self) {
-        self.profile.last_connection = chrono::Utc::now().timestamp_millis() as u64
+        self.profile.last_connection = Online;
     }
+
+    pub fn set_profile_last_connection_offline(&mut self, timestamp: u64) {
+        self.profile.last_connection = Offline(timestamp);
+    }
+
     pub fn add_contact(&mut self, profile: Profile) {
         self.contacts.insert(profile.id.clone(), profile);
     }
+
     pub fn get_contact(&self, profile_id: &str) -> Option<&Profile> {
         self.contacts.get(profile_id)
     }
+
     pub fn get_all_contacts(&self) -> Vec<Profile> {
         self.contacts.values().cloned().collect()
     }
+
     pub fn remove_contact(&mut self, profile_id: &str) {
         self.contacts.remove(profile_id);
     }
+
     pub fn modify_contact(&mut self, profile: Profile) {
         if let Some(existing_profile) = self.contacts.get_mut(&profile.id) {
             existing_profile.name = profile.name;
             existing_profile.avatar = profile.avatar;
             existing_profile.last_connection = profile.last_connection;
+        }
+    }
+
+    pub fn set_contact_last_connection(&mut self, contact: &str, timestamp: u64) {
+        if let Some(profile) = self.contacts.get_mut(contact) {
+            profile.last_connection = Offline(timestamp);
         }
     }
 }
@@ -331,15 +350,50 @@ pub struct Profile {
     pub id: String,
     pub name: String,
     pub avatar: Option<String>,
-    pub last_connection: u64,
+    pub last_connection: ConnectionStatus,
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ConnectionStatus {
+    Online,
+    Offline(u64),
+}
+
+impl Default for ConnectionStatus {
+    fn default() -> Self {
+        Offline(0)
+    }
+}
+
+impl PartialEq<Self> for ConnectionStatus {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Online, Online) => true,
+            (Offline(ts1), Offline(ts2)) => ts1 == ts2,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ConnectionStatus {}
+
+impl Display for ConnectionStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Online => "Online".to_string(),
+            Offline(timestamp) => format!("Offline since {}", timestamp),
+        };
+        write!(f, "{}", str)
+    }
+}
+
 impl Profile {
     pub fn new(id: &str, name: &str, avatar: &str) -> Self {
         Self {
             id: id.to_string(),
             name: name.to_string(),
             avatar: Some(avatar.to_string()),
-            last_connection: chrono::Utc::now().timestamp_millis() as u64,
+            last_connection: Online,
         }
     }
 
@@ -348,7 +402,7 @@ impl Profile {
             id: id.to_string(),
             name: id.to_string(),
             avatar: None,
-            last_connection: chrono::Utc::now().timestamp_millis() as u64,
+            last_connection: Online,
         }
     }
 }
@@ -364,4 +418,3 @@ impl Hash for Profile {
         self.id.hash(state);
     }
 }
-

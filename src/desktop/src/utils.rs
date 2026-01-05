@@ -312,6 +312,7 @@ pub mod contacts {
     mod tests {
         use super::*;
         use tempfile::TempDir;
+        use ui::desktop::models::ConnectionStatus::Offline;
         use ui::desktop::models::Profile;
 
         fn create_test_profile(id: &str, name: &str, avatar: Option<&str>) -> Profile {
@@ -319,7 +320,7 @@ pub mod contacts {
                 id: id.to_string(),
                 name: name.to_string(),
                 avatar: avatar.map(|s| s.to_string()),
-                last_connection: 1234567890,
+                last_connection: Offline(1234567890),
             }
         }
 
@@ -328,7 +329,11 @@ pub mod contacts {
             let temp_dir = TempDir::new().unwrap();
             let test_file_path = temp_dir.path().join("test_profile.bin");
 
-            let profile = create_test_profile("user123", "John Doe", Some("https://example.com/avatar.png"));
+            let profile = create_test_profile(
+                "user123",
+                "John Doe",
+                Some("https://example.com/avatar.png"),
+            );
 
             let save_result = save_profile_to_path(&profile, &test_file_path);
             assert!(save_result.is_ok(), "Failed to save profile");
@@ -339,8 +344,11 @@ pub mod contacts {
             let loaded_profile = load_result.unwrap();
             assert_eq!(loaded_profile.id, "user123");
             assert_eq!(loaded_profile.name, "John Doe");
-            assert_eq!(loaded_profile.avatar, Some("https://example.com/avatar.png".to_string()));
-            assert_eq!(loaded_profile.last_connection, 1234567890);
+            assert_eq!(
+                loaded_profile.avatar,
+                Some("https://example.com/avatar.png".to_string())
+            );
+            assert_eq!(loaded_profile.last_connection, Offline(1234567890));
         }
 
         #[test]
@@ -380,7 +388,10 @@ pub mod contacts {
 
             let contact1 = loaded_contacts.iter().find(|c| c.id == "contact1").unwrap();
             assert_eq!(contact1.name, "Alice");
-            assert_eq!(contact1.avatar, Some("https://example.com/alice.png".to_string()));
+            assert_eq!(
+                contact1.avatar,
+                Some("https://example.com/alice.png".to_string())
+            );
 
             let contact2 = loaded_contacts.iter().find(|c| c.id == "contact2").unwrap();
             assert_eq!(contact2.name, "Bob");
@@ -488,11 +499,18 @@ pub mod contacts {
             let profile1 = create_test_profile("user123", "John Doe", None);
             save_profile_to_path(&profile1, &test_file_path).unwrap();
 
-            let profile2 = create_test_profile("user456", "Jane Smith", Some("https://example.com/avatar.png"));
+            let profile2 = create_test_profile(
+                "user456",
+                "Jane Smith",
+                Some("https://example.com/avatar.png"),
+            );
             save_profile_to_path(&profile2, &test_file_path).unwrap();
 
             let loaded_profile = load_profile_from_path(&test_file_path).unwrap();
-            assert_eq!(loaded_profile.id, "user456", "Profile should be overwritten");
+            assert_eq!(
+                loaded_profile.id, "user456",
+                "Profile should be overwritten"
+            );
             assert_eq!(loaded_profile.name, "Jane Smith");
         }
 
@@ -511,7 +529,11 @@ pub mod contacts {
             save_contacts_to_path(&contacts2, &test_file_path).unwrap();
 
             let loaded_contacts = load_contacts_from_path(&test_file_path).unwrap();
-            assert_eq!(loaded_contacts.len(), 2, "Expected 2 contacts after overwrite");
+            assert_eq!(
+                loaded_contacts.len(),
+                2,
+                "Expected 2 contacts after overwrite"
+            );
             assert!(
                 !loaded_contacts.iter().any(|c| c.id == "contact1"),
                 "contact1 should be gone"
@@ -535,7 +557,7 @@ pub mod contacts {
                 id: "user789".to_string(),
                 name: "Test User".to_string(),
                 avatar: Some("https://example.com/test.png".to_string()),
-                last_connection: 9876543210,
+                last_connection: Offline(1234567890),
             };
 
             save_profile_to_path(&profile, &test_file_path).unwrap();
@@ -543,8 +565,11 @@ pub mod contacts {
 
             assert_eq!(loaded_profile.id, "user789");
             assert_eq!(loaded_profile.name, "Test User");
-            assert_eq!(loaded_profile.avatar, Some("https://example.com/test.png".to_string()));
-            assert_eq!(loaded_profile.last_connection, 9876543210);
+            assert_eq!(
+                loaded_profile.avatar,
+                Some("https://example.com/test.png".to_string())
+            );
+            assert_eq!(loaded_profile.last_connection, Offline(1234567890));
         }
 
         #[test]

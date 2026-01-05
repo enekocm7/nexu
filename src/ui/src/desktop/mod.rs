@@ -3,7 +3,9 @@ pub mod models;
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
     use crate::components::toast::ToastProvider;
-    use crate::desktop::models::{AppState, Message, Profile, Topic, TopicCreationMode};
+    use crate::desktop::models::{
+        AppState, ConnectionStatus, Message, Profile, Topic, TopicCreationMode,
+    };
     use arboard::Clipboard;
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
@@ -781,9 +783,13 @@ pub mod desktop_web_components {
                                         } else {
                                             DEFAULT_AVATAR.to_string()
                                         };
-                                        let last_seen = format_relative_time(
-                                            (member.last_connection / 1000) as i64,
-                                        );
+
+                                        let last_seen = match member.last_connection {
+                                            ConnectionStatus::Online => member.last_connection.to_string(),
+                                            ConnectionStatus::Offline(time) => {
+                                                format_relative_time((time / 1000) as i64)
+                                            }
+                                        };
                                         let member_clone = member.clone();
                                         rsx! {
                                             li {
@@ -900,10 +906,9 @@ pub mod desktop_web_components {
             DEFAULT_AVATAR.to_string()
         };
 
-        let last_connection_text = if profile.last_connection > 0 {
-            format_relative_time((profile.last_connection / 1000) as i64)
-        } else {
-            "Never".to_string()
+        let last_connection_text = match profile.last_connection {
+            ConnectionStatus::Online => profile.last_connection.to_string(),
+            ConnectionStatus::Offline(time) => format_relative_time((time / 1000) as i64),
         };
 
         rsx! {
