@@ -68,9 +68,9 @@ pub mod desktop_web_components {
                     e.prevent_default();
                 },
                 div { class: "flex flex-col h-full bg-bg-panel w-[clamp(280px,25%,400px)] transition-[width] duration-300 ease-in-out relative border-r border-border",
-                    div { class: "bg-bg-panel py-5 px-[15px] shadow-md",
+                    div { class: "bg-bg-panel py-5 px-3.75 shadow-md",
                         div { class: "flex justify-between items-center mb-5",
-                            h2 { class: "text-text-primary pl-[5px] m-0 text-[clamp(1.2rem,4vw,1.6rem)] font-semibold",
+                            h2 { class: "text-text-primary pl-1.25 m-0 text-[clamp(1.2rem,4vw,1.6rem)] font-semibold",
                                 "Messages"
                             }
                             button {
@@ -81,7 +81,7 @@ pub mod desktop_web_components {
                             }
                         }
                         input {
-                            class: "input-field pl-[45px] bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.35-4.35'%3E%3C/path%3E%3C/svg%3E\")] bg-no-repeat bg-[position:15px_center] bg-[length:18px] focus:-translate-y-px",
+                            class: "input-field pl-11.25 bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.35-4.35'%3E%3C/path%3E%3C/svg%3E\")] bg-no-repeat bg-position-[15px_center] bg-size-[18px] focus:-translate-y-px",
                             r#type: "text",
                             icon: "search",
                             placeholder: "Search",
@@ -119,6 +119,7 @@ pub mod desktop_web_components {
                                                         last_message,
                                                         last_connection,
                                                         on_select: selected_topic_id,
+                                                        highlight: search_query(),
                                                     }
                                                 }
                                                 ContextMenuContent { class: "context-menu",
@@ -163,12 +164,12 @@ pub mod desktop_web_components {
                         }
                     }
                     div {
-                        class: "bg-bg-panel py-3 px-[15px] border-t border-[#444444] flex items-center gap-3 cursor-pointer transition-colors duration-200 mt-auto shrink-0 hover:bg-bg-hover active:bg-bg-active group",
+                        class: "bg-bg-panel py-3 px-3.75 border-t border-[#444444] flex items-center gap-3 cursor-pointer transition-colors duration-200 mt-auto shrink-0 hover:bg-bg-hover active:bg-bg-active group",
                         onclick: move |_| {
                             show_profile_details.set(Some(profile_for_click.clone()));
                         },
                         img {
-                            class: "avatar w-[45px] h-[45px] transition-colors duration-200 group-hover:border-accent",
+                            class: "avatar w-11.25 h-11.25 transition-colors duration-200 group-hover:border-accent",
                             src: "{avatar_url}",
                             alt: "Profile Avatar",
                         }
@@ -264,20 +265,20 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] animate-[fadeIn_0.2s_ease]",
+                class: "fixed inset-0 bg-black/60 flex items-center justify-center z-1000 animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| {
                     toggle.set(false);
                     topic_name.set(String::new());
                 },
                 div {
-                    class: "card w-[90%] max-w-[500px] animate-[slideIn_0.3s_ease]",
+                    class: "card w-[90%] max-w-125 animate-[slideIn_0.3s_ease]",
                     onclick: move |e| {
                         e.stop_propagation();
                     },
                     div { class: "flex justify-between items-center py-5 px-6 border-b border-border",
                         h3 { class: "m-0 text-xl font-semibold text-text-primary", "New Topic" }
                         button {
-                            class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-[73%] [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-[88%] [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-[7500%] [&:hover>img]:hue-rotate-[324deg] [&:hover>img]:brightness-[103%] [&:hover>img]:contrast-[103%]",
+                            class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-7500 [&:hover>img]:hue-rotate-324 [&:hover>img]:brightness-103 [&:hover>img]:contrast-103",
                             onclick: move |_| {
                                 toggle.set(false);
                                 topic_name.set(String::new());
@@ -365,15 +366,15 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "fixed inset-0 bg-black/70 flex items-center justify-center z-[1001] animate-[fadeIn_0.2s_ease]",
+                class: "fixed inset-0 bg-black/70 flex items-center justify-center z-1001 animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "card w-[90%] max-w-[450px] animate-[slideIn_0.3s_ease]",
+                    class: "card w-[90%] max-w-112.5 animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
                     div { class: "flex justify-between items-center py-5 px-6 border-b border-border",
                         h3 { class: "m-0 text-xl font-semibold text-text-primary", "{title}" }
                         button {
-                            class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-[73%] [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-[88%] [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-[7500%] [&:hover>img]:hue-rotate-[324deg] [&:hover>img]:brightness-[103%] [&:hover>img]:contrast-[103%]",
+                            class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-7500 [&:hover>img]:hue-rotate-324 [&:hover>img]:brightness-103 [&:hover>img]:contrast-103",
                             onclick: move |_| toggle.set(None),
                             img { src: CLOSE_ICON }
                         }
@@ -408,6 +409,8 @@ pub mod desktop_web_components {
         last_message: Option<String>,
         last_connection: Option<u64>,
         on_select: Signal<Option<String>>,
+        #[props(default)]
+        highlight: Option<String>,
     ) -> Element {
         let last_message_display = last_message.unwrap_or_default();
 
@@ -425,6 +428,32 @@ pub mod desktop_web_components {
             String::from("")
         };
 
+        let name_display = if let Some(query) = highlight.as_ref().filter(|q| !q.is_empty()) {
+            let name_lower = name.to_lowercase();
+            let query_lower = query.to_lowercase();
+            if let Some(idx) = name_lower.find(&query_lower) {
+                if name.len() == name_lower.len() {
+                    let end = idx + query_lower.len();
+                    let pre = &name[..idx];
+                    let mat = &name[idx..end];
+                    let post = &name[end..];
+                    rsx! {
+                        span {
+                            "{pre}"
+                            span { class: "text-accent", "{mat}" }
+                            "{post}"
+                        }
+                    }
+                } else {
+                    rsx! { "{name}" }
+                }
+            } else {
+                rsx! { "{name}" }
+            }
+        } else {
+            rsx! { "{name}" }
+        };
+
         rsx! {
             div {
                 class: "list-item group",
@@ -435,14 +464,14 @@ pub mod desktop_web_components {
                     e.prevent_default();
                 },
                 img {
-                    class: "avatar w-[50px] h-[50px] shrink-0 transition-colors duration-200 group-hover:border-text-muted",
+                    class: "avatar w-12.5 h-12.5 shrink-0 transition-colors duration-200 group-hover:border-text-muted",
                     src: "{avatar_display}",
                     alt: "{name}",
                     draggable: "false",
                 }
                 div { class: "flex-1 min-w-0 flex flex-col gap-1",
                     h3 { class: "m-0 text-[clamp(14px,2vw,16px)] font-semibold text-text-primary whitespace-nowrap overflow-hidden text-ellipsis",
-                        "{name}"
+                        {name_display}
                     }
                     p { class: "m-0 text-[clamp(12px,1.8vw,14px)] text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
                         "{last_message_display}"
@@ -525,13 +554,13 @@ pub mod desktop_web_components {
 
             rsx! {
                 div { class: "flex-1 flex flex-col bg-bg-input h-full",
-                    div { class: "bg-bg-panel py-[15px] px-5 shadow-md flex items-center gap-[15px] border-b border-border",
+                    div { class: "bg-bg-panel py-3.75 px-5 shadow-md flex items-center gap-3.75 border-b border-border",
                         img {
-                            class: "avatar w-[45px] h-[45px]",
+                            class: "avatar w-11.25 h-11.25",
                             src: "{avatar_url}",
                         }
                         h2 {
-                            class: "m-0 text-[clamp(1.1rem,2.5vw,1.4rem)] font-semibold text-text-primary max-w-[400px] overflow-hidden text-ellipsis whitespace-nowrap",
+                            class: "m-0 text-[clamp(1.1rem,2.5vw,1.4rem)] font-semibold text-text-primary max-w-100 overflow-hidden text-ellipsis whitespace-nowrap",
                             title: "{topic_name}",
                             "{topic_name}"
                         }
@@ -543,7 +572,7 @@ pub mod desktop_web_components {
                             ChatMessageComponent { message: message.clone() }
                         }
                     }
-                    div { class: "bg-bg-dark py-[15px] px-5 flex gap-3 items-center",
+                    div { class: "bg-bg-dark py-3.75 px-5 flex gap-3 items-center",
                         input {
                             class: "input-field flex-1 focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]",
                             r#type: "text",
@@ -751,15 +780,15 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] animate-[fadeIn_0.2s_ease]",
+                class: "fixed inset-0 bg-black/60 flex items-center justify-center z-1000 animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "card w-[90%] max-w-[500px] p-6 animate-[slideIn_0.3s_ease]",
+                    class: "card w-[90%] max-w-125 p-6 animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
                     div { class: "flex items-center gap-3 mb-5",
                         label { class: "cursor-pointer relative shrink-0 group",
                             img {
-                                class: "avatar w-[60px] h-[60px] transition-all duration-200 group-hover:border-accent group-hover:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
+                                class: "avatar w-15 h-15 transition-all duration-200 group-hover:border-accent group-hover:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
                                 src: avatar_url,
                             }
                             input {
@@ -955,15 +984,15 @@ pub mod desktop_web_components {
 
         rsx! {
             div {
-                class: "fixed inset-0 bg-black/70 flex justify-center items-center z-[2000] animate-[fadeIn_0.2s_ease]",
+                class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
                 onclick: move |_| toggle.set(None),
                 div {
-                    class: "card w-[90%] max-w-[500px] p-6 animate-[slideIn_0.3s_ease]",
+                    class: "card w-[90%] max-w-125 p-6 animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
                     div { class: "flex items-center gap-3 mb-5",
                         label { class: "cursor-pointer relative shrink-0 group",
                             img {
-                                class: "avatar w-[60px] h-[60px] transition-all duration-200 group-hover:border-accent group-hover:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
+                                class: "avatar w-15 h-15 transition-all duration-200 group-hover:border-accent group-hover:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
                                 src: avatar_url,
                             }
                             if !readonly {
