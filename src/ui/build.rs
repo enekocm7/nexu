@@ -32,6 +32,12 @@ fn install_dependencies() -> &'static str {
         "bunx"
     };
 
+    let bun = if cfg!(target_os = "windows") {
+        "bun.cmd"
+    } else {
+        "bun"
+    };
+
     let npm = if cfg!(target_os = "windows") {
         "npm.cmd"
     } else {
@@ -44,7 +50,7 @@ fn install_dependencies() -> &'static str {
         "npx"
     };
 
-    if std::process::Command::new(bunx)
+    if std::process::Command::new(bun)
         .arg("install")
         .spawn()
         .is_ok()
