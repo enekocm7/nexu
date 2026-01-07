@@ -1,10 +1,10 @@
 use crate::messages::{DmMessageTypes, GossipMessage, MessageTypes};
-use crate::protocol::{DM_ALPN, DMProtocol};
+use crate::protocol::{DM_ALPN, DMProtocol, write_frame};
 use crate::ticket::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
 use futures_lite::StreamExt;
-use iroh::endpoint::{RecvStream, SendStream};
+use iroh::endpoint::SendStream;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
@@ -21,8 +21,8 @@ pub struct ChatClient {
     gossip_sender: HashMap<TopicId, GossipSender>,
     gossip_receiver: HashMap<TopicId, GossipReceiver>,
     dm_sender: HashMap<EndpointAddr, SendStream>,
-    dm_receiver: HashMap<EndpointAddr, RecvStream>,
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
+    dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
 }
 
 impl ChatClient {
@@ -35,7 +35,8 @@ impl ChatClient {
             .max_message_size(1_048_576)
             .spawn(endpoint.clone());
 
-        let dm_protocol = DMProtocol;
+        let (dm_tx, dm_rx) = flume::unbounded();
+        let dm_protocol = DMProtocol { tx: dm_tx };
 
         let router = Router::builder(endpoint.clone())
             .accept(ALPN, gossip.clone())
@@ -49,8 +50,8 @@ impl ChatClient {
             gossip_sender: HashMap::new(),
             gossip_receiver: HashMap::new(),
             dm_sender: HashMap::new(),
-            dm_receiver: HashMap::new(),
             listen_tasks: HashMap::new(),
+            dm_incoming: dm_rx,
         })
     }
 
@@ -172,9 +173,8 @@ impl ChatClient {
     pub async fn connect_peer(&mut self, addr: &EndpointAddr) -> anyhow::Result<()> {
         let conn = self.endpoint.connect(addr.to_owned(), DM_ALPN).await?;
 
-        let (send, recv) = conn.open_bi().await?;
+        let (send, _recv) = conn.open_bi().await?;
 
-        self.dm_receiver.insert(addr.to_owned(), recv);
         self.dm_sender.insert(addr.to_owned(), send);
 
         Ok(())
@@ -182,19 +182,23 @@ impl ChatClient {
 
     pub async fn send_dm(
         &mut self,
-        addr: EndpointAddr,
+        addr: &EndpointAddr,
         message: DmMessageTypes,
     ) -> anyhow::Result<()> {
         let send = self
             .dm_sender
-            .get_mut(&addr)
+            .get_mut(addr)
             .ok_or_else(|| anyhow::anyhow!("No DM sender for address"))?;
 
         let serialized = postcard::to_stdvec(&message)?;
 
-        send.write_all(&serialized).await?;
+        write_frame(send, &serialized).await?;
 
         Ok(())
+    }
+
+    pub fn incoming_dms(&self) -> Receiver<(EndpointId, DmMessageTypes)> {
+        self.dm_incoming.clone()
     }
 }
 
@@ -497,5 +501,57 @@ mod tests {
                 .any(|m| m.sender == client3_id && m.content == message3),
             "Client2 should have received message from client3"
         );
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dm_send_receive() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        let addr1 = client1.endpoint_addr().await;
+        let addr2 = client2.endpoint_addr().await;
+
+        client1
+            .connect_peer(&addr2)
+            .await
+            .expect("Failed to connect");
+
+        let msg_content =
+            DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
+                addr: addr1.clone(),
+                username: "user1".to_string(),
+                avatar_url: None,
+                last_connection: 12345,
+            });
+
+        client1
+            .send_dm(&addr2, msg_content)
+            .await
+            .expect("Failed to send DM");
+
+        let incoming = client2.incoming_dms();
+
+        let (sender, received_msg) =
+            tokio::time::timeout(Duration::from_secs(5), incoming.recv_async())
+                .await
+                .expect("Timeout waiting for DM")
+                .expect("Failed to receive DM");
+
+        assert_eq!(sender, addr1.id);
+
+        match received_msg {
+            DmMessageTypes::ProfileMetadata(meta) => {
+                assert_eq!(meta.username, "user1");
+                assert_eq!(meta.last_connection, 12345);
+            }
+        }
     }
 }

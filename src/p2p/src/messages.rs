@@ -172,12 +172,16 @@ impl Display for ChatMessage {
     }
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DmMessageTypes {}
+pub enum DmMessageTypes {
+    ProfileMetadata(DmProfileMetadataMessage),
+}
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmProfileMetadataMessage {
     pub addr: EndpointAddr,
     pub username: String,
     pub avatar_url: Option<String>,
+    pub last_connection: u64,
 }
 
 #[cfg(test)]
