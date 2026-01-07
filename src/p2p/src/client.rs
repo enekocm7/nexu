@@ -1,8 +1,10 @@
-use crate::messages::{MessageTypes, GossipMessage};
+use crate::messages::{DmMessageTypes, GossipMessage, MessageTypes};
+use crate::protocol::{DM_ALPN, DMProtocol};
 use crate::ticket::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
 use futures_lite::StreamExt;
+use iroh::endpoint::{RecvStream, SendStream};
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
@@ -13,12 +15,13 @@ use std::time::Duration;
 use tokio::time::sleep;
 
 pub struct ChatClient {
-    id: EndpointId,
     endpoint: Endpoint,
     gossip: Gossip,
     _router: Router,
     gossip_sender: HashMap<TopicId, GossipSender>,
     gossip_receiver: HashMap<TopicId, GossipReceiver>,
+    dm_sender: HashMap<EndpointAddr, SendStream>,
+    dm_receiver: HashMap<EndpointAddr, RecvStream>,
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
 }
 
@@ -32,17 +35,21 @@ impl ChatClient {
             .max_message_size(1_048_576)
             .spawn(endpoint.clone());
 
+        let dm_protocol = DMProtocol;
+
         let router = Router::builder(endpoint.clone())
             .accept(ALPN, gossip.clone())
+            .accept(DM_ALPN, dm_protocol.clone())
             .spawn();
 
         Ok(ChatClient {
-            id: endpoint.id(),
             endpoint,
             gossip,
             _router: router,
             gossip_sender: HashMap::new(),
             gossip_receiver: HashMap::new(),
+            dm_sender: HashMap::new(),
+            dm_receiver: HashMap::new(),
             listen_tasks: HashMap::new(),
         })
     }
@@ -114,8 +121,8 @@ impl ChatClient {
         Ok(())
     }
 
-    pub fn peer_id(&self) -> &EndpointId {
-        &self.id
+    pub fn peer_id(&self) -> EndpointId {
+        self.endpoint.id()
     }
 
     pub fn endpoint(&self) -> &Endpoint {
@@ -161,14 +168,42 @@ impl ChatClient {
         }
         Ok(())
     }
+
+    pub async fn connect_peer(&mut self, addr: &EndpointAddr) -> anyhow::Result<()> {
+        let conn = self.endpoint.connect(addr.to_owned(), DM_ALPN).await?;
+
+        let (send, recv) = conn.open_bi().await?;
+
+        self.dm_receiver.insert(addr.to_owned(), recv);
+        self.dm_sender.insert(addr.to_owned(), send);
+
+        Ok(())
+    }
+
+    pub async fn send_dm(
+        &mut self,
+        addr: EndpointAddr,
+        message: DmMessageTypes,
+    ) -> anyhow::Result<()> {
+        let send = self
+            .dm_sender
+            .get_mut(&addr)
+            .ok_or_else(|| anyhow::anyhow!("No DM sender for address"))?;
+
+        let serialized = postcard::to_stdvec(&message)?;
+
+        send.write_all(&serialized).await?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ChatMessage;
     use serial_test::serial;
     use tokio::time::{Duration, sleep};
-    use crate::ChatMessage;
 
     #[tokio::test]
     #[serial]
@@ -223,8 +258,8 @@ mod tests {
 
         sleep(Duration::from_secs(2)).await;
 
-        let client1_id = *client1.peer_id();
-        let client2_id = *client2.peer_id();
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
 
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
@@ -345,9 +380,9 @@ mod tests {
 
         sleep(Duration::from_secs(3)).await;
 
-        let client1_id = *client1.peer_id();
-        let client2_id = *client2.peer_id();
-        let client3_id = *client3.peer_id();
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
+        let client3_id = client3.peer_id();
 
         let message1 = "Hello from client1";
         let timestamp1 = 1625247600000;
@@ -463,16 +498,4 @@ mod tests {
             "Client2 should have received message from client3"
         );
     }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_peer_id() {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let client = ChatClient::new(temp_dir.path().to_path_buf())
-            .await
-            .expect("Failed to create chat client");
-        let peer_id = *client.peer_id();
-        assert_eq!(peer_id, client.id);
-    }
 }
-

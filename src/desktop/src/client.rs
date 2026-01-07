@@ -89,7 +89,7 @@ impl DesktopClient {
         let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
         let message = ChatMessage::new(
-            *client.lock().await.peer_id(),
+            client.lock().await.peer_id(),
             message.to_string(),
             timestamp,
             ticket.topic,

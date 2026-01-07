@@ -1,4 +1,4 @@
-use iroh::{EndpointId};
+use iroh::{EndpointAddr, EndpointId};
 use iroh_gossip::proto::TopicId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -171,6 +171,14 @@ impl Display for ChatMessage {
         )
     }
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum DmMessageTypes {}
+
+pub struct DmProfileMetadataMessage {
+    pub addr: EndpointAddr,
+    pub username: String,
+    pub avatar_url: Option<String>,
+}
 
 #[cfg(test)]
 mod tests {
@@ -204,4 +212,3 @@ mod tests {
         assert_eq!(original_message.timestamp, deserialized.timestamp);
     }
 }
-
