@@ -554,4 +554,164 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dm_send_without_connection_fails() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        let addr2 = client2.endpoint_addr().await;
+
+        let msg_content =
+            DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
+                addr: client1.endpoint_addr().await,
+                username: "user1".to_string(),
+                avatar_url: None,
+                last_connection: 12345,
+            });
+
+        let result = client1.send_dm(&addr2, msg_content).await;
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "No DM sender for address");
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dm_bidirectional() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let mut client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        let addr1 = client1.endpoint_addr().await;
+        let addr2 = client2.endpoint_addr().await;
+
+        client1
+            .connect_peer(&addr2)
+            .await
+            .expect("Failed to connect client1 to client2");
+        client2
+            .connect_peer(&addr1)
+            .await
+            .expect("Failed to connect client2 to client1");
+
+        let msg_from_1 =
+            DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
+                addr: addr1.clone(),
+                username: "user1".to_string(),
+                avatar_url: None,
+                last_connection: 100,
+            });
+
+        let msg_from_2 =
+            DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
+                addr: addr2.clone(),
+                username: "user2".to_string(),
+                avatar_url: None,
+                last_connection: 200,
+            });
+
+        client1
+            .send_dm(&addr2, msg_from_1)
+            .await
+            .expect("Failed to send DM from client1");
+
+        client2
+            .send_dm(&addr1, msg_from_2)
+            .await
+            .expect("Failed to send DM from client2");
+
+        let incoming2 = client2.incoming_dms();
+        let (sender2, received_msg2) =
+            tokio::time::timeout(Duration::from_secs(5), incoming2.recv_async())
+                .await
+                .expect("Timeout waiting for DM on client2")
+                .expect("Failed to receive DM on client2");
+
+        assert_eq!(sender2, addr1.id);
+        match received_msg2 {
+            DmMessageTypes::ProfileMetadata(meta) => {
+                assert_eq!(meta.username, "user1");
+            }
+        }
+
+        let incoming1 = client1.incoming_dms();
+        let (sender1, received_msg1) =
+            tokio::time::timeout(Duration::from_secs(5), incoming1.recv_async())
+                .await
+                .expect("Timeout waiting for DM on client1")
+                .expect("Failed to receive DM on client1");
+
+        assert_eq!(sender1, addr2.id);
+        match received_msg1 {
+            DmMessageTypes::ProfileMetadata(meta) => {
+                assert_eq!(meta.username, "user2");
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dm_multiple_messages() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        let addr1 = client1.endpoint_addr().await;
+        let addr2 = client2.endpoint_addr().await;
+
+        client1
+            .connect_peer(&addr2)
+            .await
+            .expect("Failed to connect");
+
+        for i in 0..5 {
+            let msg = DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
+                addr: addr1.clone(),
+                username: format!("user1_message_{}", i),
+                avatar_url: None,
+                last_connection: i as u64,
+            });
+            client1
+                .send_dm(&addr2, msg)
+                .await
+                .expect("Failed to send DM");
+        }
+
+        let incoming = client2.incoming_dms();
+        for i in 0..5 {
+            let (sender, received_msg) =
+                tokio::time::timeout(Duration::from_secs(5), incoming.recv_async())
+                    .await
+                    .expect("Timeout waiting for DM")
+                    .expect("Failed to receive DM");
+
+            assert_eq!(sender, addr1.id);
+            match received_msg {
+                DmMessageTypes::ProfileMetadata(meta) => {
+                    assert_eq!(meta.username, format!("user1_message_{}", i));
+                    assert_eq!(meta.last_connection, i as u64);
+                }
+            }
+        }
+    }
 }
