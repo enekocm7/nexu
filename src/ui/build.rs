@@ -1,8 +1,8 @@
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=../../input.css");
-    println!("cargo:rerun-if-changed=/desktop/");
-    println!("cargo:rerun-if-changed=/mobile");
+    println!("cargo:rerun-if-changed=/src/desktop/");
+    println!("cargo:rerun-if-changed=/src/mobile");
     println!("cargo:rerun-if-changed=../../package.json");
 
     let package_manager = install_dependencies();
