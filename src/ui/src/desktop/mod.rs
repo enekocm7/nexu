@@ -1181,7 +1181,7 @@ pub mod desktop_web_components {
                                                         .set(Some((id_for_leave.clone(), name_for_leave.clone())))
                                                 }
                                             },
-                                            "Leave Topic"
+                                            "Remove Contact"
                                         }
                                     }
                                 }
