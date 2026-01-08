@@ -130,7 +130,7 @@ impl ChatClient {
         &self.endpoint
     }
 
-    pub async fn endpoint_addr(&self) -> EndpointAddr {
+    pub fn endpoint_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
     }
 
@@ -516,8 +516,8 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr().await;
-        let addr2 = client2.endpoint_addr().await;
+        let addr1 = client1.endpoint_addr();
+        let addr2 = client2.endpoint_addr();
 
         client1
             .connect_peer(&addr2)
@@ -568,11 +568,11 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr2 = client2.endpoint_addr().await;
+        let addr2 = client2.endpoint_addr();
 
         let msg_content =
             DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: client1.endpoint_addr().await,
+                addr: client1.endpoint_addr(),
                 username: "user1".to_string(),
                 avatar_url: None,
                 last_connection: 12345,
@@ -596,8 +596,8 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr().await;
-        let addr2 = client2.endpoint_addr().await;
+        let addr1 = client1.endpoint_addr();
+        let addr2 = client2.endpoint_addr();
 
         client1
             .connect_peer(&addr2)
@@ -676,8 +676,8 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr().await;
-        let addr2 = client2.endpoint_addr().await;
+        let addr1 = client1.endpoint_addr();
+        let addr2 = client2.endpoint_addr();
 
         client1
             .connect_peer(&addr2)
