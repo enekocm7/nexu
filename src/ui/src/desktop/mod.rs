@@ -4,7 +4,8 @@ pub mod models;
 pub mod desktop_web_components {
     use crate::components::toast::ToastProvider;
     use crate::desktop::models::{
-        AppState, ConnectionStatus, Message, Profile, Topic, TopicCreationMode,
+        AppState, ColumnState, ConnectionStatus, Message, Profile, ProfileChat, Topic,
+        TopicCreationMode,
     };
     use arboard::Clipboard;
     use base64::Engine;
@@ -32,20 +33,14 @@ pub mod desktop_web_components {
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
         let mut selected_topic_id = use_signal::<Option<String>>(|| None);
-        let mut show_topic_details = use_signal::<Option<Topic>>(|| None);
+        let show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut show_profile_details = use_signal::<Option<Profile>>(|| None);
         let mut search_query = use_signal(String::new);
         let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
-
-        let mut contacts_list: Vec<Topic> = {
-            let state = app_state.read();
-            let mut contacts = state.get_all_topics().into_iter().collect::<Vec<Topic>>();
-            contacts.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-            contacts
-        };
+        let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
 
         let profile_data: Profile = {
-            let state = app_state.read();
+            let state = app_state();
             state.get_profile()
         };
 
@@ -74,7 +69,7 @@ pub mod desktop_web_components {
                                 "Messages"
                             }
                             button {
-                                class: "w-10 h-10 text-3xl leading-none bg-bg-subtle text-text-primary border-none rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 ease-in-out shadow-sm hover:bg-bg-active hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm pb-1.75",
+                                class: "w-10 h-10 text-3xl leading-none bg-bg-subtle text-text-primary border-none rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 ease-in-out shadow-sm hover:bg-bg-active hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm",
                                 title: "New Topic",
                                 onclick: move |_| show_topic_dialog.set(true),
                                 "+"
@@ -89,77 +84,37 @@ pub mod desktop_web_components {
                                 search_query.set(value.value());
                             },
                         }
+                        div { class: "grid grid-cols-2 mt-4 p-1 bg-bg-subtle rounded-lg gap-1",
+                            button {
+                                class: if selected_column() == ColumnState::Contact { "selected-column-button" } else { "unselected-topic-button" },
+                                title: "Contacts",
+                                onclick: move |_| selected_column.set(ColumnState::Contact),
+                                "Contacts"
+                            }
+                            button {
+                                class: if selected_column() == ColumnState::Topic { "selected-column-button" } else { "unselected-topic-button" },
+                                title: "Topics",
+                                onclick: move |_| selected_column.set(ColumnState::Topic),
+                                "Topics"
+                            }
+                        }
                     }
                     div { class: "flex-1 overflow-y-auto overflow-x-hidden min-h-0 scrollbar-custom",
-                        ul {
-                            {
-                                contacts_list.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
-                                contacts_list
-                                    .into_iter()
-                                    .filter(|contact| {
-                                        contact.name.to_lowercase().contains(&search_query().to_lowercase())
-                                    })
-                                    .map(|contact| {
-                                        let topic_id = contact.id;
-                                        let topic_name = contact.name;
-                                        let avatar_url = contact.avatar_url;
-                                        let last_message = contact.last_message;
-                                        let last_connection = contact.last_connection;
-                                        let id_for_chat = topic_id.clone();
-                                        let id_for_details = topic_id.clone();
-                                        let id_for_leave = topic_id.clone();
-                                        let name_for_leave = topic_name.clone();
-                                        rsx! {
-                                            ContextMenu {
-                                                ContextMenuTrigger {
-                                                    TopicItem {
-                                                        id: topic_id.clone(),
-                                                        name: topic_name.clone(),
-                                                        avatar_url,
-                                                        last_message,
-                                                        last_connection,
-                                                        on_select: selected_topic_id,
-                                                        highlight: search_query(),
-                                                    }
-                                                }
-                                                ContextMenuContent { class: "context-menu",
-                                                    ContextMenuItem {
-                                                        class: "context-menu-item",
-                                                        value: "Open Chat".to_string(),
-                                                        index: 0usize,
-                                                        on_select: move |_| {
-                                                            selected_topic_id.set(Some(id_for_chat.clone()));
-                                                        },
-                                                        "Open Chat"
-                                                    }
-                                                    ContextMenuItem {
-                                                        class: "context-menu-item",
-                                                        value: "Open Details".to_string(),
-                                                        index: 1usize,
-                                                        on_select: move |_| {
-                                                            let state = app_state.read();
-                                                            if let Some(topic) = state.get_topic(&id_for_details) {
-                                                                show_topic_details.set(Some(topic.clone()));
-                                                            }
-                                                        },
-                                                        "Open Details"
-                                                    }
-                                                    ContextMenuItem {
-                                                        class: "context-menu-item-danger",
-                                                        value: "Leave Topic".to_string(),
-                                                        index: 2usize,
-                                                        on_select: {
-                                                            move |_| {
-                                                                show_leave_confirmation
-                                                                    .set(Some((id_for_leave.clone(), name_for_leave.clone())))
-                                                            }
-                                                        },
-                                                        "Leave Topic"
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    })
+                        if selected_column() == ColumnState::Topic {
+                            TopicColumn {
+                                search_query,
+                                selected_topic_id,
+                                show_topic_details,
+                                show_leave_confirmation,
+                                app_state,
+                            }
+                        } else {
+                            ContactColumn {
+                                search_query,
+                                selected_topic_id,
+                                show_profile_details,
+                                show_leave_confirmation,
+                                app_state,
                             }
                         }
                     }
@@ -276,7 +231,9 @@ pub mod desktop_web_components {
                         e.stop_propagation();
                     },
                     div { class: "flex justify-between items-center py-5 px-6 border-b border-border",
-                        h3 { class: "m-0 text-xl font-semibold text-text-primary", "New Topic" }
+                        h3 { class: "m-0 text-xl font-semibold text-text-primary",
+                            "New Topic"
+                        }
                         button {
                             class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-7500 [&:hover>img]:hue-rotate-324 [&:hover>img]:brightness-103 [&:hover>img]:contrast-103",
                             onclick: move |_| {
@@ -372,7 +329,9 @@ pub mod desktop_web_components {
                     class: "card w-[90%] max-w-112.5 animate-[slideIn_0.3s_ease]",
                     onclick: move |e| e.stop_propagation(),
                     div { class: "flex justify-between items-center py-5 px-6 border-b border-border",
-                        h3 { class: "m-0 text-xl font-semibold text-text-primary", "{title}" }
+                        h3 { class: "m-0 text-xl font-semibold text-text-primary",
+                            "{title}"
+                        }
                         button {
                             class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-7500 [&:hover>img]:hue-rotate-324 [&:hover>img]:brightness-103 [&:hover>img]:contrast-103",
                             onclick: move |_| toggle.set(None),
@@ -402,15 +361,14 @@ pub mod desktop_web_components {
     }
 
     #[component]
-    fn TopicItem(
+    fn ColumnItem(
         id: String,
         name: String,
         avatar_url: Option<String>,
         last_message: Option<String>,
         last_connection: Option<u64>,
         on_select: Signal<Option<String>>,
-        #[props(default)]
-        highlight: Option<String>,
+        #[props(default)] highlight: Option<String>,
     ) -> Element {
         let last_message_display = last_message.unwrap_or_default();
 
@@ -490,7 +448,7 @@ pub mod desktop_web_components {
         topic_id: Option<String>,
         on_send_message: EventHandler<(String, String)>,
     ) -> Element {
-        let state = app_state.read();
+        let state = app_state();
 
         let topic = if let Some(id) = topic_id {
             state.get_topic(&id)
@@ -520,7 +478,7 @@ pub mod desktop_web_components {
             }
 
             use_effect(move || {
-                let state = app_state.read();
+                let state = app_state();
                 let current_topic_id = tracked_topic_id.read();
 
                 if let Some(t) = state.get_topic(&current_topic_id) {
@@ -826,7 +784,7 @@ pub mod desktop_web_components {
                         ul {
                             {
                                 let members: Vec<Profile> = {
-                                    let state = app_state.read();
+                                    let state = app_state();
                                     let own_profile = state.get_profile();
                                     topic
                                         .members
@@ -1042,6 +1000,193 @@ pub mod desktop_web_components {
                             "{last_connection_text}"
                         }
                     }
+                }
+            }
+        }
+    }
+
+    #[component]
+    fn TopicColumn(
+        search_query: Signal<String>,
+        selected_topic_id: Signal<Option<String>>,
+        show_topic_details: Signal<Option<Topic>>,
+        show_leave_confirmation: Signal<Option<(String, String)>>,
+        app_state: Signal<AppState>,
+    ) -> Element {
+        let topic_list: Vec<Topic> = {
+            let state = app_state();
+            let mut topics = state.get_all_topics().into_iter().collect::<Vec<Topic>>();
+            topics.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
+            topics
+        };
+
+        rsx! {
+            ul {
+                {
+                    topic_list
+                        .into_iter()
+                        .filter(|contact| {
+                            contact.name.to_lowercase().contains(&search_query().to_lowercase())
+                        })
+                        .map(|contact| {
+                            let topic_id = contact.id;
+                            let topic_name = contact.name;
+                            let avatar_url = contact.avatar_url;
+                            let last_message = contact.last_message;
+                            let last_connection = contact.last_connection;
+                            let id_for_chat = topic_id.clone();
+                            let id_for_details = topic_id.clone();
+                            let id_for_leave = topic_id.clone();
+                            let name_for_leave = topic_name.clone();
+                            rsx! {
+                                ContextMenu {
+                                    ContextMenuTrigger {
+                                        ColumnItem {
+                                            id: topic_id.clone(),
+                                            name: topic_name.clone(),
+                                            avatar_url,
+                                            last_message,
+                                            last_connection,
+                                            on_select: selected_topic_id,
+                                            highlight: search_query(),
+                                        }
+                                    }
+                                    ContextMenuContent { class: "context-menu",
+                                        ContextMenuItem {
+                                            class: "context-menu-item",
+                                            value: "Open Chat".to_string(),
+                                            index: 0usize,
+                                            on_select: move |_| {
+                                                selected_topic_id.set(Some(id_for_chat.clone()));
+                                            },
+                                            "Open Chat"
+                                        }
+                                        ContextMenuItem {
+                                            class: "context-menu-item",
+                                            value: "Open Details".to_string(),
+                                            index: 1usize,
+                                            on_select: move |_| {
+                                                let state = app_state();
+                                                if let Some(topic) = state.get_topic(&id_for_details) {
+                                                    show_topic_details.set(Some(topic.clone()));
+                                                }
+                                            },
+                                            "Open Details"
+                                        }
+                                        ContextMenuItem {
+                                            class: "context-menu-item-danger",
+                                            value: "Leave Topic".to_string(),
+                                            index: 2usize,
+                                            on_select: {
+                                                move |_| {
+                                                    show_leave_confirmation
+                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone())))
+                                                }
+                                            },
+                                            "Leave Topic"
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                }
+            }
+        }
+    }
+
+    #[component]
+    fn ContactColumn(
+        search_query: Signal<String>,
+        selected_topic_id: Signal<Option<String>>,
+        show_profile_details: Signal<Option<Profile>>,
+        show_leave_confirmation: Signal<Option<(String, String)>>,
+        app_state: Signal<AppState>,
+    ) -> Element {
+        let contact_list: Vec<ProfileChat> = {
+            let state = app_state();
+            let mut contacts = state.get_all_contacts_chat();
+            contacts.sort_by(|a, b| b.profile.last_connection.cmp(&a.profile.last_connection));
+            contacts
+        };
+
+        rsx! {
+            ul {
+                {
+                    contact_list
+                        .into_iter()
+                        .filter(|contact_chat| {
+                            contact_chat
+                                .profile
+                                .name
+                                .to_lowercase()
+                                .contains(&search_query().to_lowercase())
+                        })
+                        .map(|contact_chat| {
+                            let last_message = contact_chat.last_message();
+                            let profile_id = contact_chat.profile.id;
+                            let profile_name = contact_chat.profile.name;
+                            let avatar_url = contact_chat.profile.avatar;
+                            let last_connection = match contact_chat.profile.last_connection {
+                                ConnectionStatus::Online => {
+                                    chrono::Utc::now().timestamp_millis() as u64
+                                }
+                                ConnectionStatus::Offline(time) => time,
+                            };
+                            let id_for_chat = profile_id.clone();
+                            let id_for_details = profile_id.clone();
+                            let id_for_leave = profile_id.clone();
+                            let name_for_leave = profile_name.clone();
+                            rsx! {
+                                ContextMenu {
+                                    ContextMenuTrigger {
+                                        ColumnItem {
+                                            id: profile_id.clone(),
+                                            name: profile_name.clone(),
+                                            avatar_url,
+                                            last_message,
+                                            last_connection,
+                                            on_select: selected_topic_id,
+                                            highlight: search_query(),
+                                        }
+                                    }
+                                    ContextMenuContent { class: "context-menu",
+                                        ContextMenuItem {
+                                            class: "context-menu-item",
+                                            value: "Open Chat".to_string(),
+                                            index: 0usize,
+                                            on_select: move |_| {
+                                                selected_topic_id.set(Some(id_for_chat.clone()));
+                                            },
+                                            "Open Chat"
+                                        }
+                                        ContextMenuItem {
+                                            class: "context-menu-item",
+                                            value: "Open Details".to_string(),
+                                            index: 1usize,
+                                            on_select: move |_| {
+                                                let state = app_state();
+                                                if let Some(contact) = state.get_contact(&id_for_details) {
+                                                    show_profile_details.set(Some(contact.clone()));
+                                                }
+                                            },
+                                            "Open Details"
+                                        }
+                                        ContextMenuItem {
+                                            class: "context-menu-item-danger",
+                                            value: "Leave Topic".to_string(),
+                                            index: 2usize,
+                                            on_select: {
+                                                move |_| {
+                                                    show_leave_confirmation
+                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone())))
+                                                }
+                                            },
+                                            "Leave Topic"
+                                        }
+                                    }
+                                }
+                            }
+                        })
                 }
             }
         }

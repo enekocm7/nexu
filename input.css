@@ -94,3 +94,11 @@
 .context-menu-item-danger {
     @apply text-danger;
 }
+
+.selected-column-button {
+    @apply w-full py-1.5 text-sm font-medium rounded-md transition-all duration-200 bg-bg-panel text-text-primary shadow-sm cursor-default;
+}
+
+.unselected-column-button {
+    @apply w-full py-1.5 text-sm font-medium rounded-md transition-all duration-200 text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer
+}

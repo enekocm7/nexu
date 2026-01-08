@@ -101,7 +101,7 @@ pub enum TopicCreationMode {
 pub struct AppState {
     topics: HashMap<String, Topic>,
     current_topic_id: Option<String>,
-    contacts: HashMap<String, Profile>,
+    contacts: HashMap<String, ProfileChat>,
     profile: Profile,
 }
 
@@ -204,14 +204,27 @@ impl AppState {
     }
 
     pub fn add_contact(&mut self, profile: Profile) {
-        self.contacts.insert(profile.id.clone(), profile);
+        self.contacts
+            .insert(profile.id.clone(), ProfileChat::new(profile));
     }
 
-    pub fn get_contact(&self, profile_id: &str) -> Option<&Profile> {
+    pub fn get_contact_chat(&self, profile_id: &str) -> Option<&ProfileChat> {
         self.contacts.get(profile_id)
     }
 
+    pub fn get_contact(&self, profile_id: &str) -> Option<&Profile> {
+        self.contacts.get(profile_id).map(|prof| &prof.profile)
+    }
+
     pub fn get_all_contacts(&self) -> Vec<Profile> {
+        self.contacts
+            .values()
+            .cloned()
+            .map(|chat| chat.profile)
+            .collect()
+    }
+
+    pub fn get_all_contacts_chat(&self) -> Vec<ProfileChat> {
         self.contacts.values().cloned().collect()
     }
 
@@ -220,7 +233,9 @@ impl AppState {
     }
 
     pub fn modify_contact(&mut self, profile: Profile) {
-        if let Some(existing_profile) = self.contacts.get_mut(&profile.id) {
+        if let Some(profile_chat) = self.contacts.get_mut(&profile.id)
+            && let Some(existing_profile) = Some(&mut profile_chat.profile)
+        {
             existing_profile.name = profile.name;
             existing_profile.avatar = profile.avatar;
             existing_profile.last_connection = profile.last_connection;
@@ -228,7 +243,9 @@ impl AppState {
     }
 
     pub fn set_contact_last_connection(&mut self, contact: &str, timestamp: u64) {
-        if let Some(profile) = self.contacts.get_mut(contact) {
+        if let Some(profile_chat) = self.contacts.get_mut(contact)
+            && let Some(profile) = Some(&mut profile_chat.profile)
+        {
             profile.last_connection = Offline(timestamp);
         }
     }
@@ -353,7 +370,7 @@ pub struct Profile {
     pub last_connection: ConnectionStatus,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq)]
 pub enum ConnectionStatus {
     Online,
     Offline(u64),
@@ -375,7 +392,22 @@ impl PartialEq<Self> for ConnectionStatus {
     }
 }
 
-impl Eq for ConnectionStatus {}
+impl PartialOrd<Self> for ConnectionStatus {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ConnectionStatus {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Online, Online) => Ordering::Equal,
+            (Online, Offline(_)) => Ordering::Greater,
+            (Offline(_), Online) => Ordering::Less,
+            (Offline(ts1), Offline(ts2)) => ts1.cmp(ts2),
+        }
+    }
+}
 
 impl Display for ConnectionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -417,4 +449,36 @@ impl Hash for Profile {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ProfileChat {
+    pub profile: Profile,
+    pub messages: Vec<ChatMessage>,
+    pub last_changed: u64,
+}
+
+impl ProfileChat {
+    pub fn new(profile: Profile) -> Self {
+        Self {
+            profile,
+            messages: Vec::new(),
+            last_changed: chrono::Utc::now().timestamp_millis() as u64,
+        }
+    }
+
+    pub fn last_message(&self) -> Option<String> {
+        self.messages.last().map(|msg| msg.content.clone())
+    }
+
+    pub fn add_message(&mut self, message: ChatMessage) {
+        self.last_changed = chrono::Utc::now().timestamp_millis() as u64;
+        self.messages.push(message);
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ColumnState {
+    Topic,
+    Contact,
 }
