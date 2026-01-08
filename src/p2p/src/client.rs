@@ -552,6 +552,7 @@ mod tests {
                 assert_eq!(meta.username, "user1");
                 assert_eq!(meta.last_connection, 12345);
             }
+            _ => panic!("Expected ProfileMetadata"),
         }
     }
 
@@ -646,6 +647,7 @@ mod tests {
             DmMessageTypes::ProfileMetadata(meta) => {
                 assert_eq!(meta.username, "user1");
             }
+            _ => panic!("Expected ProfileMetadata"),
         }
 
         let incoming1 = client1.incoming_dms();
@@ -660,6 +662,7 @@ mod tests {
             DmMessageTypes::ProfileMetadata(meta) => {
                 assert_eq!(meta.username, "user2");
             }
+            _ => panic!("Expected ProfileMetadata"),
         }
     }
 
@@ -711,7 +714,60 @@ mod tests {
                     assert_eq!(meta.username, format!("user1_message_{}", i));
                     assert_eq!(meta.last_connection, i as u64);
                 }
+                _ => panic!("Expected ProfileMetadata"),
             }
+        }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_dm_chat_message() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        let addr1 = client1.endpoint_addr();
+        let addr2 = client2.endpoint_addr();
+
+        client1
+            .connect_peer(&addr2)
+            .await
+            .expect("Failed to connect");
+
+        let msg_content = DmMessageTypes::Chat(crate::messages::DmChatMessage {
+            sender: addr1.id,
+            receiver: addr2.clone(),
+            content: "Hello DM".to_string(),
+            timestamp: 123456789,
+        });
+
+        client1
+            .send_dm(&addr2, msg_content)
+            .await
+            .expect("Failed to send DM");
+
+        let incoming = client2.incoming_dms();
+
+        let (sender, received_msg) =
+            tokio::time::timeout(Duration::from_secs(5), incoming.recv_async())
+                .await
+                .expect("Timeout waiting for DM")
+                .expect("Failed to receive DM");
+
+        assert_eq!(sender, addr1.id);
+
+        match received_msg {
+            DmMessageTypes::Chat(chat_msg) => {
+                assert_eq!(chat_msg.content, "Hello DM");
+                assert_eq!(chat_msg.timestamp, 123456789);
+            }
+            _ => panic!("Expected Chat message"),
         }
     }
 }

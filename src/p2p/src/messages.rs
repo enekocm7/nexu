@@ -173,6 +173,7 @@ impl Display for ChatMessage {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DmMessageTypes {
+    Chat(DmChatMessage),
     ProfileMetadata(DmProfileMetadataMessage),
 }
 
@@ -182,6 +183,46 @@ pub struct DmProfileMetadataMessage {
     pub username: String,
     pub avatar_url: Option<String>,
     pub last_connection: u64,
+}
+
+impl DmProfileMetadataMessage {
+    pub fn new(
+        addr: EndpointAddr,
+        username: String,
+        avatar_url: Option<String>,
+        last_connection: u64,
+    ) -> Self {
+        DmProfileMetadataMessage {
+            addr,
+            username,
+            avatar_url,
+            last_connection,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DmChatMessage {
+    pub sender: EndpointId,
+    pub receiver: EndpointAddr,
+    pub content: String,
+    pub timestamp: u64,
+}
+
+impl DmChatMessage {
+    pub fn new(
+        sender: EndpointId,
+        receiver: EndpointAddr,
+        content: String,
+        timestamp: u64,
+    ) -> Self {
+        DmChatMessage {
+            sender,
+            receiver,
+            content,
+            timestamp,
+        }
+    }
 }
 
 #[cfg(test)]
