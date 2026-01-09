@@ -1,4 +1,5 @@
 use crate::client::DesktopClient;
+use crate::utils;
 use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
@@ -187,14 +188,25 @@ impl AppController {
                     let msg = client
                         .get_chat_message(&ticket_id, &message)
                         .await
-                        .map_err(|e| Error::MessageCreation(e.to_string()))?;
+                        .map_err(|e| {
+                            eprintln!("Failed to create chat message: {}", e);
+                            Error::MessageCreation(e.to_string())
+                        })?;
+
                     let send = client.send(MessageTypes::Chat(msg)).await;
                     let peer = client.peer_id().await;
                     (send, peer)
                 };
 
-                send_result.map_err(|e| Error::MessageSend(e.to_string()))?;
-                let peer_id = peer_id_result.map_err(|e| Error::PeerId(e.to_string()))?;
+                send_result.map_err(|e| {
+                    eprintln!("Failed to send message: {}", e);
+                    Error::MessageSend(e.to_string())
+                })?;
+
+                let peer_id = peer_id_result.map_err(|e| {
+                    eprintln!("Failed to get peer_id: {}", e);
+                    Error::PeerId(e.to_string())
+                })?;
 
                 app_state.with_mut(|state| {
                     if let Some(topic) = state.get_topic_mutable(&ticket_id) {
@@ -209,8 +221,10 @@ impl AppController {
                     }
                 });
 
-                save_topics_to_file(&app_state().get_all_topics())
-                    .map_err(|_| Error::FileSave("Failed to save topics to file".to_string()))?;
+                save_topics_to_file(&app_state().get_all_topics()).map_err(|_| {
+                    eprintln!("Failed to save topics to file");
+                    Error::FileSave("Failed to save topics to file".to_string())
+                })?;
 
                 Ok(())
             }
@@ -292,8 +306,7 @@ impl AppController {
                     state.set_profile_name(&profile.name);
                     state.set_profile_avatar(&profile.avatar);
                 });
-
-                crate::utils::contacts::save_profile(&profile)
+                utils::contacts::save_profile(&profile)
                     .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 Ok(())

@@ -142,28 +142,30 @@ fn App() -> Element {
                     let mut msgs = Vec::new();
                     for (topic, receiver) in client.get_message_receiver() {
                         while let Ok(message) = receiver.try_recv() {
+                            eprintln!("[DEBUG] Received message for topic: {}", topic);
                             msgs.push((topic.to_string(), message));
                         }
                     }
                     msgs
                 };
 
-                let had_messages = !messages.is_empty();
-
                 for (topic, message) in messages {
                     match message {
                         MessageTypes::Chat(msg) => {
-                            let state = controller.read().get_app_state();
-                            if let Some(topic_obj) = state().get_topic_mutable(&topic) {
-                                let message = ChatMessage::new(
-                                    msg.sender.to_string(),
-                                    topic_obj.id.clone(),
-                                    msg.content,
-                                    msg.timestamp,
-                                    false,
-                                );
-                                topic_obj.add_message(message);
-                            }
+                            let mut state = controller.read().get_app_state();
+
+                            state.with_mut(|s| {
+                                if let Some(topic_obj) = s.get_topic_mutable(&topic) {
+                                    let message = ChatMessage::new(
+                                        msg.sender.to_string(),
+                                        topic_obj.id.clone(),
+                                        msg.content.clone(),
+                                        msg.timestamp,
+                                        false,
+                                    );
+                                    topic_obj.add_message(message);
+                                }
+                            });
                         }
                         MessageTypes::TopicMetadata(metadata) => {
                             let should_send = {
@@ -274,16 +276,17 @@ fn App() -> Element {
                                 }
                             });
                         }
-                        MessageTypes::LeaveTopic(message) => {
-                            let state = controller.read().get_app_state();
-                            if let Some(topic_obj) = state().get_topic_mutable(&topic) {
-                                let message = ui::desktop::models::LeaveMessage {
-                                    sender_id: message.endpoint.to_string(),
-                                    timestamp: Utc::now().timestamp_millis() as u64,
-                                };
-
-                                topic_obj.add_leave_message(message);
-                            }
+                        MessageTypes::LeaveTopic(leave_msg) => {
+                            let mut state = controller.read().get_app_state();
+                            state.with_mut(|s| {
+                                if let Some(topic_obj) = s.get_topic_mutable(&topic) {
+                                    let message = ui::desktop::models::LeaveMessage {
+                                        sender_id: leave_msg.endpoint.to_string(),
+                                        timestamp: Utc::now().timestamp_millis() as u64,
+                                    };
+                                    topic_obj.add_leave_message(message);
+                                }
+                            });
                         }
                         MessageTypes::DisconnectTopic(disconnect_msg) => {
                             let mut state = controller.read().get_app_state();
@@ -293,16 +296,11 @@ fn App() -> Element {
                                         sender_id: disconnect_msg.endpoint.to_string(),
                                         timestamp: Utc::now().timestamp_millis() as u64,
                                     };
-
                                     topic_obj.add_disconnect_message(message);
                                 }
                             });
                         }
                         MessageTypes::TopicMessages(topic_messages_msg) => {
-                            if topic_messages_msg.messages.is_empty() {
-                                continue;
-                            }
-
                             let mut state = controller.read().get_app_state();
 
                             state.with_mut(|s| {
@@ -384,11 +382,10 @@ fn App() -> Element {
                     }
                 }
 
-                if had_messages
-                    && save_topics_to_file(&controller.read().get_app_state()().get_all_topics())
-                        .is_err()
+                if let Err(e) =
+                    save_topics_to_file(&controller.read().get_app_state()().get_all_topics())
                 {
-                    eprintln!("Failed to save topics to file");
+                    eprintln!("Failed to save topics to file: {}", e);
                 }
 
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
