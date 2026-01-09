@@ -15,7 +15,7 @@ pub mod desktop_web_components {
     use dioxus_primitives::context_menu::{
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
     };
-    use dioxus_primitives::toast::{ToastOptions, use_toast};
+    use dioxus_primitives::toast::{ToastOptions, Toasts, use_toast};
 
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
@@ -648,20 +648,7 @@ pub mod desktop_web_components {
         let handle_copy_topic_id = {
             let topic_id = topic.id.clone();
             move |_event: Event<MouseData>| match Clipboard::new() {
-                Ok(mut clipboard) => match clipboard.set_text(topic_id.clone()) {
-                    Ok(_) => {
-                        toast.success(
-                            "Topic ID copied to clipboard!".to_owned(),
-                            ToastOptions::default(),
-                        );
-                    }
-                    Err(_) => {
-                        toast.error(
-                            "Error copying Topic ID.".to_owned(),
-                            ToastOptions::default(),
-                        );
-                    }
-                },
+                Ok(clipboard) => copy_to_clipboard(clipboard, &topic_id, toast),
                 Err(_) => {
                     toast.error(
                         "Error accessing clipboard.".to_owned(),
@@ -852,17 +839,15 @@ pub mod desktop_web_components {
         let toast = use_toast();
         let mut edited_name = use_signal(|| profile.name.clone());
 
+        let profile_id = profile.id.clone();
         let handle_copy_profile_id = {
-            let profile_id = profile.id.clone();
-            move |_event: Event<MouseData>| match copy_to_clipboard(&profile_id) {
-                Ok(_) => {
-                    toast.success(
-                        "Profile ID copied to clipboard!".to_owned(),
+            move |_event: Event<MouseData>| match Clipboard::new() {
+                Ok(clipboard) => copy_to_clipboard(clipboard, &profile_id, toast),
+                Err(_) => {
+                    toast.error(
+                        "Error accessing clipboard.".to_owned(),
                         ToastOptions::default(),
                     );
-                }
-                Err(error) => {
-                    toast.error(error, ToastOptions::default());
                 }
             }
         };
@@ -1252,13 +1237,20 @@ pub mod desktop_web_components {
         last_connection.format("%m/%d/%Y").to_string()
     }
 
-    fn copy_to_clipboard(text: &str) -> Result<(), String> {
-        match Clipboard::new() {
-            Ok(mut clipboard) => match clipboard.set_text(text) {
-                Ok(_) => Ok(()),
-                Err(_) => Err("Failed to copy to clipboard".to_owned()),
-            },
-            Err(_) => Err("Failed to access clipboard".to_owned()),
+    fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
+        match clipboard.set_text(text) {
+            Ok(_) => {
+                toast.success(
+                    "Topic ID copied to clipboard!".to_owned(),
+                    ToastOptions::default(),
+                );
+            }
+            Err(_) => {
+                toast.error(
+                    "Error copying Topic ID.".to_owned(),
+                    ToastOptions::default(),
+                );
+            }
         }
     }
 }
