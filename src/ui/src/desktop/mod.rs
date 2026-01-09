@@ -79,7 +79,7 @@ pub mod desktop_web_components {
                             class: "input-field pl-11.25 bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.35-4.35'%3E%3C/path%3E%3C/svg%3E\")] bg-no-repeat bg-position-[15px_center] bg-size-[18px] focus:-translate-y-px",
                             r#type: "text",
                             icon: "search",
-                            placeholder: "Search",
+                            placeholder: "Search contacts or add by ID...",
                             oninput: move |value| {
                                 search_query.set(value.value());
                             },
@@ -1010,15 +1010,16 @@ pub mod desktop_web_components {
                 {
                     topic_list
                         .into_iter()
-                        .filter(|contact| {
-                            contact.name.to_lowercase().contains(&search_query().to_lowercase())
+                        .filter(|topic| {
+                            topic.name.to_lowercase().contains(&search_query().to_lowercase())
+                                || topic.id.to_lowercase().contains(&search_query().to_lowercase())
                         })
-                        .map(|contact| {
-                            let topic_id = contact.id;
-                            let topic_name = contact.name;
-                            let avatar_url = contact.avatar_url;
-                            let last_message = contact.last_message;
-                            let last_connection = contact.last_connection;
+                        .map(|topic| {
+                            let topic_id = topic.id;
+                            let topic_name = topic.name;
+                            let avatar_url = topic.avatar_url;
+                            let last_message = topic.last_message;
+                            let last_connection = topic.last_connection;
                             let id_for_chat = topic_id.clone();
                             let id_for_details = topic_id.clone();
                             let id_for_leave = topic_id.clone();
@@ -1105,6 +1106,11 @@ pub mod desktop_web_components {
                                 .name
                                 .to_lowercase()
                                 .contains(&search_query().to_lowercase())
+                                || contact_chat
+                                    .profile
+                                    .id
+                                    .to_lowercase()
+                                    .contains(&search_query().to_lowercase())
                         })
                         .map(|contact_chat| {
                             let last_message = contact_chat.last_message();
