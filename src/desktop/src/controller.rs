@@ -1,0 +1,351 @@
+use crate::client::DesktopClient;
+use crate::utils::topics::save_topics_to_file;
+use base64::Engine;
+use chrono::Utc;
+use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
+use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use ui::desktop::models::{AppState, ChatMessage, Profile, Topic};
+
+pub struct AppController {
+    app_state: Signal<AppState>,
+    desktop_client: Arc<Mutex<DesktopClient>>,
+}
+
+impl AppController {
+    pub fn new() -> Self {
+        Self {
+            app_state: Signal::new(AppState::new("Error")),
+            desktop_client: Arc::new(Mutex::new(DesktopClient::new())),
+        }
+    }
+
+    pub fn get_app_state(&self) -> Signal<AppState> {
+        self.app_state
+    }
+
+    pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
+        Arc::clone(&self.desktop_client)
+    }
+
+    pub fn create_topic(&self, name: String) {
+        let mut app_state = self.app_state;
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let ticket = desktop_client
+                    .lock()
+                    .await
+                    .create_topic()
+                    .await
+                    .map_err(|e| Error::TopicCreation(e.to_string()))?;
+
+                let mut topic = Topic::new(ticket.clone(), name, None);
+                let profile = app_state.read().get_profile();
+                topic.add_member(&profile.id);
+                app_state.write().add_topic(&topic);
+
+                save_topics_to_file(&app_state.read().get_all_topics())
+                    .map_err(|_| Error::FileSave("Failed to save topics to file".to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to create topic: {}", e);
+            }
+        });
+    }
+
+    pub fn join_topic(&self, topic_id: String) {
+        let mut app_state = self.get_app_state();
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                if app_state().get_topic(&topic_id).is_some() {
+                    return Ok(());
+                }
+
+                let mut topic = Topic::new_placeholder(topic_id.clone());
+
+                let ticket_str = desktop_client
+                    .lock()
+                    .await
+                    .join_topic(&topic_id)
+                    .await
+                    .map_err(|e| Error::TopicJoin(e.to_string()))?;
+
+                let ticket = Ticket::from_str(&ticket_str)
+                    .map_err(|_| Error::InvalidTicket("Invalid ticket string".to_string()))?;
+
+                topic.add_join_message(ui::desktop::models::JoinMessage::new_me(
+                    Utc::now().timestamp_millis() as u64,
+                ));
+
+                let profile = app_state.read().get_profile();
+                topic.add_member(&profile.id);
+                app_state.write().add_topic(&topic);
+
+                save_topics_to_file(&app_state.read().get_all_topics())
+                    .map_err(|_| Error::FileSave("Failed to save topics to file".to_string()))?;
+
+                tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+                let id = desktop_client
+                    .lock()
+                    .await
+                    .peer_id()
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?
+                    .parse()
+                    .map_err(|_| Error::InvalidPeerId)?;
+
+                desktop_client
+                    .lock()
+                    .await
+                    .send(MessageTypes::JoinTopic(p2p::JoinMessage::new(
+                        ticket.topic,
+                        id,
+                        Utc::now().timestamp_millis() as u64,
+                    )))
+                    .await
+                    .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to join topic: {}", e);
+            }
+        });
+    }
+
+    pub fn leave_topic(&self, topic_id: String) {
+        let mut app_state = self.app_state;
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let client_ref = desktop_client.clone();
+                let mut client = client_ref.lock().await;
+
+                let id = client
+                    .peer_id()
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?
+                    .parse()
+                    .map_err(|_| Error::InvalidPeerId)?;
+
+                let ticket = Ticket::from_str(&topic_id)
+                    .map_err(|_| Error::InvalidTicket("Failed to parse topic_id".to_string()))?;
+
+                client
+                    .send(MessageTypes::LeaveTopic(p2p::LeaveMessage::new(
+                        ticket.topic,
+                        id,
+                        Utc::now().timestamp_millis() as u64,
+                    )))
+                    .await
+                    .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                client
+                    .leave_topic(&topic_id)
+                    .await
+                    .map_err(|e| Error::TopicLeave(e.to_string()))?;
+
+                app_state.write().remove_topic(&topic_id);
+
+                save_topics_to_file(&app_state.read().get_all_topics())
+                    .map_err(|_| Error::FileSave("Failed to save topics to file".to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to leave topic: {}", e);
+            }
+        });
+    }
+
+    pub fn send_message_to_topic(&self, ticket_id: String, message: String) {
+        let mut app_state = self.app_state;
+        let desktop_client = Arc::clone(&self.desktop_client);
+        let now = Utc::now().timestamp_millis() as u64;
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let client_ref = desktop_client.clone();
+                let (send_result, peer_id_result) = {
+                    let client = client_ref.lock().await;
+                    let msg = client
+                        .get_chat_message(&ticket_id, &message)
+                        .await
+                        .map_err(|e| Error::MessageCreation(e.to_string()))?;
+                    let send = client.send(MessageTypes::Chat(msg)).await;
+                    let peer = client.peer_id().await;
+                    (send, peer)
+                };
+
+                send_result.map_err(|e| Error::MessageSend(e.to_string()))?;
+                let peer_id = peer_id_result.map_err(|e| Error::PeerId(e.to_string()))?;
+
+                app_state.with_mut(|state| {
+                    if let Some(topic) = state.get_topic_mutable(&ticket_id) {
+                        let msg = ChatMessage::new(
+                            peer_id.clone(),
+                            ticket_id.clone(),
+                            message.clone(),
+                            now,
+                            true,
+                        );
+                        topic.add_message(msg);
+                    }
+                });
+
+                save_topics_to_file(&app_state().get_all_topics())
+                    .map_err(|_| Error::FileSave("Failed to save topics to file".to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to send message to topic {}: {}", ticket_id, e);
+            }
+        });
+    }
+
+    pub fn send_message_to_user(&self, _user_id: String, _message: String) {
+        // Placeholder for direct messaging functionality
+        // Not implemented in main.rs yet
+        todo!("Direct user messaging not yet implemented")
+    }
+
+    pub fn modify_topic(&self, topic: Topic) {
+        let mut app_state = self.get_app_state();
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                if let Some(ref avatar_url) = topic.avatar_url
+                    && let Some(base64_data) = avatar_url.strip_prefix("data:")
+                    && let Some(comma_pos) = base64_data.find(',')
+                {
+                    let base64_str = &base64_data[comma_pos + 1..];
+                    if let Ok(decoded) =
+                        base64::engine::general_purpose::STANDARD.decode(base64_str)
+                    {
+                        const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
+                        if decoded.len() > MAX_SIZE {
+                            return Err(Error::ImageSizeExceeded);
+                        }
+                    }
+                }
+
+                app_state.write().modify_topic_name(&topic.id, &topic.name);
+                app_state
+                    .write()
+                    .modify_topic_avatar(&topic.id, topic.avatar_url.clone());
+                let time = app_state.write().set_last_changed_to_now(&topic.id);
+                let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
+                let update_message =
+                    TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url, time);
+
+                if let Err(e) = desktop_client
+                    .lock()
+                    .await
+                    .send(MessageTypes::TopicMetadata(update_message))
+                    .await
+                {
+                    eprintln!("Failed to send update topic message: {}", e);
+                }
+
+                if save_topics_to_file(&app_state.read().get_all_topics()).is_err() {
+                    return Err(Error::TopicModification(
+                        "Failed to save topics to file".to_string(),
+                    ));
+                }
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to modify topic: {}", e);
+            }
+        });
+    }
+
+    pub fn modify_profile(&self, profile: Profile) {
+        let mut app_state = self.app_state;
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                app_state.with_mut(|state| {
+                    state.set_profile_name(&profile.name);
+                    state.set_profile_avatar(&profile.avatar);
+                });
+
+                crate::utils::contacts::save_profile(&profile)
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to save profile: {}", e);
+            }
+        });
+    }
+
+    pub fn connect_to_user(&self, _user_id: String) {
+        // Placeholder for direct user connection functionality
+        // Not implemented in main.rs yet
+        todo!("Direct user connection not yet implemented")
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    TopicCreation(String),
+    TopicJoin(String),
+    TopicLeave(String),
+    TopicModification(String),
+    FileSave(String),
+    InvalidTicket(String),
+    PeerId(String),
+    InvalidPeerId,
+    MessageSend(String),
+    MessageCreation(String),
+    ImageSizeExceeded,
+    ProfileSave(String),
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::TopicCreation(msg) => write!(f, "Topic creation error: {}", msg),
+            Error::TopicJoin(msg) => write!(f, "Topic join error: {}", msg),
+            Error::TopicLeave(msg) => write!(f, "Topic leave error: {}", msg),
+            Error::TopicModification(msg) => write!(f, "Topic modification error: {}", msg),
+            Error::FileSave(msg) => write!(f, "File save error: {}", msg),
+            Error::InvalidTicket(msg) => write!(f, "Invalid ticket: {}", msg),
+            Error::PeerId(msg) => write!(f, "Peer ID error: {}", msg),
+            Error::InvalidPeerId => write!(f, "Invalid peer ID"),
+            Error::MessageSend(msg) => write!(f, "Message send error: {}", msg),
+            Error::MessageCreation(msg) => write!(f, "Message creation error: {}", msg),
+            Error::ImageSizeExceeded => write!(f, "Image size exceeds 512 KB limit"),
+            Error::ProfileSave(msg) => write!(f, "Profile save error: {}", msg),
+        }
+    }
+}
+
+impl std::error::Error for Error {}

@@ -27,8 +27,8 @@ pub mod desktop_web_components {
         on_create_topic: EventHandler<String>,
         on_join_topic: EventHandler<String>,
         on_leave_topic: EventHandler<String>,
-        on_modify_topic: EventHandler<Topic>,
         on_send_message: EventHandler<(String, String)>,
+        on_modify_topic: EventHandler<Topic>,
         on_modify_profile: EventHandler<Profile>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
@@ -1113,9 +1113,14 @@ pub mod desktop_web_components {
                                     .contains(&search_query().to_lowercase())
                         })
                         .collect::<Vec<ProfileChat>>();
-                    if filtered_contacts.is_empty() && !search_query().is_empty() {
+                    if filtered_contacts.is_empty() {
+                        let message = if search_query().is_empty() {
+                            "You have no contacts. Add some to start chatting!"
+                        } else {
+                            "No contacts found."
+                        };
                         return rsx! {
-                            div { class: "p-4 text-text-secondary text-center", "No contacts found." }
+                            div { class: "p-4 text-text-secondary text-center", "{message}" }
                         };
                     }
                     filtered_contacts
