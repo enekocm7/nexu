@@ -1098,7 +1098,7 @@ pub mod desktop_web_components {
         rsx! {
             ul {
                 {
-                    contact_list
+                    let filtered_contacts = contact_list
                         .into_iter()
                         .filter(|contact_chat| {
                             contact_chat
@@ -1112,6 +1112,14 @@ pub mod desktop_web_components {
                                     .to_lowercase()
                                     .contains(&search_query().to_lowercase())
                         })
+                        .collect::<Vec<ProfileChat>>();
+                    if filtered_contacts.is_empty() && !search_query().is_empty() {
+                        return rsx! {
+                            div { class: "p-4 text-text-secondary text-center", "No contacts found." }
+                        };
+                    }
+                    filtered_contacts
+                        .into_iter()
                         .map(|contact_chat| {
                             let last_message = contact_chat.last_message();
                             let profile_id = contact_chat.profile.id;
