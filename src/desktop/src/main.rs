@@ -33,60 +33,6 @@ fn main() {
         .launch(App);
 }
 
-async fn join_topic_internal(
-    desktop_client: &Arc<Mutex<DesktopClient>>,
-    mut app_state: Signal<AppState>,
-    mut topic: Topic,
-) -> Result<(), Box<dyn Error>> {
-    let join_result = desktop_client.lock().await.join_topic(&topic.id).await;
-
-    match join_result {
-        Ok(ticket_str) => {
-            let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
-
-            topic.add_join_message(ui::desktop::models::JoinMessage::new_me(
-                Utc::now().timestamp_millis() as u64,
-            ));
-            let profile = app_state().get_profile();
-
-            topic.add_member(&profile.id);
-
-            app_state.with_mut(|state| state.add_topic(&topic));
-
-            if save_topics_to_file(&app_state().get_all_topics()).is_err() {
-                eprintln!("Failed to save topics to file");
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
-
-            let id = desktop_client
-                .lock()
-                .await
-                .peer_id()
-                .await?
-                .parse()
-                .expect("Invalid peer id");
-
-            desktop_client
-                .lock()
-                .await
-                .send(MessageTypes::JoinTopic(p2p::JoinMessage::new(
-                    ticket.topic,
-                    id,
-                    Utc::now().timestamp_millis() as u64,
-                )))
-                .await
-                .expect("Failed to send JoinTopic message");
-
-            Ok(())
-        }
-        Err(e) => {
-            eprintln!("Failed to join topic: {e}");
-            Err(e.into())
-        }
-    }
-}
-
 #[component]
 fn App() -> Element {
     let controller = use_signal(controller::AppController::new);
@@ -487,5 +433,59 @@ impl FromP2PMessage for ChatMessage {
             self.timestamp,
             ticket.topic,
         )
+    }
+}
+
+async fn join_topic_internal(
+    desktop_client: &Arc<Mutex<DesktopClient>>,
+    mut app_state: Signal<AppState>,
+    mut topic: Topic,
+) -> std::result::Result<(), Box<dyn Error>> {
+    let join_result = desktop_client.lock().await.join_topic(&topic.id).await;
+
+    match join_result {
+        Ok(ticket_str) => {
+            let ticket = Ticket::from_str(&ticket_str).expect("Invalid ticket string");
+
+            topic.add_join_message(ui::desktop::models::JoinMessage::new_me(
+                Utc::now().timestamp_millis() as u64,
+            ));
+            let profile = app_state().get_profile();
+
+            topic.add_member(&profile.id);
+
+            app_state.with_mut(|state| state.add_topic(&topic));
+
+            if save_topics_to_file(&app_state().get_all_topics()).is_err() {
+                eprintln!("Failed to save topics to file");
+            }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+
+            let id = desktop_client
+                .lock()
+                .await
+                .peer_id()
+                .await?
+                .parse()
+                .expect("Invalid peer id");
+
+            desktop_client
+                .lock()
+                .await
+                .send(MessageTypes::JoinTopic(p2p::JoinMessage::new(
+                    ticket.topic,
+                    id,
+                    Utc::now().timestamp_millis() as u64,
+                )))
+                .await
+                .expect("Failed to send JoinTopic message");
+
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("Failed to join topic: {e}");
+            Err(e.into())
+        }
     }
 }
