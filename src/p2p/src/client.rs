@@ -1,6 +1,6 @@
 use crate::messages::{DmMessageTypes, GossipMessage, MessageTypes};
 use crate::protocol::{DM_ALPN, DMProtocol, write_frame};
-use crate::ticket::Ticket;
+use crate::types::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
 use futures_lite::StreamExt;
@@ -11,6 +11,7 @@ use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::sleep;
 
@@ -157,7 +158,7 @@ impl ChatClient {
     }
 
     pub async fn join_topic_from_string(&mut self, ticket_str: &str) -> anyhow::Result<TopicId> {
-        let ticket = std::str::FromStr::from_str(ticket_str)?;
+        let ticket = FromStr::from_str(ticket_str)?;
         self.join_topic(ticket).await
     }
 
@@ -170,7 +171,8 @@ impl ChatClient {
         Ok(())
     }
 
-    pub async fn connect_peer(&mut self, addr: &EndpointAddr) -> anyhow::Result<()> {
+    pub async fn connect_peer(&mut self, addr: impl Into<EndpointAddr>) -> anyhow::Result<()> {
+        let addr: EndpointAddr = addr.into();
         let conn = self.endpoint.connect(addr.to_owned(), DM_ALPN).await?;
 
         let (send, _recv) = conn.open_bi().await?;
@@ -182,12 +184,13 @@ impl ChatClient {
 
     pub async fn send_dm(
         &mut self,
-        addr: &EndpointAddr,
+        addr: impl Into<EndpointAddr>,
         message: DmMessageTypes,
     ) -> anyhow::Result<()> {
+        let addr: EndpointAddr = addr.into();
         let send = self
             .dm_sender
-            .get_mut(addr)
+            .get_mut(&addr)
             .ok_or_else(|| anyhow::anyhow!("No DM sender for address"))?;
 
         let serialized = postcard::to_stdvec(&message)?;
@@ -520,7 +523,7 @@ mod tests {
         let addr2 = client2.endpoint_addr();
 
         client1
-            .connect_peer(&addr2)
+            .connect_peer(addr2.clone())
             .await
             .expect("Failed to connect");
 
@@ -533,7 +536,7 @@ mod tests {
             });
 
         client1
-            .send_dm(&addr2, msg_content)
+            .send_dm(addr2.clone(), msg_content)
             .await
             .expect("Failed to send DM");
 
@@ -579,7 +582,7 @@ mod tests {
                 last_connection: 12345,
             });
 
-        let result = client1.send_dm(&addr2, msg_content).await;
+        let result = client1.send_dm(addr2.clone(), msg_content).await;
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "No DM sender for address");
     }
@@ -601,11 +604,11 @@ mod tests {
         let addr2 = client2.endpoint_addr();
 
         client1
-            .connect_peer(&addr2)
+            .connect_peer(addr2.clone())
             .await
             .expect("Failed to connect client1 to client2");
         client2
-            .connect_peer(&addr1)
+            .connect_peer(addr1.clone())
             .await
             .expect("Failed to connect client2 to client1");
 
@@ -626,12 +629,12 @@ mod tests {
             });
 
         client1
-            .send_dm(&addr2, msg_from_1)
+            .send_dm(addr2.clone(), msg_from_1)
             .await
             .expect("Failed to send DM from client1");
 
         client2
-            .send_dm(&addr1, msg_from_2)
+            .send_dm(addr1.clone(), msg_from_2)
             .await
             .expect("Failed to send DM from client2");
 
@@ -683,7 +686,7 @@ mod tests {
         let addr2 = client2.endpoint_addr();
 
         client1
-            .connect_peer(&addr2)
+            .connect_peer(addr2.clone())
             .await
             .expect("Failed to connect");
 
@@ -695,7 +698,7 @@ mod tests {
                 last_connection: i as u64,
             });
             client1
-                .send_dm(&addr2, msg)
+                .send_dm(addr2.clone(), msg)
                 .await
                 .expect("Failed to send DM");
         }
@@ -736,7 +739,7 @@ mod tests {
         let addr2 = client2.endpoint_addr();
 
         client1
-            .connect_peer(&addr2)
+            .connect_peer(addr2.clone())
             .await
             .expect("Failed to connect");
 
@@ -748,7 +751,7 @@ mod tests {
         });
 
         client1
-            .send_dm(&addr2, msg_content)
+            .send_dm(addr2.clone(), msg_content)
             .await
             .expect("Failed to send DM");
 
