@@ -1,8 +1,7 @@
 use dioxus::core::anyhow;
 use flume::Receiver;
 use p2p::messages::DmMessageTypes;
-use p2p::types::Address;
-use p2p::{ChatClient, ChatMessage, MessageTypes, Ticket};
+use p2p::{ChatClient, EndpointId, MessageTypes, Ticket};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tokio::sync::{Mutex, OnceCell};
@@ -32,12 +31,13 @@ impl DesktopClient {
         Ok(())
     }
 
-    pub async fn peer_id(&self) -> anyhow::Result<String> {
+    pub async fn peer_id(&self) -> anyhow::Result<EndpointId> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        Ok(client.lock().await.peer_id().to_string())
+
+        Ok(client.lock().await.peer_id())
     }
 
     pub async fn create_topic(&mut self) -> anyhow::Result<String> {
@@ -84,7 +84,7 @@ impl DesktopClient {
         &self,
         ticket_str: &str,
         message: &str,
-    ) -> anyhow::Result<ChatMessage> {
+    ) -> anyhow::Result<p2p::ChatMessage> {
         let client = self
             .client
             .get()
@@ -92,18 +92,16 @@ impl DesktopClient {
 
         let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
-        let message = ChatMessage::new(
-            client.lock().await.peer_id(),
-            message.to_string(),
-            timestamp,
-            ticket.topic,
-        );
+        let client_guard = client.lock().await;
+        let sender = client_guard.peer_id();
+
+        let message = p2p::ChatMessage::new(sender, message.to_string(), timestamp, ticket.topic);
         Ok(message)
     }
 
     pub async fn get_dm_chat_message(
         &self,
-        address_str: &str,
+        id: &str,
         message: &str,
     ) -> anyhow::Result<p2p::messages::DmChatMessage> {
         let client = self
@@ -111,14 +109,13 @@ impl DesktopClient {
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
-        let address = Address::from_str(address_str)?;
+        let client_guard = client.lock().await;
+        let sender = client_guard.peer_id();
+        let endpoint_id = id.parse::<EndpointId>()?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
-        let dm_message = p2p::messages::DmChatMessage::new(
-            client.lock().await.peer_id(),
-            address.into(),
-            message.to_string(),
-            timestamp,
-        );
+
+        let dm_message =
+            p2p::messages::DmChatMessage::new(sender, endpoint_id, message.to_string(), timestamp);
 
         Ok(dm_message)
     }
@@ -141,42 +138,40 @@ impl DesktopClient {
         &mut self.message_receivers
     }
 
-    pub async fn connect_to_user(&mut self, username: &str) -> anyhow::Result<()> {
+    pub async fn get_global_dm_receiver(
+        &self,
+    ) -> anyhow::Result<Receiver<(EndpointId, DmMessageTypes)>> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client not initialized"))?;
+        let guard = client.lock().await;
+        Ok(guard.incoming_dms())
+    }
+
+    pub async fn connect_to_user(&mut self, id: &str) -> anyhow::Result<()> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
-        let address = Address::from_str(username)?;
+        let peer_id = id.parse::<EndpointId>()?;
 
-        client.lock().await.connect_peer(address).await?;
+        client.lock().await.connect_peer(peer_id).await?;
 
         Ok(())
     }
 
-    pub async fn send_dm(&self, address: &str, message: DmMessageTypes) -> anyhow::Result<()> {
+    pub async fn send_dm(&self, id: &str, message: DmMessageTypes) -> anyhow::Result<()> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
-        let endpoint_addr = Address::from_str(address)?;
+        let peer_id = id.parse::<EndpointId>()?;
 
-        client.lock().await.send_dm(endpoint_addr, message).await?;
+        client.lock().await.send_dm(peer_id, message).await?;
 
         Ok(())
-    }
-
-    pub fn get_dm_receiver(&mut self) -> &mut HashMap<String, Receiver<DmMessageTypes>> {
-        &mut self.dm_receivers
-    }
-
-    pub async fn get_self_address(&self) -> anyhow::Result<Address> {
-        let client = self
-            .client
-            .get()
-            .ok_or_else(|| anyhow!("Client is not initialized"))?;
-
-        Ok(Address::from(client.lock().await.endpoint_addr()))
     }
 }

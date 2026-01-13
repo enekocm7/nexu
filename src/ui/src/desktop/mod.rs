@@ -17,6 +17,12 @@ pub mod desktop_web_components {
     };
     use dioxus_primitives::toast::{ToastOptions, Toasts, use_toast};
 
+    #[derive(PartialEq, Clone, Copy, Debug)]
+    pub enum RemovalType {
+        Topic,
+        Contact,
+    }
+
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
     static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
@@ -27,18 +33,22 @@ pub mod desktop_web_components {
         on_create_topic: EventHandler<String>,
         on_join_topic: EventHandler<String>,
         on_leave_topic: EventHandler<String>,
+        on_remove_contact: EventHandler<String>,
         on_send_message: EventHandler<(String, String)>,
         on_modify_topic: EventHandler<Topic>,
         on_modify_profile: EventHandler<Profile>,
         on_send_message_dm: EventHandler<(String, String)>,
         on_connect_peer: EventHandler<String>,
+        on_add_contact: EventHandler<String>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
+        let mut show_contact_dialog = use_signal(|| false);
         let mut selected_topic_id = use_signal::<Option<String>>(|| None);
         let show_topic_details = use_signal::<Option<Topic>>(|| None);
         let mut show_profile_details = use_signal::<Option<Profile>>(|| None);
         let mut search_query = use_signal(String::new);
-        let mut show_leave_confirmation = use_signal::<Option<(String, String)>>(|| None);
+        let mut show_leave_confirmation =
+            use_signal::<Option<(String, String, RemovalType)>>(|| None);
         let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
 
         let profile_data: Profile = {
@@ -73,7 +83,14 @@ pub mod desktop_web_components {
                             button {
                                 class: "w-10 h-10 text-3xl leading-none bg-bg-subtle text-text-primary border-none rounded-xl flex items-center justify-center cursor-pointer transition-all duration-300 ease-in-out shadow-sm hover:bg-bg-active hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 active:shadow-sm",
                                 title: "New Topic",
-                                onclick: move |_| show_topic_dialog.set(true),
+                                title: if selected_column() == ColumnState::Topic { "New Topic" } else { "Add Contact" },
+                                onclick: move |_| {
+                                    if selected_column() == ColumnState::Topic {
+                                        show_topic_dialog.set(true);
+                                    } else {
+                                        show_contact_dialog.set(true);
+                                    }
+                                },
                                 "+"
                             }
                         }
@@ -168,22 +185,53 @@ pub mod desktop_web_components {
                         }
                     }
 
-                    if let Some((topic_id, topic_name)) = show_leave_confirmation() {
-                        ConfirmationDialog {
-                            title: "Leave Topic".to_string(),
-                            message: format!(
-                                "Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.",
-                                topic_name,
-                            ),
-                            confirm_text: "Leave".to_string(),
-                            cancel_text: "Cancel".to_string(),
-                            is_danger: true,
-                            toggle: show_leave_confirmation,
-                            on_confirm: move |_| {
-                                on_leave_topic.call(topic_id.clone());
-                                show_leave_confirmation.set(None);
-                                selected_topic_id.set(None);
-                            },
+
+                    if show_contact_dialog() {
+                         ContactDialog {
+                             toggle: show_contact_dialog,
+                             on_add: on_add_contact,
+                         }
+                    }
+
+                    if let Some((id, name, removal_type)) = show_leave_confirmation() {
+                        {
+                            let (title, message, confirm_text) = match removal_type {
+                                RemovalType::Topic => (
+                                    "Leave Topic".to_string(),
+                                    format!(
+                                        "Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.",
+                                        name
+                                    ),
+                                    "Leave".to_string(),
+                                ),
+                                RemovalType::Contact => (
+                                    "Remove Contact".to_string(),
+                                    format!(
+                                        "Are you sure you want to remove \"{}\" from your contacts?",
+                                        name
+                                    ),
+                                    "Remove".to_string(),
+                                ),
+                            };
+
+                            rsx! {
+                                ConfirmationDialog {
+                                    title,
+                                    message,
+                                    confirm_text,
+                                    cancel_text: "Cancel".to_string(),
+                                    is_danger: true,
+                                    toggle: show_leave_confirmation,
+                                    on_confirm: move |_| {
+                                        match removal_type {
+                                            RemovalType::Topic => on_leave_topic.call(id.clone()),
+                                            RemovalType::Contact => on_remove_contact.call(id.clone()),
+                                        }
+                                        show_leave_confirmation.set(None);
+                                        selected_topic_id.set(None);
+                                    },
+                                }
+                            }
                         }
                     }
                 }
@@ -192,6 +240,7 @@ pub mod desktop_web_components {
                     app_state,
                     topic_id: selected_topic_id(),
                     on_send_message,
+                    on_send_message_dm,
                 }
             }
         }
@@ -306,7 +355,81 @@ pub mod desktop_web_components {
             }
         }
     }
+    #[component]
+    fn ContactDialog(mut toggle: Signal<bool>, on_add: EventHandler<String>) -> Element {
+        let mut address_str = use_signal(String::new);
 
+        let handle_submit = move |_| {
+            let addr = address_str().trim().to_string();
+            if !addr.is_empty() {
+                on_add.call(addr);
+                toggle.set(false);
+                address_str.set(String::new());
+            }
+        };
+
+        rsx! {
+            div {
+                class: "fixed inset-0 bg-black/60 flex items-center justify-center z-1000 animate-[fadeIn_0.2s_ease]",
+                onclick: move |_| {
+                    toggle.set(false);
+                    address_str.set(String::new());
+                },
+                div {
+                    class: "card w-[90%] max-w-125 animate-[slideIn_0.3s_ease]",
+                    onclick: move |e| {
+                        e.stop_propagation();
+                    },
+                    div { class: "flex justify-between items-center py-5 px-6 border-b border-border",
+                        h3 { class: "m-0 text-xl font-semibold text-text-primary",
+                            "Add Contact"
+                        }
+                        button {
+                            class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:invert-100 [&:hover>img]:sepia-0 [&:hover>img]:saturate-7500 [&:hover>img]:hue-rotate-324 [&:hover>img]:brightness-103 [&:hover>img]:contrast-103",
+                            onclick: move |_| {
+                                toggle.set(false);
+                                address_str.set(String::new());
+                            },
+                            img { src: CLOSE_ICON }
+                        }
+                    }
+                    div { class: "p-6",
+                        div { class: "mb-5",
+                            label { class: "block text-text-secondary text-sm font-medium mb-2",
+                                "Contact Address"
+                            }
+                            input {
+                                class: "input-field border-2 border-border focus:border-accent focus:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
+                                r#type: "text",
+                                value: "{address_str}",
+                                placeholder: "Enter contact address...",
+                                oninput: move |e| address_str.set(e.value()),
+                            }
+                        }
+                        p { class: "m-0 text-text-secondary text-[13px] leading-relaxed",
+                            "Enter the address of the user you want to add to your contacts."
+                        }
+                    }
+                    div { class: "flex gap-3 justify-end py-5 px-6 border-t border-border bg-bg-input",
+                        button {
+                            class: "btn-secondary py-2.5 px-6",
+                            onclick: move |_| {
+                                toggle.set(false);
+                                address_str.set(String::new());
+                            },
+                            "Cancel"
+                        }
+                        button {
+                            class: "btn-primary py-2.5 px-6 disabled:bg-bg-subtle disabled:text-text-muted disabled:cursor-not-allowed disabled:shadow-none",
+                            disabled: address_str().trim().is_empty(),
+                            onclick: handle_submit,
+                            "Add Contact"
+                        }
+                    }
+                }
+            }
+        }
+    }
     #[component]
     fn ConfirmationDialog(
         title: String,
@@ -314,7 +437,7 @@ pub mod desktop_web_components {
         confirm_text: String,
         cancel_text: String,
         is_danger: bool,
-        mut toggle: Signal<Option<(String, String)>>,
+        mut toggle: Signal<Option<(String, String, RemovalType)>>,
         on_confirm: EventHandler<()>,
     ) -> Element {
         let button_class = if is_danger {
@@ -449,46 +572,84 @@ pub mod desktop_web_components {
         app_state: Signal<AppState>,
         topic_id: Option<String>,
         on_send_message: EventHandler<(String, String)>,
+        on_send_message_dm: EventHandler<(String, String)>,
     ) -> Element {
         let state = app_state();
 
-        let topic = if let Some(id) = topic_id {
-            state.get_topic(&id)
+        let topic = if let Some(id) = &topic_id {
+            state.get_topic(id)
         } else {
             None
         };
 
-        if let Some(topic) = topic {
-            let messages = &topic.messages;
-            let topic_name = &topic.name;
+        let contact = if let Some(id) = &topic_id {
+            state.get_contact_chat(id)
+        } else {
+            None
+        };
 
-            let avatar_url = if let Some(url) = &topic.avatar_url {
-                url.to_string()
-            } else {
-                DEFAULT_AVATAR.to_string()
-            };
+        let (messages, title_text, avatar_url, chat_id) = if let Some(topic) = topic {
+            (
+                topic.messages.clone(),
+                topic.name.clone(),
+                topic
+                    .avatar_url
+                    .clone()
+                    .unwrap_or(DEFAULT_AVATAR.to_string()),
+                topic.id.clone(),
+            )
+        } else if let Some(contact) = contact {
+            (
+                contact
+                    .messages
+                    .iter()
+                    .cloned()
+                    .map(Message::from)
+                    .collect::<Vec<Message>>(),
+                contact.profile.name.clone(),
+                contact
+                    .profile
+                    .avatar
+                    .clone()
+                    .unwrap_or(DEFAULT_AVATAR.to_string()),
+                contact.profile.id.clone(),
+            )
+        } else {
+            (
+                Vec::<Message>::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+            )
+        };
 
+        if !chat_id.is_empty() {
             let mut message_input = use_signal(String::new);
 
-            let topic_id_str = topic.id.clone();
-            let mut tracked_topic_id = use_signal(|| topic_id_str.clone());
+            let mut tracked_id = use_signal(|| chat_id.clone());
             let mut last_msg_count = use_signal(|| 0);
 
-            if *tracked_topic_id.read() != topic_id_str {
-                tracked_topic_id.set(topic_id_str.clone());
+            if *tracked_id.read() != chat_id {
+                tracked_id.set(chat_id.clone());
                 last_msg_count.set(0);
             }
 
             use_effect(move || {
                 let state = app_state();
-                let current_topic_id = tracked_topic_id.read();
+                let current_id = tracked_id.read();
 
-                if let Some(t) = state.get_topic(&current_topic_id) {
-                    let count = t.messages.len();
-                    if count != *last_msg_count.read() {
-                        last_msg_count.set(count);
-                        document::eval(
-                            r#"
+                let count = if let Some(t) = state.get_topic(&current_id) {
+                    t.messages.len()
+                } else if let Some(c) = state.get_contact_chat(&current_id) {
+                    c.messages.len()
+                } else {
+                    0
+                };
+
+                if count != *last_msg_count.read() {
+                    last_msg_count.set(count);
+                    document::eval(
+                        r#"
                             requestAnimationFrame(() => {
                                 const element = document.getElementById("chat-messages-container");
                                 if (element) {
@@ -496,17 +657,21 @@ pub mod desktop_web_components {
                                 }
                             });
                         "#,
-                        );
-                    }
+                    );
                 }
             });
 
             let send_message = use_callback({
-                let topic_id = topic.id.clone();
+                let id = chat_id.clone();
+                let is_dm = contact.is_some();
                 move |_| {
                     let content = message_input().trim().to_string();
                     if !content.is_empty() {
-                        on_send_message.call((topic_id.clone(), content));
+                        if is_dm {
+                            on_send_message_dm.call((id.clone(), content)); // We need to pass on_send_message_dm into Chat!
+                        } else {
+                            on_send_message.call((id.clone(), content));
+                        }
                         message_input.set(String::new());
                     }
                 }
@@ -521,8 +686,8 @@ pub mod desktop_web_components {
                         }
                         h2 {
                             class: "m-0 text-[clamp(1.1rem,2.5vw,1.4rem)] font-semibold text-text-primary max-w-100 overflow-hidden text-ellipsis whitespace-nowrap",
-                            title: "{topic_name}",
-                            "{topic_name}"
+                            title: "{title_text}",
+                            "{title_text}"
                         }
                     }
                     div {
@@ -561,10 +726,21 @@ pub mod desktop_web_components {
             rsx! {
                 div { class: "flex-1 flex items-center justify-center bg-bg-input text-text-secondary",
                     h2 { class: "text-[clamp(1.2rem,3vw,1.8rem)] font-medium m-0",
-                        "Select a topic to start chatting"
+                        "Select a chat to start messaging"
                     }
                 }
             }
+        }
+    }
+
+    // Add truncation helper
+    fn truncate_id(id: &str) -> String {
+        if id.len() > 12 {
+            let start = &id[..6];
+            let end = &id[id.len() - 6..];
+            format!("{}...{}", start, end)
+        } else {
+            id.to_string()
         }
     }
 
@@ -573,10 +749,12 @@ pub mod desktop_web_components {
         match message {
             Message::Chat(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
+                let sender_display = truncate_id(&message.sender_id);
                 rsx! {
                     div { class: if message.is_sent { "message-bubble-sent" } else { "message-bubble-received" },
                         p { class: "message-sender-id m-0 mb-1 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
-                            "{message.sender_id}"
+                            title: "{message.sender_id}",
+                            "{sender_display}"
                         }
                         p { class: "m-0 text-[clamp(14px,2vw,15px)] leading-snug",
                             "{message.content}"
@@ -997,7 +1175,7 @@ pub mod desktop_web_components {
         search_query: Signal<String>,
         selected_topic_id: Signal<Option<String>>,
         show_topic_details: Signal<Option<Topic>>,
-        show_leave_confirmation: Signal<Option<(String, String)>>,
+        show_leave_confirmation: Signal<Option<(String, String, RemovalType)>>,
         app_state: Signal<AppState>,
     ) -> Element {
         let topic_list: Vec<Topic> = {
@@ -1068,7 +1246,7 @@ pub mod desktop_web_components {
                                             on_select: {
                                                 move |_| {
                                                     show_leave_confirmation
-                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone())))
+                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone(), RemovalType::Topic)))
                                                 }
                                             },
                                             "Leave Topic"
@@ -1087,7 +1265,7 @@ pub mod desktop_web_components {
         search_query: Signal<String>,
         selected_topic_id: Signal<Option<String>>,
         show_profile_details: Signal<Option<Profile>>,
-        show_leave_confirmation: Signal<Option<(String, String)>>,
+        show_leave_confirmation: Signal<Option<(String, String, RemovalType)>>,
         app_state: Signal<AppState>,
     ) -> Element {
         let contact_list: Vec<ProfileChat> = {
@@ -1184,7 +1362,7 @@ pub mod desktop_web_components {
                                             on_select: {
                                                 move |_| {
                                                     show_leave_confirmation
-                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone())))
+                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone(), RemovalType::Contact)))
                                                 }
                                             },
                                             "Remove Contact"

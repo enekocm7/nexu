@@ -4,12 +4,11 @@ use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
-use p2p::types::Address;
 use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ui::desktop::models::{AppState, ChatMessage, Profile, Topic};
+use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Profile, Topic};
 
 pub struct AppController {
     app_state: Signal<AppState>,
@@ -103,9 +102,7 @@ impl AppController {
                     .await
                     .peer_id()
                     .await
-                    .map_err(|e| Error::PeerId(e.to_string()))?
-                    .parse()
-                    .map_err(|_| Error::InvalidPeerId)?;
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
 
                 desktop_client
                     .lock()
@@ -140,9 +137,7 @@ impl AppController {
                 let id = client
                     .peer_id()
                     .await
-                    .map_err(|e| Error::PeerId(e.to_string()))?
-                    .parse()
-                    .map_err(|_| Error::InvalidPeerId)?;
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
 
                 let ticket = Ticket::from_str(&topic_id)
                     .map_err(|_| Error::InvalidTicket("Failed to parse topic_id".to_string()))?;
@@ -212,7 +207,7 @@ impl AppController {
                 app_state.with_mut(|state| {
                     if let Some(topic) = state.get_topic_mutable(&ticket_id) {
                         let msg = ChatMessage::new(
-                            peer_id.clone(),
+                            peer_id.to_string(),
                             ticket_id.clone(),
                             message.clone(),
                             now,
@@ -239,11 +234,12 @@ impl AppController {
 
     pub fn send_message_to_user(&self, user_addr: String, message: String) {
         let desktop_client = Arc::clone(&self.desktop_client);
+        let mut app_state = self.get_app_state();
 
         spawn(async move {
             let result: Result<(), Error> = async {
                 let client_ref = desktop_client.clone();
-                let client = client_ref.lock().await;
+                let mut client = client_ref.lock().await;
 
                 let msg = client
                     .get_dm_chat_message(&user_addr, &message)
@@ -251,16 +247,43 @@ impl AppController {
                     .map_err(|e| Error::MessageCreation(e.to_string()))?;
 
                 client
+                    .connect_to_user(&user_addr)
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                client
                     .send_dm(&user_addr, p2p::DmMessageTypes::Chat(msg))
                     .await
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                let peer_id = client
+                    .peer_id()
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                let user_addr_clone = user_addr.clone();
+                let message_clone = message.clone();
+
+                app_state.with_mut(|state| {
+                    let chat_msg = DmChatMessage::new(
+                        peer_id.to_string(),
+                        user_addr_clone.clone(),
+                        message_clone,
+                        Utc::now().timestamp_millis() as u64,
+                        true,
+                    );
+                    state.add_dm_message(&user_addr_clone, chat_msg);
+                });
+
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 Ok(())
             }
             .await;
 
             if let Err(e) = result {
-                eprintln!("Failed to send message to user {user_addr}: {e}");
+                eprintln!("Failed to send message to user {u}: {e}", u = user_addr);
             }
         });
     }
@@ -344,6 +367,7 @@ impl AppController {
 
     pub fn connect_to_user(&self, user_id: String) {
         let desktop_client = Arc::clone(&self.desktop_client);
+        let mut app_state = self.get_app_state();
 
         spawn(async move {
             let result: Result<(), Error> = async {
@@ -355,18 +379,27 @@ impl AppController {
                     .await
                     .map_err(|e| Error::PeerId(e.to_string()))?;
 
-                let user_address: Address = user_id.parse().map_err(|_| Error::InvalidPeerId)?;
-
                 let self_address = client
-                    .get_self_address()
+                    .peer_id()
                     .await
                     .map_err(|e| Error::PeerId(e.to_string()))?;
 
                 let join_msg = p2p::DmJoinMessage::new(
                     self_address,
-                    user_address,
+                    user_id.parse().map_err(|_| Error::InvalidPeerId)?,
                     Utc::now().timestamp_millis() as u64,
                 );
+
+                let user_id_clone = user_id.clone();
+                app_state.with_mut(|state| {
+                    if state.get_contact(&user_id_clone).is_none() {
+                        let profile = Profile::new_with_id(&user_id_clone);
+                        state.add_contact(profile);
+                    }
+                });
+
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 client
                     .send_dm(&user_id, p2p::DmMessageTypes::JoinPetition(join_msg))
@@ -379,6 +412,26 @@ impl AppController {
 
             if let Err(e) = result {
                 eprintln!("Failed to connect to user {}: {}", user_id, e);
+            }
+        });
+    }
+
+    pub fn remove_contact(&self, profile_id: String) {
+        let mut app_state = self.get_app_state();
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                app_state.write().remove_contact(&profile_id);
+
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to remove contact {}: {}", profile_id, e);
             }
         });
     }

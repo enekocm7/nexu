@@ -249,6 +249,16 @@ impl AppState {
             profile.last_connection = Offline(timestamp);
         }
     }
+
+    pub fn add_dm_message(&mut self, profile_id: &str, message: DmChatMessage) {
+        if let Some(contact) = self.contacts.get_mut(profile_id) {
+            contact.add_dm_message(message);
+        } else {
+            let mut contact = ProfileChat::new(Profile::new_with_id(profile_id));
+            contact.add_dm_message(message);
+            self.contacts.insert(profile_id.to_string(), contact);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -321,6 +331,66 @@ impl ChatMessage {
             content,
             timestamp,
             is_sent,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DmChatMessage {
+    pub sender_id: String,
+    pub receiver_id: String,
+    pub content: String,
+    pub timestamp: u64,
+    pub is_sent: bool,
+}
+
+impl DmChatMessage {
+    pub fn new(
+        sender_id: String,
+        receiver_id: String,
+        content: String,
+        timestamp: u64,
+        is_sent: bool,
+    ) -> Self {
+        Self {
+            sender_id,
+            receiver_id,
+            content,
+            timestamp,
+            is_sent,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum DmMessage {
+    Chat(DmChatMessage),
+}
+
+impl DmMessage {
+    pub fn get_timestamp(&self) -> u64 {
+        match self {
+            DmMessage::Chat(msg) => msg.timestamp,
+        }
+    }
+
+    pub fn get_content(&self) -> &str {
+        match self {
+            DmMessage::Chat(msg) => &msg.content,
+        }
+    }
+}
+
+impl From<DmMessage> for Message {
+    fn from(dm_msg: DmMessage) -> Self {
+        match dm_msg {
+            DmMessage::Chat(dm_chat) => Message::Chat(ChatMessage {
+                sender_id: dm_chat.sender_id,
+                topic_id: dm_chat.receiver_id,
+                content: dm_chat.content,
+                timestamp: dm_chat.timestamp,
+                is_sent: dm_chat.is_sent,
+            }),
         }
     }
 }
@@ -454,7 +524,7 @@ impl Hash for Profile {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ProfileChat {
     pub profile: Profile,
-    pub messages: Vec<ChatMessage>,
+    pub messages: Vec<DmMessage>,
     pub last_changed: u64,
 }
 
@@ -468,12 +538,14 @@ impl ProfileChat {
     }
 
     pub fn last_message(&self) -> Option<String> {
-        self.messages.last().map(|msg| msg.content.clone())
+        self.messages
+            .last()
+            .map(|msg| msg.get_content().to_string())
     }
 
-    pub fn add_message(&mut self, message: ChatMessage) {
+    pub fn add_dm_message(&mut self, message: DmChatMessage) {
         self.last_changed = chrono::Utc::now().timestamp_millis() as u64;
-        self.messages.push(message);
+        self.messages.push(DmMessage::Chat(message));
     }
 }
 

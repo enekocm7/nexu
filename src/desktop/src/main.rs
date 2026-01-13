@@ -4,7 +4,7 @@ mod message_handler;
 mod utils;
 
 use crate::client::DesktopClient;
-use crate::utils::contacts::load_profile;
+use crate::utils::contacts::{load_contacts, load_profile};
 use crate::utils::topics::{load_topics_from_file, save_topics_to_file};
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
@@ -47,7 +47,7 @@ fn App() -> Element {
             }
 
             let peer_id = match client_ref.lock().await.peer_id().await {
-                Ok(id) => id,
+                Ok(id) => id.to_string(),
                 Err(e) => {
                     eprintln!("Failed to get peer_id: {}", e);
                     return;
@@ -70,6 +70,13 @@ fn App() -> Element {
                 let mut state = controller.read().get_app_state();
                 state.write().set_profile_id(&peer_id);
                 state.write().set_profile_name(&peer_id);
+            }
+
+            if let Ok(loaded_contacts) = load_contacts() {
+                let mut state = controller.read().get_app_state();
+                for contact in loaded_contacts {
+                    state.write().add_contact(contact);
+                }
             }
 
             if let Ok(loaded_topics) = load_topics_from_file() {
@@ -99,12 +106,7 @@ fn App() -> Element {
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
                     let client = client_ref.lock().await;
-                    let id = client
-                        .peer_id()
-                        .await
-                        .expect("Failed to get peer_id")
-                        .parse()
-                        .expect("Failed to parse peer_id");
+                    let id = client.peer_id().await.expect("Failed to get peer_id");
 
                     let all_topics = controller.read().get_app_state()().get_all_topics();
 
@@ -154,6 +156,12 @@ fn App() -> Element {
             on_connect_peer: move |username: String| {
                 controller.read().connect_to_user(username);
             },
+            on_add_contact: move |username: String| {
+                controller.read().connect_to_user(username);
+            },
+            on_remove_contact: move |profile_id: String| {
+                controller.read().remove_contact(profile_id);
+            },
         }
     }
 }
@@ -193,13 +201,7 @@ async fn join_topic_internal(
 
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
 
-            let id = desktop_client
-                .lock()
-                .await
-                .peer_id()
-                .await?
-                .parse()
-                .expect("Invalid peer id");
+            let id = desktop_client.lock().await.peer_id().await?;
 
             desktop_client
                 .lock()

@@ -2,11 +2,15 @@ use crate::client::DesktopClient;
 use crate::utils::topics::save_topics_to_file;
 use chrono::Utc;
 use dioxus::prelude::{Signal, WritableExt};
-use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
+use p2p::DmChatMessage as P2pDmChatMessage;
+use p2p::{
+    DmJoinMessage, DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket,
+    TopicMetadataMessage,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ui::desktop::models::{AppState, ChatMessage, Message};
+use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Message};
 
 pub fn handle_chat_message(mut state: Signal<AppState>, topic: &str, msg: p2p::ChatMessage) {
     state.with_mut(|s| {
@@ -286,6 +290,11 @@ pub async fn process_all_messages(client_ref: &Arc<Mutex<DesktopClient>>, state:
         process_message(client_ref, state, topic, message).await;
     }
 
+    let dm_messages = collect_dm_messages(client_ref).await;
+    for (sender, message) in dm_messages {
+        process_dm_message(state, sender, message).await;
+    }
+
     if let Err(e) = save_topics_to_file(&state().get_all_topics()) {
         eprintln!("Failed to save topics to file: {}", e);
     }
@@ -315,5 +324,97 @@ impl P2PMessageConvert for ChatMessage {
             self.timestamp,
             ticket.topic,
         )
+    }
+}
+
+pub fn handle_dm_chat_message(
+    mut state: Signal<AppState>,
+    sender: p2p::EndpointId,
+    msg: P2pDmChatMessage,
+) {
+    state.with_mut(|s| {
+        let sender_id = sender.to_string();
+        let receiver_id = msg.receiver.to_string();
+
+        let message = DmChatMessage::new(
+            sender_id.clone(),
+            receiver_id,
+            msg.content.clone(),
+            msg.timestamp,
+            false,
+        );
+        s.add_dm_message(&sender_id, message);
+    });
+}
+
+pub fn handle_dm_profile_metadata(
+    mut state: Signal<AppState>,
+    sender: p2p::EndpointId,
+    msg: DmProfileMetadataMessage,
+) {
+    state.with_mut(|s| {
+        let profile_id = sender.to_string();
+
+        let profile = ui::desktop::models::Profile {
+            id: profile_id,
+            name: msg.username,
+            avatar: msg.avatar_url,
+            last_connection: ui::desktop::models::ConnectionStatus::Offline(msg.last_connection),
+        };
+        s.modify_contact(profile);
+    });
+}
+
+pub fn handle_dm_join_petition(
+    mut state: Signal<AppState>,
+    _sender: p2p::EndpointId,
+    msg: DmJoinMessage,
+) {
+    let petitioner_id = msg.petitioner.to_string();
+
+    state.with_mut(|s| {
+        if s.get_contact(&petitioner_id).is_none() {
+            let profile = ui::desktop::models::Profile::new_with_id(&petitioner_id);
+            s.add_contact(profile);
+        }
+    });
+
+    if let Err(e) = crate::utils::contacts::save_contacts(&state().get_all_contacts()) {
+        eprintln!("Failed to save contacts: {}", e);
+    }
+}
+
+pub async fn collect_dm_messages(
+    client_ref: &Arc<Mutex<DesktopClient>>,
+) -> Vec<(p2p::EndpointId, DmMessageTypes)> {
+    let receiver_result = client_ref.lock().await.get_global_dm_receiver().await;
+
+    let mut msgs = Vec::new();
+
+    if let Ok(receiver) = receiver_result {
+        while let Ok((sender, message)) = receiver.try_recv() {
+            msgs.push((sender, message));
+        }
+    } else {
+        eprintln!("Failed to get DM receiver");
+    }
+    msgs
+}
+
+pub async fn process_dm_message(
+    state: Signal<AppState>,
+    sender: p2p::EndpointId,
+    message: DmMessageTypes,
+) {
+    match message {
+        DmMessageTypes::Chat(msg) => {
+            handle_dm_chat_message(state, sender, msg);
+        }
+        DmMessageTypes::ProfileMetadata(msg) => {
+            handle_dm_profile_metadata(state, sender, msg);
+        }
+        DmMessageTypes::JoinPetition(msg) => {
+            handle_dm_join_petition(state, sender, msg);
+        }
     }
 }
