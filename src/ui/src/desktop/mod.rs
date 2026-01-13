@@ -30,6 +30,8 @@ pub mod desktop_web_components {
         on_send_message: EventHandler<(String, String)>,
         on_modify_topic: EventHandler<Topic>,
         on_modify_profile: EventHandler<Profile>,
+        on_send_message_dm: EventHandler<(String, String)>,
+        on_connect_peer: EventHandler<String>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
         let mut selected_topic_id = use_signal::<Option<String>>(|| None);

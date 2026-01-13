@@ -4,6 +4,7 @@ use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
+use p2p::types::Address;
 use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -236,10 +237,32 @@ impl AppController {
         });
     }
 
-    pub fn send_message_to_user(&self, _user_id: String, _message: String) {
-        // Placeholder for direct messaging functionality
-        // Not implemented in main.rs yet
-        todo!("Direct user messaging not yet implemented")
+    pub fn send_message_to_user(&self, user_addr: String, message: String) {
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let client_ref = desktop_client.clone();
+                let client = client_ref.lock().await;
+
+                let msg = client
+                    .get_dm_chat_message(&user_addr, &message)
+                    .await
+                    .map_err(|e| Error::MessageCreation(e.to_string()))?;
+
+                client
+                    .send_dm(&user_addr, p2p::DmMessageTypes::Chat(msg))
+                    .await
+                    .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to send message to user {user_addr}: {e}");
+            }
+        });
     }
 
     pub fn modify_topic(&self, topic: Topic) {
@@ -319,10 +342,45 @@ impl AppController {
         });
     }
 
-    pub fn connect_to_user(&self, _user_id: String) {
-        // Placeholder for direct user connection functionality
-        // Not implemented in main.rs yet
-        todo!("Direct user connection not yet implemented")
+    pub fn connect_to_user(&self, user_id: String) {
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let client_ref = desktop_client.clone();
+                let mut client = client_ref.lock().await;
+
+                client
+                    .connect_to_user(&user_id)
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                let user_address: Address = user_id.parse().map_err(|_| Error::InvalidPeerId)?;
+
+                let self_address = client
+                    .get_self_address()
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                let join_msg = p2p::DmJoinMessage::new(
+                    self_address,
+                    user_address,
+                    Utc::now().timestamp_millis() as u64,
+                );
+
+                client
+                    .send_dm(&user_id, p2p::DmMessageTypes::JoinPetition(join_msg))
+                    .await
+                    .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to connect to user {}: {}", user_id, e);
+            }
+        });
     }
 }
 

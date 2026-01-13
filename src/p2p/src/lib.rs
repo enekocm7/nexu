@@ -6,7 +6,8 @@ pub mod utils;
 
 pub use client::ChatClient;
 pub use messages::{
-    ChatMessage, DisconnectMessage, GossipMessage, JoinMessage, LeaveMessage, MessageTypes,
+    ChatMessage, DisconnectMessage, DmChatMessage, DmJoinMessage, DmMessageTypes,
+    DmProfileMetadataMessage, GossipMessage, JoinMessage, LeaveMessage, MessageTypes,
     TopicMessagesMessage, TopicMetadataMessage,
 };
 pub use types::Ticket;

@@ -88,7 +88,6 @@ fn App() -> Element {
                     let mut msgs = Vec::new();
                     for (topic, receiver) in client.get_message_receiver() {
                         while let Ok(message) = receiver.try_recv() {
-                            eprintln!("[DEBUG] Received message for topic: {}", topic);
                             msgs.push((topic.to_string(), message));
                         }
                     }
@@ -395,6 +394,12 @@ fn App() -> Element {
             },
             on_modify_profile: move |profile: Profile| {
                 controller.read().modify_profile(profile);
+            },
+            on_send_message_dm: move |(recipient_id, message): (String, String)| {
+                controller.read().send_message_to_user(recipient_id, message);
+            },
+            on_connect_peer: move |username: String| {
+                controller.read().connect_to_user(username);
             },
         }
     }

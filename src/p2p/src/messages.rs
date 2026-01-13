@@ -175,6 +175,7 @@ impl Display for ChatMessage {
 pub enum DmMessageTypes {
     Chat(DmChatMessage),
     ProfileMetadata(DmProfileMetadataMessage),
+    JoinPetition(DmJoinMessage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,6 +221,27 @@ impl DmChatMessage {
             sender,
             receiver,
             content,
+            timestamp,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DmJoinMessage {
+    pub petitioner: EndpointAddr,
+    pub target: EndpointAddr,
+    pub timestamp: u64,
+}
+
+impl DmJoinMessage {
+    pub fn new(
+        petitioner: impl Into<EndpointAddr>,
+        target: impl Into<EndpointAddr>,
+        timestamp: u64,
+    ) -> Self {
+        DmJoinMessage {
+            petitioner: petitioner.into(),
+            target: target.into(),
             timestamp,
         }
     }
