@@ -1,4 +1,4 @@
-use iroh::{EndpointAddr, EndpointId};
+use iroh::EndpointId;
 use iroh_gossip::proto::TopicId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -180,7 +180,7 @@ pub enum DmMessageTypes {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmProfileMetadataMessage {
-    pub addr: EndpointAddr,
+    pub id: EndpointId,
     pub username: String,
     pub avatar_url: Option<String>,
     pub last_connection: u64,
@@ -188,13 +188,13 @@ pub struct DmProfileMetadataMessage {
 
 impl DmProfileMetadataMessage {
     pub fn new(
-        addr: EndpointAddr,
+        id: EndpointId,
         username: String,
         avatar_url: Option<String>,
         last_connection: u64,
     ) -> Self {
         DmProfileMetadataMessage {
-            addr,
+            id,
             username,
             avatar_url,
             last_connection,
@@ -205,18 +205,13 @@ impl DmProfileMetadataMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmChatMessage {
     pub sender: EndpointId,
-    pub receiver: EndpointAddr,
+    pub receiver: EndpointId,
     pub content: String,
     pub timestamp: u64,
 }
 
 impl DmChatMessage {
-    pub fn new(
-        sender: EndpointId,
-        receiver: EndpointAddr,
-        content: String,
-        timestamp: u64,
-    ) -> Self {
+    pub fn new(sender: EndpointId, receiver: EndpointId, content: String, timestamp: u64) -> Self {
         DmChatMessage {
             sender,
             receiver,
@@ -228,20 +223,20 @@ impl DmChatMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmJoinMessage {
-    pub petitioner: EndpointAddr,
-    pub target: EndpointAddr,
+    pub petitioner: EndpointId,
+    pub target: EndpointId,
     pub timestamp: u64,
 }
 
 impl DmJoinMessage {
     pub fn new(
-        petitioner: impl Into<EndpointAddr>,
-        target: impl Into<EndpointAddr>,
+        petitioner: EndpointId,
+        target: EndpointId,
         timestamp: u64,
     ) -> Self {
         DmJoinMessage {
-            petitioner: petitioner.into(),
-            target: target.into(),
+            petitioner,
+            target,
             timestamp,
         }
     }

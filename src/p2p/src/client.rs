@@ -4,9 +4,11 @@ use crate::types::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
 use futures_lite::StreamExt;
+use iroh::discovery::dns::DnsDiscovery;
+use iroh::discovery::pkarr::PkarrPublisher;
 use iroh::endpoint::SendStream;
 use iroh::protocol::Router;
-use iroh::{Endpoint, EndpointAddr, EndpointId};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use std::collections::HashMap;
@@ -30,7 +32,12 @@ impl ChatClient {
     pub async fn new(path_buf: PathBuf) -> anyhow::Result<Self> {
         let secret = load_secret_key(path_buf.join("secret.key")).await?;
 
-        let endpoint = Endpoint::builder().secret_key(secret).bind().await?;
+        let endpoint = Endpoint::empty_builder(RelayMode::Default)
+            .secret_key(secret)
+            .discovery(PkarrPublisher::n0_dns())
+            .discovery(DnsDiscovery::n0_dns())
+            .bind()
+            .await?;
 
         let gossip = Gossip::builder()
             .max_message_size(1_048_576)
@@ -519,24 +526,26 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr();
-        let addr2 = client2.endpoint_addr();
+        sleep(Duration::from_secs(1)).await;
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
 
         client1
-            .connect_peer(addr2.clone())
+            .connect_peer(client2_id)
             .await
             .expect("Failed to connect");
 
         let msg_content =
             DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: addr1.clone(),
+                id: client1_id,
                 username: "user1".to_string(),
                 avatar_url: None,
                 last_connection: 12345,
             });
 
         client1
-            .send_dm(addr2.clone(), msg_content)
+            .send_dm(client2_id, msg_content)
             .await
             .expect("Failed to send DM");
 
@@ -548,7 +557,7 @@ mod tests {
                 .expect("Timeout waiting for DM")
                 .expect("Failed to receive DM");
 
-        assert_eq!(sender, addr1.id);
+        assert_eq!(sender, client1_id);
 
         match received_msg {
             DmMessageTypes::ProfileMetadata(meta) => {
@@ -572,11 +581,13 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
+        sleep(Duration::from_secs(1)).await;
+
         let addr2 = client2.endpoint_addr();
 
         let msg_content =
             DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: client1.endpoint_addr(),
+                id: client1.peer_id(),
                 username: "user1".to_string(),
                 avatar_url: None,
                 last_connection: 12345,
@@ -600,21 +611,23 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr();
-        let addr2 = client2.endpoint_addr();
+        sleep(Duration::from_secs(1)).await;
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
 
         client1
-            .connect_peer(addr2.clone())
+            .connect_peer(client2_id)
             .await
             .expect("Failed to connect client1 to client2");
         client2
-            .connect_peer(addr1.clone())
+            .connect_peer(client1_id)
             .await
             .expect("Failed to connect client2 to client1");
 
         let msg_from_1 =
             DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: addr1.clone(),
+                id: client1_id,
                 username: "user1".to_string(),
                 avatar_url: None,
                 last_connection: 100,
@@ -622,19 +635,19 @@ mod tests {
 
         let msg_from_2 =
             DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: addr2.clone(),
+                id: client2_id,
                 username: "user2".to_string(),
                 avatar_url: None,
                 last_connection: 200,
             });
 
         client1
-            .send_dm(addr2.clone(), msg_from_1)
+            .send_dm(client2_id, msg_from_1)
             .await
             .expect("Failed to send DM from client1");
 
         client2
-            .send_dm(addr1.clone(), msg_from_2)
+            .send_dm(client1_id, msg_from_2)
             .await
             .expect("Failed to send DM from client2");
 
@@ -645,7 +658,7 @@ mod tests {
                 .expect("Timeout waiting for DM on client2")
                 .expect("Failed to receive DM on client2");
 
-        assert_eq!(sender2, addr1.id);
+        assert_eq!(sender2, client1_id);
         match received_msg2 {
             DmMessageTypes::ProfileMetadata(meta) => {
                 assert_eq!(meta.username, "user1");
@@ -660,7 +673,7 @@ mod tests {
                 .expect("Timeout waiting for DM on client1")
                 .expect("Failed to receive DM on client1");
 
-        assert_eq!(sender1, addr2.id);
+        assert_eq!(sender1, client2_id);
         match received_msg1 {
             DmMessageTypes::ProfileMetadata(meta) => {
                 assert_eq!(meta.username, "user2");
@@ -682,23 +695,25 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr();
-        let addr2 = client2.endpoint_addr();
+        sleep(Duration::from_secs(1)).await;
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
 
         client1
-            .connect_peer(addr2.clone())
+            .connect_peer(client2_id)
             .await
             .expect("Failed to connect");
 
         for i in 0..5 {
             let msg = DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
-                addr: addr1.clone(),
+                id: client1_id,
                 username: format!("user1_message_{}", i),
                 avatar_url: None,
                 last_connection: i as u64,
             });
             client1
-                .send_dm(addr2.clone(), msg)
+                .send_dm(client2_id, msg)
                 .await
                 .expect("Failed to send DM");
         }
@@ -711,7 +726,7 @@ mod tests {
                     .expect("Timeout waiting for DM")
                     .expect("Failed to receive DM");
 
-            assert_eq!(sender, addr1.id);
+            assert_eq!(sender, client1_id);
             match received_msg {
                 DmMessageTypes::ProfileMetadata(meta) => {
                     assert_eq!(meta.username, format!("user1_message_{}", i));
@@ -735,23 +750,25 @@ mod tests {
             .await
             .expect("Failed to create client2");
 
-        let addr1 = client1.endpoint_addr();
-        let addr2 = client2.endpoint_addr();
+        sleep(Duration::from_secs(1)).await;
+
+        let client1_id = client1.peer_id();
+        let client2_id = client2.peer_id();
 
         client1
-            .connect_peer(addr2.clone())
+            .connect_peer(client2_id)
             .await
             .expect("Failed to connect");
 
         let msg_content = DmMessageTypes::Chat(crate::messages::DmChatMessage {
-            sender: addr1.id,
-            receiver: addr2.clone(),
+            sender: client1_id,
+            receiver: client2_id,
             content: "Hello DM".to_string(),
             timestamp: 123456789,
         });
 
         client1
-            .send_dm(addr2.clone(), msg_content)
+            .send_dm(client2_id, msg_content)
             .await
             .expect("Failed to send DM");
 
@@ -763,10 +780,11 @@ mod tests {
                 .expect("Timeout waiting for DM")
                 .expect("Failed to receive DM");
 
-        assert_eq!(sender, addr1.id);
+        assert_eq!(sender, client1_id);
 
         match received_msg {
             DmMessageTypes::Chat(chat_msg) => {
+                assert_eq!(chat_msg.sender, client1_id);
                 assert_eq!(chat_msg.content, "Hello DM");
                 assert_eq!(chat_msg.timestamp, 123456789);
             }
