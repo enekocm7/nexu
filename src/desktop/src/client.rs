@@ -9,7 +9,6 @@ use tokio::sync::{Mutex, OnceCell};
 pub struct DesktopClient {
     client: OnceCell<Mutex<ChatClient>>,
     message_receivers: HashMap<String, Receiver<MessageTypes>>,
-    dm_receivers: HashMap<String, Receiver<DmMessageTypes>>,
 }
 
 impl DesktopClient {
@@ -17,7 +16,6 @@ impl DesktopClient {
         Self {
             client: OnceCell::new(),
             message_receivers: HashMap::new(),
-            dm_receivers: HashMap::new(),
         }
     }
 
