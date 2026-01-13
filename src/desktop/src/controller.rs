@@ -4,11 +4,11 @@ use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
-use p2p::{MessageTypes, Ticket, TopicMetadataMessage};
+use p2p::{DmProfileMetadataMessage, MessageTypes, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Profile, Topic};
+use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic};
 
 pub struct AppController {
     app_state: Signal<AppState>,
@@ -275,7 +275,7 @@ impl AppController {
                     state.add_dm_message(&user_addr_clone, chat_msg);
                 });
 
-                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts_chat())
                     .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 Ok(())
@@ -398,13 +398,34 @@ impl AppController {
                     }
                 });
 
-                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
-                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
-
                 client
                     .send_dm(&user_id, p2p::DmMessageTypes::JoinPetition(join_msg))
                     .await
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                let profile = app_state.read().get_profile();
+                
+                let last_connection = match profile.last_connection {
+                    ui::desktop::models::ConnectionStatus::Online => {
+                        Utc::now().timestamp_millis() as u64
+                    }
+                    ui::desktop::models::ConnectionStatus::Offline(time) => time,
+                };
+
+                let msg = DmProfileMetadataMessage::new(
+                    profile.id.parse().expect("id should be an EndpointId"),
+                    profile.name,
+                    profile.avatar,
+                    last_connection,
+                );
+
+                client
+                    .send_dm(&user_id, p2p::DmMessageTypes::ProfileMetadata(msg))
+                    .await
+                    .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts_chat())
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 Ok(())
             }
@@ -416,6 +437,34 @@ impl AppController {
         });
     }
 
+    pub fn reconnect_to_user(&self, chat: ProfileChat) {
+        let desktop_client = Arc::clone(&self.desktop_client);
+        let mut app_state = self.get_app_state();
+
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                app_state.write().add_contact_chat(chat.clone());
+
+                desktop_client
+                    .lock()
+                    .await
+                    .connect_to_user(&chat.profile.id)
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts_chat())
+                    .map_err(|e| Error::ProfileSave(e.to_string()))?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to reconnect to user {}: {}", chat.profile.id, e);
+            }
+        });
+    }
+
     pub fn remove_contact(&self, profile_id: String) {
         let mut app_state = self.get_app_state();
 
@@ -423,7 +472,7 @@ impl AppController {
             let result: Result<(), Error> = async {
                 app_state.write().remove_contact(&profile_id);
 
-                utils::contacts::save_contacts(&app_state.read().get_all_contacts())
+                utils::contacts::save_contacts(&app_state.read().get_all_contacts_chat())
                     .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
                 Ok(())

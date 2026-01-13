@@ -1,7 +1,9 @@
 use crate::client::DesktopClient;
 use crate::utils::topics::save_topics_to_file;
 use chrono::Utc;
+use dioxus::core::spawn;
 use dioxus::prelude::{Signal, WritableExt};
+use dioxus::signals::ReadableExt;
 use p2p::DmChatMessage as P2pDmChatMessage;
 use p2p::{
     DmJoinMessage, DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket,
@@ -291,8 +293,9 @@ pub async fn process_all_messages(client_ref: &Arc<Mutex<DesktopClient>>, state:
     }
 
     let dm_messages = collect_dm_messages(client_ref).await;
-    for (sender, message) in dm_messages {
-        process_dm_message(state, sender, message).await;
+
+    for (_sender, message) in dm_messages {
+        process_dm_message(client_ref.clone(), state, message).await;
     }
 
     if let Err(e) = save_topics_to_file(&state().get_all_topics()) {
@@ -327,13 +330,9 @@ impl P2PMessageConvert for ChatMessage {
     }
 }
 
-pub fn handle_dm_chat_message(
-    mut state: Signal<AppState>,
-    sender: p2p::EndpointId,
-    msg: P2pDmChatMessage,
-) {
+pub fn handle_dm_chat_message(mut state: Signal<AppState>, msg: P2pDmChatMessage) {
     state.with_mut(|s| {
-        let sender_id = sender.to_string();
+        let sender_id = msg.sender.to_string();
         let receiver_id = msg.receiver.to_string();
 
         let message = DmChatMessage::new(
@@ -347,13 +346,9 @@ pub fn handle_dm_chat_message(
     });
 }
 
-pub fn handle_dm_profile_metadata(
-    mut state: Signal<AppState>,
-    sender: p2p::EndpointId,
-    msg: DmProfileMetadataMessage,
-) {
+pub fn handle_dm_profile_metadata(mut state: Signal<AppState>, msg: DmProfileMetadataMessage) {
     state.with_mut(|s| {
-        let profile_id = sender.to_string();
+        let profile_id = msg.id.to_string();
 
         let profile = ui::desktop::models::Profile {
             id: profile_id,
@@ -361,13 +356,14 @@ pub fn handle_dm_profile_metadata(
             avatar: msg.avatar_url,
             last_connection: ui::desktop::models::ConnectionStatus::Offline(msg.last_connection),
         };
+
         s.modify_contact(profile);
     });
 }
 
 pub fn handle_dm_join_petition(
+    client_ref: Arc<Mutex<DesktopClient>>,
     mut state: Signal<AppState>,
-    _sender: p2p::EndpointId,
     msg: DmJoinMessage,
 ) {
     let petitioner_id = msg.petitioner.to_string();
@@ -379,7 +375,38 @@ pub fn handle_dm_join_petition(
         }
     });
 
-    if let Err(e) = crate::utils::contacts::save_contacts(&state().get_all_contacts()) {
+    let profile = state.read().get_profile();
+
+    let endpoint_id = profile.id.parse().expect("Invalid endpoint ID");
+
+    let last_connection: u64 = match profile.last_connection {
+        ui::desktop::models::ConnectionStatus::Online => Utc::now().timestamp_millis() as u64,
+        ui::desktop::models::ConnectionStatus::Offline(last_connection) => last_connection,
+    };
+
+    let profile_metadata =
+        DmProfileMetadataMessage::new(endpoint_id, profile.name, profile.avatar, last_connection);
+
+    spawn(async move {
+        let mut client = client_ref.lock().await;
+
+        if let Err(e) = client.connect_to_user(&petitioner_id).await {
+            eprintln!("Failed to connect to petitioner: {}", e);
+            return;
+        }
+
+        if let Err(e) = client
+            .send_dm(
+                &petitioner_id,
+                DmMessageTypes::ProfileMetadata(profile_metadata),
+            )
+            .await
+        {
+            eprintln!("Failed to send profile metadata: {}", e);
+        }
+    });
+
+    if let Err(e) = crate::utils::contacts::save_contacts(&state().get_all_contacts_chat()) {
         eprintln!("Failed to save contacts: {}", e);
     }
 }
@@ -402,19 +429,19 @@ pub async fn collect_dm_messages(
 }
 
 pub async fn process_dm_message(
+    client_ref: Arc<Mutex<DesktopClient>>,
     state: Signal<AppState>,
-    sender: p2p::EndpointId,
     message: DmMessageTypes,
 ) {
     match message {
         DmMessageTypes::Chat(msg) => {
-            handle_dm_chat_message(state, sender, msg);
+            handle_dm_chat_message(state, msg);
         }
         DmMessageTypes::ProfileMetadata(msg) => {
-            handle_dm_profile_metadata(state, sender, msg);
+            handle_dm_profile_metadata(state, msg);
         }
         DmMessageTypes::JoinPetition(msg) => {
-            handle_dm_join_petition(state, sender, msg);
+            handle_dm_join_petition(client_ref.clone(), state, msg);
         }
     }
 }

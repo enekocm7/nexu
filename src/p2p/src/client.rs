@@ -23,7 +23,7 @@ pub struct ChatClient {
     _router: Router,
     gossip_sender: HashMap<TopicId, GossipSender>,
     gossip_receiver: HashMap<TopicId, GossipReceiver>,
-    dm_sender: HashMap<EndpointAddr, SendStream>,
+    dm_sender: HashMap<EndpointId, SendStream>,
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
     dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
 }
@@ -180,11 +180,16 @@ impl ChatClient {
 
     pub async fn connect_peer(&mut self, addr: impl Into<EndpointAddr>) -> anyhow::Result<()> {
         let addr: EndpointAddr = addr.into();
+
+        if self.dm_sender.contains_key(&addr.id) {
+            return Ok(());
+        }
+
         let conn = self.endpoint.connect(addr.to_owned(), DM_ALPN).await?;
 
         let (send, _recv) = conn.open_bi().await?;
 
-        self.dm_sender.insert(addr.to_owned(), send);
+        self.dm_sender.insert(addr.id, send);
 
         Ok(())
     }
@@ -197,7 +202,7 @@ impl ChatClient {
         let addr: EndpointAddr = addr.into();
         let send = self
             .dm_sender
-            .get_mut(&addr)
+            .get_mut(&addr.id)
             .ok_or_else(|| anyhow::anyhow!("No DM sender for address"))?;
 
         let serialized = postcard::to_stdvec(&message)?;

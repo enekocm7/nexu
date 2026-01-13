@@ -73,9 +73,8 @@ fn App() -> Element {
             }
 
             if let Ok(loaded_contacts) = load_contacts() {
-                let mut state = controller.read().get_app_state();
-                for contact in loaded_contacts {
-                    state.write().add_contact(contact);
+                for contact_chat in loaded_contacts {
+                    controller.read().reconnect_to_user(contact_chat);
                 }
             }
 

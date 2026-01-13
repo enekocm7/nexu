@@ -208,6 +208,10 @@ impl AppState {
             .insert(profile.id.clone(), ProfileChat::new(profile));
     }
 
+    pub fn add_contact_chat(&mut self, profile_chat: ProfileChat) {
+        self.contacts.insert(profile_chat.profile.id.clone(), profile_chat);
+    }
+
     pub fn get_contact_chat(&self, profile_id: &str) -> Option<&ProfileChat> {
         self.contacts.get(profile_id)
     }

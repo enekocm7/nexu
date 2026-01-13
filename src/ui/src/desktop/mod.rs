@@ -187,33 +187,37 @@ pub mod desktop_web_components {
 
 
                     if show_contact_dialog() {
-                         ContactDialog {
-                             toggle: show_contact_dialog,
-                             on_add: on_add_contact,
-                         }
+                        ContactDialog {
+                            toggle: show_contact_dialog,
+                            on_add: on_add_contact,
+                        }
                     }
 
                     if let Some((id, name, removal_type)) = show_leave_confirmation() {
                         {
                             let (title, message, confirm_text) = match removal_type {
-                                RemovalType::Topic => (
-                                    "Leave Topic".to_string(),
-                                    format!(
-                                        "Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.",
-                                        name
-                                    ),
-                                    "Leave".to_string(),
-                                ),
-                                RemovalType::Contact => (
-                                    "Remove Contact".to_string(),
-                                    format!(
-                                        "Are you sure you want to remove \"{}\" from your contacts?",
-                                        name
-                                    ),
-                                    "Remove".to_string(),
-                                ),
-                            };
 
+                                RemovalType::Topic => {
+                                    (
+                                        "Leave Topic".to_string(),
+                                        format!(
+                                            "Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.",
+                                            name,
+                                        ),
+                                        "Leave".to_string(),
+                                    )
+                                }
+                                RemovalType::Contact => {
+                                    (
+                                        "Remove Contact".to_string(),
+                                        format!(
+                                            "Are you sure you want to remove \"{}\" from your contacts?",
+                                            name,
+                                        ),
+                                        "Remove".to_string(),
+                                    )
+                                }
+                            };
                             rsx! {
                                 ConfirmationDialog {
                                     title,
@@ -752,7 +756,8 @@ pub mod desktop_web_components {
                 let sender_display = truncate_id(&message.sender_id);
                 rsx! {
                     div { class: if message.is_sent { "message-bubble-sent" } else { "message-bubble-received" },
-                        p { class: "message-sender-id m-0 mb-1 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                        p {
+                            class: "message-sender-id m-0 mb-1 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
                             title: "{message.sender_id}",
                             "{sender_display}"
                         }
@@ -1246,7 +1251,13 @@ pub mod desktop_web_components {
                                             on_select: {
                                                 move |_| {
                                                     show_leave_confirmation
-                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone(), RemovalType::Topic)))
+                                                        .set(
+                                                            Some((
+                                                                id_for_leave.clone(),
+                                                                name_for_leave.clone(),
+                                                                RemovalType::Topic,
+                                                            )),
+                                                        )
                                                 }
                                             },
                                             "Leave Topic"
@@ -1362,7 +1373,13 @@ pub mod desktop_web_components {
                                             on_select: {
                                                 move |_| {
                                                     show_leave_confirmation
-                                                        .set(Some((id_for_leave.clone(), name_for_leave.clone(), RemovalType::Contact)))
+                                                        .set(
+                                                            Some((
+                                                                id_for_leave.clone(),
+                                                                name_for_leave.clone(),
+                                                                RemovalType::Contact,
+                                                            )),
+                                                        )
                                                 }
                                             },
                                             "Remove Contact"
