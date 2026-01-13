@@ -379,13 +379,8 @@ pub fn handle_dm_join_petition(
 
     let endpoint_id = profile.id.parse().expect("Invalid endpoint ID");
 
-    let last_connection: u64 = match profile.last_connection {
-        ui::desktop::models::ConnectionStatus::Online => Utc::now().timestamp_millis() as u64,
-        ui::desktop::models::ConnectionStatus::Offline(last_connection) => last_connection,
-    };
-
     let profile_metadata =
-        DmProfileMetadataMessage::new(endpoint_id, profile.name, profile.avatar, last_connection);
+        DmProfileMetadataMessage::new(endpoint_id, profile.name, profile.avatar, profile.last_connection.get_u64());
 
     spawn(async move {
         let mut client = client_ref.lock().await;

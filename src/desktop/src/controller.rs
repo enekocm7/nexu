@@ -4,7 +4,7 @@ use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
-use p2p::{DmProfileMetadataMessage, MessageTypes, Ticket, TopicMetadataMessage};
+use p2p::{DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -345,6 +345,7 @@ impl AppController {
 
     pub fn modify_profile(&self, profile: Profile) {
         let mut app_state = self.app_state;
+        let desktop_client = Arc::clone(&self.desktop_client);
 
         spawn(async move {
             let result: Result<(), Error> = async {
@@ -352,6 +353,30 @@ impl AppController {
                     state.set_profile_name(&profile.name);
                     state.set_profile_avatar(&profile.avatar);
                 });
+
+                let message = DmProfileMetadataMessage::new(
+                    profile.id.parse().unwrap(),
+                    profile.name.clone(),
+                    profile.avatar.clone(),
+                    profile.last_connection.get_u64(),
+                );
+
+                let contacts = app_state.read().get_all_contacts();
+
+                for contact in contacts {
+                    let client = desktop_client.lock().await;
+
+                    if let Err(e) = client
+                        .send_dm(
+                            &contact.id,
+                            DmMessageTypes::ProfileMetadata(message.clone()),
+                        )
+                        .await
+                    {
+                        eprintln!("Failed to send profile metadata to {}: {}", contact.id, e);
+                    }
+                }
+
                 utils::contacts::save_profile(&profile)
                     .map_err(|e| Error::ProfileSave(e.to_string()))?;
 
@@ -404,19 +429,12 @@ impl AppController {
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
 
                 let profile = app_state.read().get_profile();
-                
-                let last_connection = match profile.last_connection {
-                    ui::desktop::models::ConnectionStatus::Online => {
-                        Utc::now().timestamp_millis() as u64
-                    }
-                    ui::desktop::models::ConnectionStatus::Offline(time) => time,
-                };
 
                 let msg = DmProfileMetadataMessage::new(
                     profile.id.parse().expect("id should be an EndpointId"),
                     profile.name,
                     profile.avatar,
-                    last_connection,
+                    profile.last_connection.get_u64(),
                 );
 
                 client

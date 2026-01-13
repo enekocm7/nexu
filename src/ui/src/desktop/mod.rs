@@ -1321,12 +1321,7 @@ pub mod desktop_web_components {
                             let profile_id = contact_chat.profile.id;
                             let profile_name = contact_chat.profile.name;
                             let avatar_url = contact_chat.profile.avatar;
-                            let last_connection = match contact_chat.profile.last_connection {
-                                ConnectionStatus::Online => {
-                                    chrono::Utc::now().timestamp_millis() as u64
-                                }
-                                ConnectionStatus::Offline(time) => time,
-                            };
+                            let last_connection = contact_chat.profile.last_connection.get_u64();
                             let id_for_chat = profile_id.clone();
                             let id_for_details = profile_id.clone();
                             let id_for_leave = profile_id.clone();

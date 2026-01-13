@@ -1,5 +1,6 @@
 use crate::desktop::models::ConnectionStatus::Online;
 use ConnectionStatus::Offline;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -448,6 +449,15 @@ pub struct Profile {
 pub enum ConnectionStatus {
     Online,
     Offline(u64),
+}
+
+impl ConnectionStatus {
+    pub fn get_u64(&self) -> u64{
+        match self {
+            Online => Utc::now().timestamp_millis() as u64,
+            Offline(time) => time.to_owned(),
+        }
+    }
 }
 
 impl Default for ConnectionStatus {
