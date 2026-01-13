@@ -239,7 +239,7 @@ pub mod contacts {
     };
 
     use tokio::io;
-    use ui::desktop::models::Profile;
+    use ui::desktop::models::{Profile, ProfileChat};
 
     use crate::utils::DIR_NAME;
 
@@ -277,7 +277,7 @@ pub mod contacts {
         Ok(profile)
     }
 
-    pub fn save_contacts(contacts: &[Profile]) -> io::Result<()> {
+    pub fn save_contacts(contacts: &[ProfileChat]) -> io::Result<()> {
         let path = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(DIR_NAME)
@@ -286,14 +286,14 @@ pub mod contacts {
         save_contacts_to_path(contacts, &path)
     }
 
-    pub fn save_contacts_to_path(contacts: &[Profile], path: &Path) -> io::Result<()> {
+    pub fn save_contacts_to_path(contacts: &[ProfileChat], path: &Path) -> io::Result<()> {
         fs::create_dir_all(path.parent().unwrap())?;
         let encoded_contacts = postcard::to_stdvec(contacts)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         fs::write(path, encoded_contacts)
     }
 
-    pub fn load_contacts() -> io::Result<Vec<Profile>> {
+    pub fn load_contacts() -> io::Result<Vec<ProfileChat>> {
         let path = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join(DIR_NAME)
@@ -301,9 +301,9 @@ pub mod contacts {
         load_contacts_from_path(&path)
     }
 
-    pub fn load_contacts_from_path(path: &Path) -> io::Result<Vec<Profile>> {
+    pub fn load_contacts_from_path(path: &Path) -> io::Result<Vec<ProfileChat>> {
         let data = fs::read(path)?;
-        let contacts: Vec<Profile> = postcard::from_bytes(&data)
+        let contacts: Vec<ProfileChat> = postcard::from_bytes(&data)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         Ok(contacts)
     }
@@ -313,7 +313,7 @@ pub mod contacts {
         use super::*;
         use tempfile::TempDir;
         use ui::desktop::models::ConnectionStatus::Offline;
-        use ui::desktop::models::Profile;
+        use ui::desktop::models::{DmMessage, Profile, ProfileChat};
 
         fn create_test_profile(id: &str, name: &str, avatar: Option<&str>) -> Profile {
             Profile {
@@ -321,6 +321,19 @@ pub mod contacts {
                 name: name.to_string(),
                 avatar: avatar.map(|s| s.to_string()),
                 last_connection: Offline(1234567890),
+            }
+        }
+
+        fn create_test_profile_chat(id: &str, name: &str, avatar: Option<&str>, messages: Vec<DmMessage>) -> ProfileChat {
+            ProfileChat {
+                profile: Profile {
+                    id: id.to_string(),
+                    name: name.to_string(),
+                    avatar: avatar.map(|s| s.to_string()),
+                    last_connection: Offline(1234567890),
+                },
+                messages,
+                last_changed: 1234567890,
             }
         }
 
@@ -372,9 +385,9 @@ pub mod contacts {
             let test_file_path = temp_dir.path().join("test_contacts.bin");
 
             let contacts = vec![
-                create_test_profile("contact1", "Alice", Some("https://example.com/alice.png")),
-                create_test_profile("contact2", "Bob", Some("https://example.com/bob.png")),
-                create_test_profile("contact3", "Charlie", None),
+                create_test_profile_chat("contact1", "Alice", Some("https://example.com/alice.png"), Vec::new()),
+                create_test_profile_chat("contact2", "Bob", Some("https://example.com/bob.png"), Vec::new()),
+                create_test_profile_chat("contact3", "Charlie", None, Vec::new()),
             ];
 
             let save_result = save_contacts_to_path(&contacts, &test_file_path);
@@ -386,19 +399,19 @@ pub mod contacts {
             let loaded_contacts = load_result.unwrap();
             assert_eq!(loaded_contacts.len(), 3, "Loaded contacts count mismatch");
 
-            let contact1 = loaded_contacts.iter().find(|c| c.id == "contact1").unwrap();
-            assert_eq!(contact1.name, "Alice");
+            let contact1 = loaded_contacts.iter().find(|c| c.profile.id == "contact1").unwrap();
+            assert_eq!(contact1.profile.name, "Alice");
             assert_eq!(
-                contact1.avatar,
+                contact1.profile.avatar,
                 Some("https://example.com/alice.png".to_string())
             );
 
-            let contact2 = loaded_contacts.iter().find(|c| c.id == "contact2").unwrap();
-            assert_eq!(contact2.name, "Bob");
+            let contact2 = loaded_contacts.iter().find(|c| c.profile.id == "contact2").unwrap();
+            assert_eq!(contact2.profile.name, "Bob");
 
-            let contact3 = loaded_contacts.iter().find(|c| c.id == "contact3").unwrap();
-            assert_eq!(contact3.name, "Charlie");
-            assert_eq!(contact3.avatar, None);
+            let contact3 = loaded_contacts.iter().find(|c| c.profile.id == "contact3").unwrap();
+            assert_eq!(contact3.profile.name, "Charlie");
+            assert_eq!(contact3.profile.avatar, None);
         }
 
         #[test]
@@ -406,7 +419,7 @@ pub mod contacts {
             let temp_dir = TempDir::new().unwrap();
             let test_file_path = temp_dir.path().join("empty_contacts.bin");
 
-            let contacts: Vec<Profile> = Vec::new();
+            let contacts: Vec<ProfileChat> = Vec::new();
 
             let save_result = save_contacts_to_path(&contacts, &test_file_path);
             assert!(save_result.is_ok(), "Failed to save empty contacts");
@@ -454,8 +467,8 @@ pub mod contacts {
         #[test]
         fn test_save_contacts_to_invalid_path() {
             let invalid_path = PathBuf::from("/nonexistent/directory/test_contacts.bin");
-            let contacts = vec![create_test_profile("contact1", "Alice", None)];
-
+            let contacts = vec![create_test_profile_chat("contact1", "Alice", None, Vec::new())];
+            
             let result = save_contacts_to_path(&contacts, &invalid_path);
             assert!(
                 result.is_err(),
@@ -513,18 +526,18 @@ pub mod contacts {
             );
             assert_eq!(loaded_profile.name, "Jane Smith");
         }
-
+        
         #[test]
         fn test_save_contacts_overwrites_existing() {
             let temp_dir = TempDir::new().unwrap();
             let test_file_path = temp_dir.path().join("overwrite_contacts.bin");
 
-            let contacts1 = vec![create_test_profile("contact1", "Alice", None)];
+            let contacts1 = vec![create_test_profile_chat("contact1", "Alice", None, Vec::new())];
             save_contacts_to_path(&contacts1, &test_file_path).unwrap();
 
             let contacts2 = vec![
-                create_test_profile("contact2", "Bob", None),
-                create_test_profile("contact3", "Charlie", None),
+                create_test_profile_chat("contact2", "Bob", None, Vec::new()),
+                create_test_profile_chat("contact3", "Charlie", None, Vec::new()),
             ];
             save_contacts_to_path(&contacts2, &test_file_path).unwrap();
 
@@ -535,15 +548,15 @@ pub mod contacts {
                 "Expected 2 contacts after overwrite"
             );
             assert!(
-                !loaded_contacts.iter().any(|c| c.id == "contact1"),
+                !loaded_contacts.iter().any(|c| c.profile.id == "contact1"),
                 "contact1 should be gone"
             );
             assert!(
-                loaded_contacts.iter().any(|c| c.id == "contact2"),
+                loaded_contacts.iter().any(|c| c.profile.id == "contact2"),
                 "contact2 should exist"
             );
             assert!(
-                loaded_contacts.iter().any(|c| c.id == "contact3"),
+                loaded_contacts.iter().any(|c| c.profile.id == "contact3"),
                 "contact3 should exist"
             );
         }
@@ -578,17 +591,17 @@ pub mod contacts {
             let test_file_path = temp_dir.path().join("ordered_contacts.bin");
 
             let contacts = vec![
-                create_test_profile("contact1", "Alice", None),
-                create_test_profile("contact2", "Bob", None),
-                create_test_profile("contact3", "Charlie", None),
+                create_test_profile_chat("contact1", "Alice", None, Vec::new()),
+                create_test_profile_chat("contact2", "Bob", None, Vec::new()),
+                create_test_profile_chat("contact3", "Charlie", None, Vec::new()),
             ];
 
             save_contacts_to_path(&contacts, &test_file_path).unwrap();
             let loaded_contacts = load_contacts_from_path(&test_file_path).unwrap();
 
-            assert_eq!(loaded_contacts[0].id, "contact1");
-            assert_eq!(loaded_contacts[1].id, "contact2");
-            assert_eq!(loaded_contacts[2].id, "contact3");
+            assert_eq!(loaded_contacts[0].profile.id, "contact1");
+            assert_eq!(loaded_contacts[1].profile.id, "contact2");
+            assert_eq!(loaded_contacts[2].profile.id, "contact3");
         }
     }
 }
