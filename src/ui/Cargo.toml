@@ -12,7 +12,12 @@ mobile = []
 dioxus = { workspace = true }
 chrono = { workspace = true }
 dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
-arboard = { version = "3.6.1", features = ["wayland-data-control", "windows-sys", "wl-clipboard-rs"] }
+arboard = { version = "3.6.1", features = [
+    "wayland-data-control",
+    "windows-sys",
+    "wl-clipboard-rs",
+] }
 serde = { workspace = true, features = ["derive"] }
 base64 = "0.22.1"
-
+image = { workspace = true, features = ["webp"] }
+anyhow = { workspace = true }

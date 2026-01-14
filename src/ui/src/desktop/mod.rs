@@ -864,8 +864,19 @@ pub mod desktop_web_components {
                 spawn(async move {
                     match file.read_bytes().await {
                         Ok(bytes) => {
+                            let processed_bytes = match process_image(&bytes) {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    toast.error(
+                                        format!("Failed to process image: {}", e),
+                                        ToastOptions::default(),
+                                    );
+                                    return;
+                                }
+                            };
+
                             const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
-                            if bytes.len() > MAX_SIZE {
+                            if processed_bytes.len() > MAX_SIZE {
                                 toast.error(
                                     "Image size must be less than 512 KB".to_owned(),
                                     ToastOptions::default(),
@@ -873,9 +884,8 @@ pub mod desktop_web_components {
                                 return;
                             }
 
-                            let base64 = BASE64_STANDARD.encode(&bytes);
-                            let url =
-                                format!("data:{};base64,{}", file.content_type().unwrap(), base64);
+                            let base64 = BASE64_STANDARD.encode(&processed_bytes);
+                            let url = format!("data:image/webp;base64,{}", base64);
 
                             let mut updated_topic = topic_clone.clone();
                             updated_topic.avatar_url = Some(url);
@@ -1058,8 +1068,19 @@ pub mod desktop_web_components {
                 spawn(async move {
                     match file.read_bytes().await {
                         Ok(bytes) => {
+                            let processed_bytes = match process_image(&bytes) {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    toast.error(
+                                        format!("Failed to process image: {}", e),
+                                        ToastOptions::default(),
+                                    );
+                                    return;
+                                }
+                            };
+
                             const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
-                            if bytes.len() > MAX_SIZE {
+                            if processed_bytes.len() > MAX_SIZE {
                                 toast.error(
                                     "Image size must be less than 512 KB".to_owned(),
                                     ToastOptions::default(),
@@ -1067,12 +1088,8 @@ pub mod desktop_web_components {
                                 return;
                             }
 
-                            let base64 = BASE64_STANDARD.encode(&bytes);
-                            let url = format!(
-                                "data:{};base64,{}",
-                                file.content_type().unwrap_or("image/png".to_string()),
-                                base64
-                            );
+                            let base64 = BASE64_STANDARD.encode(&processed_bytes);
+                            let url = format!("data:image/webp;base64,{}", base64);
 
                             let mut updated_profile = profile_clone.clone();
                             updated_profile.avatar = Some(url);
@@ -1479,5 +1496,13 @@ pub mod desktop_web_components {
                 );
             }
         }
+    }
+
+    fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let image = image::load_from_memory(file_bytes)?;
+        let resized = image.thumbnail(500, 500);
+        let mut buffer = std::io::Cursor::new(Vec::new());
+        resized.write_to(&mut buffer, image::ImageFormat::WebP)?;
+        Ok(buffer.into_inner())
     }
 }
