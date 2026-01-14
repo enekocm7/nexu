@@ -1110,6 +1110,8 @@ pub mod desktop_web_components {
             ConnectionStatus::Offline(time) => format_relative_time((time / 1000) as i64),
         };
 
+        let profile_clone_for_image = profile.clone();
+
         rsx! {
             div {
                 class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
@@ -1129,6 +1131,20 @@ pub mod desktop_web_components {
                                     accept: "image/*",
                                     style: "display: none;",
                                     onchange: handle_image_change,
+                                }
+                                if profile.avatar.is_some_and(|url| !url.is_empty()) {
+                                    button {
+                                        class: "absolute -top-1 -right-1 w-5 h-5 rounded-full bg-danger hover:bg-danger-hover text-white text-xs font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:scale-110 shadow-md pb-0.5 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto",
+                                        title: "Remove Avatar",
+                                        onclick: move |e| {
+                                            e.stop_propagation();
+                                            let mut updated_profile = profile_clone_for_image.clone();
+                                            updated_profile.avatar = None;
+                                            on_modify_profile.call(updated_profile);
+                                            toggle.set(None);
+                                        },
+                                        "✕"
+                                    }
                                 }
                             }
                         }
