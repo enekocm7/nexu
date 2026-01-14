@@ -1051,6 +1051,7 @@ pub mod desktop_web_components {
     ) -> Element {
         let toast = use_toast();
         let mut edited_name = use_signal(|| profile.name.clone());
+        let mut edited_avatar = use_signal(|| profile.avatar.clone());
 
         let profile_id = profile.id.clone();
         let handle_copy_profile_id = {
@@ -1069,6 +1070,7 @@ pub mod desktop_web_components {
         let handle_save = move |_event: Event<MouseData>| {
             let mut updated_profile = profile_clone.clone();
             updated_profile.name = edited_name().trim().to_string();
+            updated_profile.avatar = edited_avatar().clone();
             on_modify_profile.call(updated_profile);
             toast.success(
                 "Profile updated successfully".to_owned(),
@@ -1077,12 +1079,10 @@ pub mod desktop_web_components {
             toggle.set(None);
         };
 
-        let profile_clone_for_image = profile.clone();
         let handle_image_change = move |event: Event<FormData>| {
             let files = event.files();
             if let Some(file) = files.first() {
                 let file = file.clone();
-                let profile_clone = profile_clone_for_image.clone();
                 spawn(async move {
                     match file.read_bytes().await {
                         Ok(bytes) => {
@@ -1109,9 +1109,7 @@ pub mod desktop_web_components {
                             let base64 = BASE64_STANDARD.encode(&processed_bytes);
                             let url = format!("data:image/webp;base64,{}", base64);
 
-                            let mut updated_profile = profile_clone.clone();
-                            updated_profile.avatar = Some(url);
-                            on_modify_profile.call(updated_profile);
+                            edited_avatar.set(Some(url));
 
                             toast.success(
                                 "Profile avatar updated successfully".to_owned(),
@@ -1131,7 +1129,7 @@ pub mod desktop_web_components {
             }
         };
 
-        let avatar_url = if let Some(url) = &profile.avatar
+        let avatar_url = if let Some(url) = edited_avatar()
             && !url.is_empty()
         {
             url.clone()
@@ -1143,8 +1141,6 @@ pub mod desktop_web_components {
             ConnectionStatus::Online => profile.last_connection.to_string(),
             ConnectionStatus::Offline(time) => format_relative_time((time / 1000) as i64),
         };
-
-        let profile_clone_for_image = profile.clone();
 
         rsx! {
             div {
@@ -1172,9 +1168,7 @@ pub mod desktop_web_components {
                                         title: "Remove Avatar",
                                         onclick: move |e| {
                                             e.stop_propagation();
-                                            let mut updated_profile = profile_clone_for_image.clone();
-                                            updated_profile.avatar = None;
-                                            on_modify_profile.call(updated_profile);
+                                            edited_avatar.set(None);
                                         },
                                         "✕"
                                     }
