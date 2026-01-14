@@ -28,7 +28,7 @@ fn main() {
                 WindowBuilder::new()
                     .with_title("Nexu")
                     .with_window_icon(load_icon())
-                    .with_min_inner_size(LogicalSize::new(800, 600)),
+                    .with_min_inner_size(LogicalSize::new(1100, 700)),
             ),
         )
         .launch(App);
