@@ -316,7 +316,7 @@ impl AppController {
                 let time = app_state.write().set_last_changed_to_now(&topic.id);
                 let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
                 let update_message =
-                    TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url, time);
+                    TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url, time, topic.members.into_iter().collect());
 
                 if let Err(e) = desktop_client
                     .lock()

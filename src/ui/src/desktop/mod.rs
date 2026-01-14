@@ -698,7 +698,7 @@ pub mod desktop_web_components {
                         class: "flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-bg-dark scrollbar-custom",
                         id: "chat-messages-container",
                         for message in messages.iter() {
-                            ChatMessageComponent { message: message.clone() }
+                            ChatMessageComponent { message: message.clone(), app_state }
                         }
                     }
                     div { class: "bg-bg-dark py-3.75 px-5 flex gap-3 items-center",
@@ -737,7 +737,6 @@ pub mod desktop_web_components {
         }
     }
 
-    // Add truncation helper
     fn truncate_id(id: &str) -> String {
         if id.len() > 12 {
             let start = &id[..6];
@@ -748,12 +747,29 @@ pub mod desktop_web_components {
         }
     }
 
+    fn get_sender_display_name(app_state: &AppState, sender_id: &str) -> String {
+        let profile = app_state.get_profile();
+        if sender_id == profile.id {
+            return profile.name;
+        }
+        if let Some(contact) = app_state.get_contact(sender_id) {
+            if contact.name == contact.id {
+                truncate_id(sender_id)
+            } else {
+                contact.name.clone()
+            }
+        } else {
+            truncate_id(sender_id)
+        }
+    }
+
     #[component]
-    fn ChatMessageComponent(message: Message) -> Element {
+    fn ChatMessageComponent(message: Message, app_state: Signal<AppState>) -> Element {
+        let state = app_state();
         match message {
             Message::Chat(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
-                let sender_display = truncate_id(&message.sender_id);
+                let sender_display = get_sender_display_name(&state, &message.sender_id);
                 rsx! {
                     div { class: if message.is_sent { "message-bubble-sent" } else { "message-bubble-received" },
                         p {
@@ -772,10 +788,11 @@ pub mod desktop_web_components {
             }
             Message::Leave(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
+                let sender_display = get_sender_display_name(&state, &message.sender_id);
                 rsx! {
                     div { class: "max-w-full self-center bg-transparent text-text-muted py-2 px-3 text-[clamp(12px,1.8vw,13px)] italic text-center",
                         p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-text-muted",
-                            "{message.sender_id} has left the topic."
+                            "{sender_display} has left the topic."
                         }
                         p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
                             "{timestamp_str}"
@@ -785,11 +802,11 @@ pub mod desktop_web_components {
             }
             Message::Join(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
-                let sender = message.sender_id.clone();
+                let sender_display = get_sender_display_name(&state, &message.sender_id);
                 let text = if message.me {
-                    format!("{sender} joined the topic.")
+                    format!("{sender_display} joined the topic.")
                 } else {
-                    format!("{sender} has joined the topic.")
+                    format!("{sender_display} has joined the topic.")
                 };
 
                 rsx! {
@@ -805,10 +822,11 @@ pub mod desktop_web_components {
             }
             Message::Disconnect(message) => {
                 let timestamp_str = format_message_timestamp(message.timestamp);
+                let sender_display = get_sender_display_name(&state, &message.sender_id);
                 rsx! {
                     div { class: "max-w-full self-center bg-transparent text-text-muted py-2 px-3 text-[clamp(12px,1.8vw,13px)] italic text-center",
                         p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-text-muted",
-                            "{message.sender_id} has disconnected."
+                            "{sender_display} has disconnected."
                         }
                         p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
                             "{timestamp_str}"
@@ -1094,7 +1112,6 @@ pub mod desktop_web_components {
                             let mut updated_profile = profile_clone.clone();
                             updated_profile.avatar = Some(url);
                             on_modify_profile.call(updated_profile);
-                            toggle.set(None);
 
                             toast.success(
                                 "Profile avatar updated successfully".to_owned(),
@@ -1158,7 +1175,6 @@ pub mod desktop_web_components {
                                             let mut updated_profile = profile_clone_for_image.clone();
                                             updated_profile.avatar = None;
                                             on_modify_profile.call(updated_profile);
-                                            toggle.set(None);
                                         },
                                         "✕"
                                     }

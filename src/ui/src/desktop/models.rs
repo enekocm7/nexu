@@ -168,6 +168,19 @@ impl AppState {
         }
     }
 
+    pub fn set_topic_members(&mut self, topic_id: &str, members: Vec<String>) {
+        if let Some(topic) = self.topics.get_mut(topic_id) {
+            topic.members = members.into_iter().collect();
+        }
+    }
+
+    pub fn get_topic_members(&self, topic_id: &str) -> Option<&HashSet<String>> {
+        if let Some(topic) = self.topics.get(topic_id) {
+            return Some(&topic.members);
+        }
+        None
+    }
+
     pub fn get_topic_mutable(&mut self, topic_id: &str) -> Option<&mut Topic> {
         self.topics.get_mut(topic_id)
     }

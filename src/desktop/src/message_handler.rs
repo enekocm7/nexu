@@ -40,6 +40,12 @@ pub fn handle_topic_metadata(
                 s.modify_topic_name(topic, &metadata.name);
                 s.modify_topic_avatar(topic, metadata.avatar_url.clone());
                 s.set_last_changed(topic, metadata.timestamp);
+                let own_id = s.get_profile().id;
+                let mut members = metadata.members;
+                if !members.contains(&own_id) {
+                    members.push(own_id);
+                }
+                s.set_topic_members(topic, members);
             });
             None
         } else if let Ok(ticket) = Ticket::from_str(topic) {
@@ -48,6 +54,7 @@ pub fn handle_topic_metadata(
                 &existing_topic.name,
                 existing_topic.avatar_url.clone(),
                 existing_topic.last_changed,
+                existing_topic.members.clone().into_iter().collect(),
             ))
         } else {
             None
@@ -73,6 +80,7 @@ pub fn handle_join_topic(
                 &t.name,
                 t.avatar_url.clone(),
                 t.last_changed,
+                t.members.clone().into_iter().collect(),
             ))
         } else {
             None
@@ -101,8 +109,10 @@ pub fn handle_join_topic(
 
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
+            let sender_id = join_message.endpoint.to_string();
+            topic_obj.add_member(&sender_id);
             let message = ui::desktop::models::JoinMessage::new(
-                join_message.endpoint.to_string(),
+                sender_id,
                 Utc::now().timestamp_millis() as u64,
             );
             topic_obj.add_join_message(message);
@@ -115,8 +125,10 @@ pub fn handle_join_topic(
 pub fn handle_leave_topic(mut state: Signal<AppState>, topic: &str, leave_msg: p2p::LeaveMessage) {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
+            let sender_id = leave_msg.endpoint.to_string();
+            topic_obj.remove_member(&sender_id);
             let message = ui::desktop::models::LeaveMessage {
-                sender_id: leave_msg.endpoint.to_string(),
+                sender_id,
                 timestamp: Utc::now().timestamp_millis() as u64,
             };
             topic_obj.add_leave_message(message);
@@ -379,8 +391,12 @@ pub fn handle_dm_join_petition(
 
     let endpoint_id = profile.id.parse().expect("Invalid endpoint ID");
 
-    let profile_metadata =
-        DmProfileMetadataMessage::new(endpoint_id, profile.name, profile.avatar, profile.last_connection.get_u64());
+    let profile_metadata = DmProfileMetadataMessage::new(
+        endpoint_id,
+        profile.name,
+        profile.avatar,
+        profile.last_connection.get_u64(),
+    );
 
     spawn(async move {
         let mut client = client_ref.lock().await;

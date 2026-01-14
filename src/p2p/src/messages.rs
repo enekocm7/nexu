@@ -118,15 +118,17 @@ pub struct TopicMetadataMessage {
     pub name: String,
     pub avatar_url: Option<String>,
     pub timestamp: u64,
+    pub members: Vec<String>,
 }
 
 impl TopicMetadataMessage {
-    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>, timestamp: u64) -> Self {
+    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>, timestamp: u64, members: Vec<String>) -> Self {
         TopicMetadataMessage {
             topic,
             name: name.to_string(),
             avatar_url,
             timestamp,
+            members,
         }
     }
 }
