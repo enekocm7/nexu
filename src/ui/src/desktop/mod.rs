@@ -400,18 +400,18 @@ pub mod desktop_web_components {
                     div { class: "p-6",
                         div { class: "mb-5",
                             label { class: "block text-text-secondary text-sm font-medium mb-2",
-                                "Contact Address"
+                                "Contact Id"
                             }
                             input {
                                 class: "input-field border-2 border-border focus:border-accent focus:shadow-[0_0_0_3px_rgba(59,130,246,0.2)]",
                                 r#type: "text",
                                 value: "{address_str}",
-                                placeholder: "Enter contact address...",
+                                placeholder: "Enter contact id...",
                                 oninput: move |e| address_str.set(e.value()),
                             }
                         }
                         p { class: "m-0 text-text-secondary text-[13px] leading-relaxed",
-                            "Enter the address of the user you want to add to your contacts."
+                            "Enter the id of the user you want to add to your contacts."
                         }
                     }
                     div { class: "flex gap-3 justify-end py-5 px-6 border-t border-border bg-bg-input",
