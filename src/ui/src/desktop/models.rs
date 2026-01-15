@@ -1,5 +1,4 @@
-use crate::desktop::models::ConnectionStatus::Online;
-use ConnectionStatus::Offline;
+use ConnectionStatus::{Offline, Online};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -613,6 +612,12 @@ impl ProfileChat {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ColumnState {
+    Topic,
+    Contact,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RemovalType {
     Topic,
     Contact,
 }
