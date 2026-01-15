@@ -71,7 +71,7 @@
 .message-bubble,
 .message-bubble-sent,
 .message-bubble-received {
-    @apply max-w-[75%] py-2 px-4 rounded-2xl wrap-break-word flex flex-col gap-1 text-sm shadow-sm;
+    @apply max-w-[50%] py-2 px-4 rounded-2xl wrap-break-word flex flex-col gap-1 text-sm shadow-sm;
 }
 
 .message-bubble-sent {
@@ -100,5 +100,5 @@
 }
 
 .unselected-column-button {
-    @apply w-full py-1.5 text-sm font-medium rounded-md transition-all duration-200 text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer
+    @apply w-full py-1.5 text-sm font-medium rounded-md transition-all duration-200 text-text-secondary hover:text-text-primary hover:bg-bg-hover cursor-pointer;
 }

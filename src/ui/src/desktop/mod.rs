@@ -785,7 +785,7 @@ pub mod desktop_web_components {
                             title: "{message.sender_id}",
                             "{sender_display}"
                         }
-                        p { class: "m-0 text-[clamp(14px,2vw,15px)] leading-snug",
+                        p { class: "m-0 max-w-96 text-[clamp(14px,2vw,15px)] leading-snug wrap-break-word",
                             "{message.content}"
                         }
                         p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 self-end",
