@@ -12,10 +12,36 @@ pub enum MessageTypes {
     DisconnectTopic(DisconnectMessage),
     TopicMetadata(TopicMetadataMessage),
     TopicMessages(TopicMessagesMessage),
+    ImageMessages(ImageMessage),
 }
 
 pub trait GossipMessage: Serialize {
     fn topic_id(&self) -> &TopicId;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ImageMessage {
+    pub topic: TopicId,
+    pub sender: EndpointId,
+    pub image_data: Vec<u8>,
+    pub timestamp: u64,
+}
+
+impl ImageMessage {
+    pub fn new(topic: TopicId, sender: EndpointId, image_data: Vec<u8>, timestamp: u64) -> Self {
+        ImageMessage {
+            topic,
+            sender,
+            image_data,
+            timestamp,
+        }
+    }
+}
+
+impl GossipMessage for ImageMessage {
+    fn topic_id(&self) -> &TopicId {
+        &self.topic
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -122,7 +148,13 @@ pub struct TopicMetadataMessage {
 }
 
 impl TopicMetadataMessage {
-    pub fn new(topic: TopicId, name: &str, avatar_url: Option<String>, timestamp: u64, members: Vec<String>) -> Self {
+    pub fn new(
+        topic: TopicId,
+        name: &str,
+        avatar_url: Option<String>,
+        timestamp: u64,
+        members: Vec<String>,
+    ) -> Self {
         TopicMetadataMessage {
             topic,
             name: name.to_string(),
@@ -231,11 +263,7 @@ pub struct DmJoinMessage {
 }
 
 impl DmJoinMessage {
-    pub fn new(
-        petitioner: EndpointId,
-        target: EndpointId,
-        timestamp: u64,
-    ) -> Self {
+    pub fn new(petitioner: EndpointId, target: EndpointId, timestamp: u64) -> Self {
         DmJoinMessage {
             petitioner,
             target,

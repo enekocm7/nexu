@@ -8,8 +8,8 @@ pub use client::ChatClient;
 pub use iroh::{EndpointAddr, EndpointId};
 pub use messages::{
     ChatMessage, DisconnectMessage, DmChatMessage, DmJoinMessage, DmMessageTypes,
-    DmProfileMetadataMessage, GossipMessage, JoinMessage, LeaveMessage, MessageTypes,
+    DmProfileMetadataMessage, GossipMessage, ImageMessage, JoinMessage, LeaveMessage, MessageTypes,
     TopicMessagesMessage, TopicMetadataMessage,
 };
-pub use types::{Ticket};
+pub use types::Ticket;
 pub use utils::load_secret_key;

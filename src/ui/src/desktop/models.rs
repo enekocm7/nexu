@@ -1,6 +1,5 @@
 use crate::desktop::models::ConnectionStatus::Online;
 use ConnectionStatus::Offline;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -62,6 +61,12 @@ impl Topic {
 
     pub fn add_disconnect_message(&mut self, message: DisconnectMessage) {
         self.messages.push(Message::Disconnect(message));
+    }
+
+    pub fn add_image_message(&mut self, message: ImageMessage) {
+        self.last_message = Some("[Image]".to_string());
+        self.messages.push(Message::Image(message));
+        self.messages.sort()
     }
 
     pub fn add_member(&mut self, profile_id: &str) {
@@ -223,7 +228,8 @@ impl AppState {
     }
 
     pub fn add_contact_chat(&mut self, profile_chat: ProfileChat) {
-        self.contacts.insert(profile_chat.profile.id.clone(), profile_chat);
+        self.contacts
+            .insert(profile_chat.profile.id.clone(), profile_chat);
     }
 
     pub fn get_contact_chat(&self, profile_id: &str) -> Option<&ProfileChat> {
@@ -285,6 +291,7 @@ pub enum Message {
     Leave(LeaveMessage),
     Join(JoinMessage),
     Disconnect(DisconnectMessage),
+    Image(ImageMessage),
 }
 
 impl Message {
@@ -294,6 +301,7 @@ impl Message {
             Message::Leave(msg) => msg.timestamp,
             Message::Join(msg) => msg.timestamp,
             Message::Disconnect(msg) => msg.timestamp,
+            Message::Image(msg) => msg.timestamp,
         }
     }
 }
@@ -347,6 +355,33 @@ impl ChatMessage {
             sender_id,
             topic_id,
             content,
+            timestamp,
+            is_sent,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ImageMessage {
+    pub sender_id: String,
+    pub topic_id: String,
+    pub image_url: String,
+    pub timestamp: u64,
+    pub is_sent: bool,
+}
+
+impl ImageMessage {
+    pub fn new(
+        sender_id: String,
+        topic_id: String,
+        image_url: String,
+        timestamp: u64,
+        is_sent: bool,
+    ) -> Self {
+        Self {
+            sender_id,
+            topic_id,
+            image_url,
             timestamp,
             is_sent,
         }
@@ -465,9 +500,9 @@ pub enum ConnectionStatus {
 }
 
 impl ConnectionStatus {
-    pub fn get_u64(&self) -> u64{
+    pub fn get_u64(&self) -> u64 {
         match self {
-            Online => Utc::now().timestamp_millis() as u64,
+            Online => chrono::Utc::now().timestamp_millis() as u64,
             Offline(time) => time.to_owned(),
         }
     }

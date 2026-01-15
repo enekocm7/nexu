@@ -118,6 +118,7 @@ impl ChatClient {
             MessageTypes::LeaveTopic(msg) => msg.topic_id(),
             MessageTypes::DisconnectTopic(msg) => msg.topic_id(),
             MessageTypes::TopicMessages(msg) => msg.topic_id(),
+            MessageTypes::ImageMessages(msg) => msg.topic_id(),
         };
 
         let sender = self

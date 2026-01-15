@@ -2,13 +2,16 @@ use crate::client::DesktopClient;
 use crate::utils;
 use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
 use p2p::{DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket, TopicMetadataMessage};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic};
+use ui::desktop::models::{
+    AppState, ChatMessage, DmChatMessage, ImageMessage, Profile, ProfileChat, Topic,
+};
 
 pub struct AppController {
     app_state: Signal<AppState>,
@@ -232,6 +235,60 @@ impl AppController {
         });
     }
 
+    pub fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>) {
+        let mut app_state = self.app_state;
+        let desktop_client = Arc::clone(&self.desktop_client);
+        let now = Utc::now().timestamp_millis() as u64;
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let client_ref = desktop_client.clone();
+                let client = client_ref.lock().await;
+
+                let ticket = Ticket::from_str(&ticket_id)
+                    .map_err(|_| Error::InvalidTicket("Failed to parse ticket_id".to_string()))?;
+
+                let peer_id = client
+                    .peer_id()
+                    .await
+                    .map_err(|e| Error::PeerId(e.to_string()))?;
+
+                let msg = p2p::ImageMessage::new(ticket.topic, peer_id, image_data, now);
+
+                let send_result = client.send(MessageTypes::ImageMessages(msg.clone())).await;
+
+                send_result.map_err(|e| {
+                    eprintln!("Failed to send message: {}", e);
+                    Error::MessageSend(e.to_string())
+                })?;
+
+                app_state.with_mut(|state| {
+                    if let Some(topic) = state.get_topic_mutable(&ticket_id) {
+                        let image_msg = ImageMessage::new(
+                            peer_id.to_string(),
+                            ticket_id.clone(),
+                            BASE64_STANDARD.encode(msg.image_data.clone()),
+                            now,
+                            true,
+                        );
+                        topic.add_image_message(image_msg);
+                    }
+                });
+
+                save_topics_to_file(&app_state().get_all_topics()).map_err(|_| {
+                    eprintln!("Failed to save topics to file");
+                    Error::FileSave("Failed to save topics to file".to_string())
+                })?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to send message to topic {}: {}", ticket_id, e);
+            }
+        });
+    }
+
     pub fn send_message_to_user(&self, user_addr: String, message: String) {
         let desktop_client = Arc::clone(&self.desktop_client);
         let mut app_state = self.get_app_state();
@@ -252,7 +309,7 @@ impl AppController {
                     .map_err(|e| Error::PeerId(e.to_string()))?;
 
                 client
-                    .send_dm(&user_addr, p2p::DmMessageTypes::Chat(msg))
+                    .send_dm(&user_addr, DmMessageTypes::Chat(msg))
                     .await
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
 
@@ -315,8 +372,13 @@ impl AppController {
                     .modify_topic_avatar(&topic.id, topic.avatar_url.clone());
                 let time = app_state.write().set_last_changed_to_now(&topic.id);
                 let ticket = Ticket::from_str(&topic.id).expect("Invalid ticket string");
-                let update_message =
-                    TopicMetadataMessage::new(ticket.topic, &topic.name, topic.avatar_url, time, topic.members.into_iter().collect());
+                let update_message = TopicMetadataMessage::new(
+                    ticket.topic,
+                    &topic.name,
+                    topic.avatar_url,
+                    time,
+                    topic.members.into_iter().collect(),
+                );
 
                 if let Err(e) = desktop_client
                     .lock()
@@ -424,7 +486,7 @@ impl AppController {
                 });
 
                 client
-                    .send_dm(&user_id, p2p::DmMessageTypes::JoinPetition(join_msg))
+                    .send_dm(&user_id, DmMessageTypes::JoinPetition(join_msg))
                     .await
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
 
@@ -438,7 +500,7 @@ impl AppController {
                 );
 
                 client
-                    .send_dm(&user_id, p2p::DmMessageTypes::ProfileMetadata(msg))
+                    .send_dm(&user_id, DmMessageTypes::ProfileMetadata(msg))
                     .await
                     .map_err(|e| Error::MessageSend(e.to_string()))?;
 

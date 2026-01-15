@@ -1,5 +1,7 @@
 use crate::client::DesktopClient;
 use crate::utils::topics::save_topics_to_file;
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use chrono::Utc;
 use dioxus::core::spawn;
 use dioxus::prelude::{Signal, WritableExt};
@@ -152,6 +154,21 @@ pub fn handle_disconnect_topic(
     });
 }
 
+pub fn handle_image_message(mut state: Signal<AppState>, msg: p2p::ImageMessage) {
+    state.with_mut(|s| {
+        if let Some(topic_obj) = s.get_topic_mutable(&msg.topic.to_string()) {
+            let message = ui::desktop::models::ImageMessage::new(
+                msg.sender.to_string(),
+                topic_obj.id.clone(),
+                BASE64_STANDARD.encode(msg.image_data.clone()),
+                msg.timestamp,
+                false,
+            );
+            topic_obj.add_image_message(message);
+        }
+    });
+}
+
 pub fn handle_topic_messages(
     mut state: Signal<AppState>,
     topic: &str,
@@ -280,6 +297,9 @@ pub async fn process_message(
                     eprintln!("Failed to send missing messages: {}", e);
                 }
             }
+        }
+        MessageTypes::ImageMessages(image_message) => {
+            handle_image_message(state, image_message);
         }
     }
 }

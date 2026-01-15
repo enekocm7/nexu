@@ -42,6 +42,7 @@ pub mod desktop_web_components {
         on_send_message_dm: EventHandler<(String, String)>,
         on_connect_peer: EventHandler<String>,
         on_add_contact: EventHandler<String>,
+        on_image_send: EventHandler<(String, Vec<u8>)>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
         let mut show_contact_dialog = use_signal(|| false);
@@ -247,6 +248,7 @@ pub mod desktop_web_components {
                     topic_id: selected_topic_id(),
                     on_send_message,
                     on_send_message_dm,
+                    on_image_send
                 }
             }
         }
@@ -579,6 +581,7 @@ pub mod desktop_web_components {
         topic_id: Option<String>,
         on_send_message: EventHandler<(String, String)>,
         on_send_message_dm: EventHandler<(String, String)>,
+        on_image_send: EventHandler<(String, Vec<u8>)>,
     ) -> Element {
         let state = app_state();
 
@@ -685,8 +688,19 @@ pub mod desktop_web_components {
 
             let mut show_attachment = use_signal(|| false);
 
-            let handle_media_submit = move |_files| {
-                show_attachment.set(false);
+            let handle_media_submit = {
+                move |files: Vec<FileData>| {
+                    let chat_id = chat_id.clone();
+                    let mut show_attachment = show_attachment;
+                    spawn(async move {
+                        for file in files {
+                            if let Ok(data) = file.read_bytes().await {
+                                on_image_send.call((chat_id.clone(), data.to_vec()));
+                            }
+                        }
+                        show_attachment.set(false);
+                    });
+                }
             };
 
             rsx! {
@@ -886,6 +900,26 @@ pub mod desktop_web_components {
                         }
                         p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
                             "{timestamp_str}"
+                        }
+                    }
+                }
+            }
+            Message::Image(message) => {
+                let url = format!("data:image/png;base64,{}", message.image_url);
+                let alignment = if message.is_sent {
+                    "self-end"
+                } else {
+                    "self-start"
+                };
+                rsx! {
+                    div { class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                        img {
+                            class: "max-w-96 rounded-xl shadow-md",
+                            src: "{url}",
+                            alt: "Image message",
+                        }
+                        p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
+                            "{format_message_timestamp(message.timestamp)}"
                         }
                     }
                 }

@@ -17,7 +17,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, Profile, Topic};
+use ui::desktop::models::{AppState, ImageMessage, Profile, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 
@@ -161,6 +161,9 @@ fn App() -> Element {
             on_remove_contact: move |profile_id: String| {
                 controller.read().remove_contact(profile_id);
             },
+            on_image_send: move |(topic_id, image_data): (String, Vec<u8>)| {
+                controller.read().send_image_to_topic(topic_id.clone(), image_data);
+            }
         }
     }
 }
