@@ -98,7 +98,7 @@ pub mod desktop_web_components {
                             class: "input-field pl-11.25 bg-[url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cpath d='m21 21-4.35-4.35'%3E%3C/path%3E%3C/svg%3E\")] bg-no-repeat bg-position-[15px_center] bg-size-[18px] focus:-translate-y-px",
                             r#type: "text",
                             icon: "search",
-                            placeholder: "Search contacts or add by ID...",
+                            placeholder: "Search...",
                             oninput: move |value| {
                                 search_query.set(value.value());
                             },
