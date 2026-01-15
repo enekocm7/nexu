@@ -11,6 +11,7 @@ pub mod desktop_web_components {
     use base64::Engine;
     use base64::prelude::BASE64_STANDARD;
     use chrono::{DateTime, Local, TimeDelta};
+    use dioxus::html::FileData;
     use dioxus::prelude::*;
     use dioxus_primitives::context_menu::{
         ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
@@ -673,7 +674,7 @@ pub mod desktop_web_components {
                     let content = message_input().trim().to_string();
                     if !content.is_empty() {
                         if is_dm {
-                            on_send_message_dm.call((id.clone(), content)); // We need to pass on_send_message_dm into Chat!
+                            on_send_message_dm.call((id.clone(), content));
                         } else {
                             on_send_message.call((id.clone(), content));
                         }
@@ -681,6 +682,12 @@ pub mod desktop_web_components {
                     }
                 }
             });
+
+            let mut show_attachment = use_signal(|| false);
+
+            let handle_media_submit = move |_files| {
+                show_attachment.set(false);
+            };
 
             rsx! {
                 div { class: "flex-1 flex flex-col bg-bg-input h-full",
@@ -702,6 +709,12 @@ pub mod desktop_web_components {
                             ChatMessageComponent { message: message.clone(), app_state }
                         }
                     }
+                    if show_attachment() {
+                        AttachComponent {
+                            on_select_media: handle_media_submit,
+                            on_close: move |_| show_attachment.set(false),
+                        }
+                    }
                     div { class: "bg-bg-dark py-3.75 px-5 flex gap-3 items-center",
                         div { class: "flex-1 flex gap-2 items-center bg-bg-input rounded-lg border border-border px-4 py-2.5 transition-all duration-200 focus-within:border-accent-primary focus-within:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]",
                             input {
@@ -720,7 +733,7 @@ pub mod desktop_web_components {
                             }
                             button {
                                 class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:saturate-7500",
-                                onclick: move |_| {},
+                                onclick: move |_| show_attachment.set(true),
                                 img { src: CLIP_ICON }
                             }
                         }
@@ -739,6 +752,41 @@ pub mod desktop_web_components {
                 div { class: "flex-1 flex items-center justify-center bg-bg-input text-text-secondary",
                     h2 { class: "text-[clamp(1.2rem,3vw,1.8rem)] font-medium m-0",
                         "Select a chat to start messaging"
+                    }
+                }
+            }
+        }
+    }
+
+    #[component]
+    fn AttachComponent(
+        on_select_media: EventHandler<Vec<FileData>>,
+        on_close: EventHandler<()>,
+    ) -> Element {
+        rsx! {
+            div {
+                class: "fixed inset-0 z-40",
+                onclick: move |_| on_close.call(()),
+                div {
+                    class: "absolute bottom-24 right-24 bg-bg-panel rounded-xl shadow-lg border border-border p-2 min-w-48 animate-[slideIn_0.2s_ease]",
+                    onclick: move |e| e.stop_propagation(),
+                    div { class: "flex flex-row gap-1",
+                        label { class: "flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-bg-hover active:bg-bg-active group",
+                            input {
+                                class: "hidden",
+                                r#type: "file",
+                                multiple: true,
+                                accept: "image/*,video/*",
+                                onchange: move |e| on_select_media.call(e.files()),
+                            }
+                            p { class: "text-text-primary font-medium", "Photo/Video" }
+                        }
+                        button { class: "flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-bg-hover active:bg-bg-active text-left",
+                            p { class: "text-text-primary font-medium", "Files" }
+                        }
+                        button { class: "flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all duration-200 hover:bg-bg-hover active:bg-bg-active text-left",
+                            p { class: "text-text-primary font-medium", "Audio" }
+                        }
                     }
                 }
             }
