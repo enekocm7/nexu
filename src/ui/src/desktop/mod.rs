@@ -19,10 +19,12 @@ pub mod desktop_web_components {
 
     use dioxus::prelude::*;
     use dioxus_primitives::toast::ToastProvider;
+    use crate::desktop::details::ImageDetails;
 
     pub static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     pub static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
     pub static CLIP_ICON: Asset = asset!("/assets/clip_icon.svg");
+    pub static DOWNLOAD_ICON: Asset = asset!("/assets/download.svg");
     pub static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
     #[component]
@@ -49,6 +51,7 @@ pub mod desktop_web_components {
         let mut show_leave_confirmation =
             use_signal::<Option<(String, String, RemovalType)>>(|| None);
         let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
+        let mut show_image_details = use_signal::<Option<String>>(|| None);
 
         let profile_data: Profile = {
             let state = app_state();
@@ -191,6 +194,13 @@ pub mod desktop_web_components {
                         }
                     }
 
+                    if let Some(image_url) = show_image_details() {
+                        ImageDetails {
+                            image: image_url,
+                            on_close: move |_| show_image_details.set(None),
+                        }
+                    }
+
                     if let Some((id, name, removal_type)) = show_leave_confirmation() {
                         {
                             let (title, message, confirm_text) = match removal_type {
@@ -244,6 +254,7 @@ pub mod desktop_web_components {
                     on_send_message,
                     on_send_message_dm,
                     on_image_send,
+                    show_image_details,
                 }
             }
         }

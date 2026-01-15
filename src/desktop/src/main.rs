@@ -163,7 +163,7 @@ fn App() -> Element {
             },
             on_image_send: move |(topic_id, image_data): (String, Vec<u8>)| {
                 controller.read().send_image_to_topic(topic_id.clone(), image_data);
-            }
+            },
         }
     }
 }

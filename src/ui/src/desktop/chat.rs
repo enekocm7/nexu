@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name, process_image};
@@ -11,8 +12,10 @@ pub fn Chat(
     on_send_message: EventHandler<(String, String)>,
     on_send_message_dm: EventHandler<(String, String)>,
     on_image_send: EventHandler<(String, Vec<u8>)>,
+    show_image_details: Signal<Option<String>>
 ) -> Element {
     let state = app_state();
+    let mut show_attachment = use_signal(|| false);
 
     let topic = if let Some(id) = &topic_id {
         state.get_topic(id)
@@ -115,8 +118,6 @@ pub fn Chat(
             }
         });
 
-        let mut show_attachment = use_signal(|| false);
-
         let handle_media_submit = {
             move |files: Vec<FileData>| {
                 let chat_id = chat_id.clone();
@@ -137,10 +138,7 @@ pub fn Chat(
         rsx! {
             div { class: "flex-1 flex flex-col bg-bg-input h-full",
                 div { class: "bg-bg-panel py-3.75 px-5 shadow-md flex items-center gap-3.75 border-b border-border",
-                    img {
-                        class: "avatar w-11.25 h-11.25",
-                        src: "{avatar_url}",
-                    }
+                    img { class: "avatar w-11.25 h-11.25", src: "{avatar_url}" }
                     h2 {
                         class: "m-0 text-[clamp(1.1rem,2.5vw,1.4rem)] font-semibold text-text-primary max-w-100 overflow-hidden text-ellipsis whitespace-nowrap",
                         title: "{title_text}",
@@ -151,7 +149,11 @@ pub fn Chat(
                     class: "flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-bg-dark scrollbar-custom",
                     id: "chat-messages-container",
                     for message in messages.iter() {
-                        ChatMessageComponent { message: message.clone(), app_state }
+                        ChatMessageComponent {
+                            message: message.clone(),
+                            app_state,
+                            show_image_details,
+                        }
                     }
                 }
                 if show_attachment() {
@@ -209,9 +211,7 @@ pub fn AttachComponent(
     on_close: EventHandler<()>,
 ) -> Element {
     rsx! {
-        div {
-            class: "fixed inset-0 z-40",
-            onclick: move |_| on_close.call(()),
+        div { class: "fixed inset-0 z-40", onclick: move |_| on_close.call(()),
             div {
                 class: "absolute bottom-24 right-24 bg-bg-panel rounded-xl shadow-lg border border-border p-2 min-w-48 animate-[slideIn_0.2s_ease]",
                 onclick: move |e| e.stop_propagation(),
@@ -239,7 +239,7 @@ pub fn AttachComponent(
 }
 
 #[component]
-pub fn ChatMessageComponent(message: Message, app_state: Signal<AppState>) -> Element {
+pub fn ChatMessageComponent(message: Message, app_state: Signal<AppState>, show_image_details: Signal<Option<String>>) -> Element {
     let state = app_state();
     match message {
         Message::Chat(message) => {
@@ -310,15 +310,19 @@ pub fn ChatMessageComponent(message: Message, app_state: Signal<AppState>) -> El
             }
         }
         Message::Image(message) => {
-            let url = format!("data:image/webp;base64,{}", message.image_url);
+            let url = Rc::new(format!("data:image/webp;base64,{}", message.image_url));
             let sender_display = get_sender_display_name(&state, &message.sender_id);
             let alignment = if message.is_sent {
                 "self-end"
             } else {
                 "self-start"
             };
+            let url_clone = url.clone();
+
             rsx! {
-                div { class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                div {
+                    class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                    onclick: move |_| show_image_details.set(Some(url_clone.to_string())),
                     if !message.is_sent {
                         p {
                             class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",

@@ -11,7 +11,7 @@ p2p = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 anyhow = { workspace = true }
 chrono = { workspace = true }
-dirs = "6.0.0"
+dirs = { workspace = true }
 base64 = { workspace = true }
 flume = { workspace = true }
 postcard = { workspace = true }

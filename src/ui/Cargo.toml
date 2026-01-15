@@ -21,3 +21,5 @@ serde = { workspace = true, features = ["derive"] }
 base64 = "0.22.1"
 image = { workspace = true, features = ["webp"] }
 anyhow = { workspace = true }
+rfd = { version = "0.17.2", features = ["wayland", "gtk3"] }
+dirs = { workspace = true }

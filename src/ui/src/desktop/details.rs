@@ -1,4 +1,5 @@
-use super::desktop_web_components::DEFAULT_AVATAR;
+use std::rc::Rc;
+use super::desktop_web_components::{CLOSE_ICON, DEFAULT_AVATAR, DOWNLOAD_ICON};
 use super::models::{AppState, ConnectionStatus, Profile, Topic};
 use super::utils::{copy_to_clipboard, format_relative_time, process_image};
 use arboard::Clipboard;
@@ -386,4 +387,64 @@ pub fn ProfileDetails(
             }
         }
     }
+}
+
+
+#[component]
+pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
+    let image_rc = Rc::new(image);
+    let image_clone = image_rc.clone();
+    rsx! {
+        div {
+            class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
+            onclick: move |_| on_close.call(()),
+            button {
+                class: "absolute top-5 right-16 w-10 h-10 rounded-full text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:shadow",
+                title: "Download",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    let image_clone = image_clone.clone();
+                    spawn(async move {
+                        let dir = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+                        let file = rfd::AsyncFileDialog::new()
+                            .set_file_name("image.png")
+                            .set_directory(dir)
+                            .save_file()
+                            .await;
+
+                        let bytes = image_clone.to_string().split(",").nth(1)
+                            .and_then(|b64| BASE64_STANDARD.decode(b64).ok())
+                            .unwrap_or_default();
+                        if let Some(path) = file {
+                            if let Err(err) = std::fs::write(path.path(), bytes) {
+                                println!("Error saving file: {}", err);
+                            }
+                        }
+                    });
+                },
+                img { class: "w-10 h-10", src: DOWNLOAD_ICON }
+            }
+            button {
+                class: "absolute top-5 right-5 w-10 h-10 rounded-full  text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:shadow pb-0.5",
+                title: "Close",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    on_close.call(());
+                },
+                img {
+                    class: "w-10 h-10 fill-danger",
+                    src: CLOSE_ICON
+                }
+            }
+            div {
+                class: "w-max max-w-300 p-6 animate-[slideIn_0.3s_ease]",
+                onclick: move |e| e.stop_propagation(),
+                img {
+                    class: "max-w-full max-h-[90vh] mx-auto rounded-lg",
+                    src: "{image_rc}",
+                }
+            }
+        }
+    }
+
 }
