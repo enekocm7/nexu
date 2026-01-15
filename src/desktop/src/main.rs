@@ -17,7 +17,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, ImageMessage, Profile, Topic};
+use ui::desktop::models::{AppState, Profile, Topic};
 
 const MAIN_CSS: Asset = asset!("/assets/main.css");
 

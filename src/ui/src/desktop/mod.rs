@@ -695,7 +695,9 @@ pub mod desktop_web_components {
                     spawn(async move {
                         for file in files {
                             if let Ok(data) = file.read_bytes().await {
-                                on_image_send.call((chat_id.clone(), data.to_vec()));
+                                let processed_data =
+                                    process_image(&data).expect("Failed to process image");
+                                on_image_send.call((chat_id.clone(), processed_data));
                             }
                         }
                         show_attachment.set(false);
@@ -905,7 +907,7 @@ pub mod desktop_web_components {
                 }
             }
             Message::Image(message) => {
-                let url = format!("data:image/png;base64,{}", message.image_url);
+                let url = format!("data:image/webp;base64,{}", message.image_url);
                 let sender_display = get_sender_display_name(&state, &message.sender_id);
                 let alignment = if message.is_sent {
                     "self-end"
