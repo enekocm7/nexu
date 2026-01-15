@@ -154,9 +154,9 @@ pub fn handle_disconnect_topic(
     });
 }
 
-pub fn handle_image_message(mut state: Signal<AppState>, msg: p2p::ImageMessage) {
+pub fn handle_image_message(mut state: Signal<AppState>, topic: &str, msg: p2p::ImageMessage) {
     state.with_mut(|s| {
-        if let Some(topic_obj) = s.get_topic_mutable(&msg.topic.to_string()) {
+        if let Some(topic_obj) = s.get_topic_mutable(topic) {
             let message = ui::desktop::models::ImageMessage::new(
                 msg.sender.to_string(),
                 topic_obj.id.clone(),
@@ -299,7 +299,7 @@ pub async fn process_message(
             }
         }
         MessageTypes::ImageMessages(image_message) => {
-            handle_image_message(state, image_message);
+            handle_image_message(state, &topic, image_message);
         }
     }
 }

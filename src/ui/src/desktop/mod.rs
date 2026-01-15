@@ -906,6 +906,7 @@ pub mod desktop_web_components {
             }
             Message::Image(message) => {
                 let url = format!("data:image/png;base64,{}", message.image_url);
+                let sender_display = get_sender_display_name(&state, &message.sender_id);
                 let alignment = if message.is_sent {
                     "self-end"
                 } else {
@@ -913,6 +914,13 @@ pub mod desktop_web_components {
                 };
                 rsx! {
                     div { class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                        if !message.is_sent {
+                            p {
+                                class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                                title: "{message.sender_id}",
+                                "{sender_display}"
+                            }
+                        }
                         img {
                             class: "max-w-96 rounded-xl shadow-md",
                             src: "{url}",
