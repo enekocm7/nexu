@@ -25,6 +25,7 @@ pub mod desktop_web_components {
 
     static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
+    static CLIP_ICON: Asset = asset!("/assets/clip_icon.svg");
     static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
     #[component]
@@ -702,19 +703,26 @@ pub mod desktop_web_components {
                         }
                     }
                     div { class: "bg-bg-dark py-3.75 px-5 flex gap-3 items-center",
-                        input {
-                            class: "input-field flex-1 focus:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]",
-                            r#type: "text",
-                            placeholder: "Type a message...",
-                            value: "{message_input()}",
-                            oninput: move |e| {
-                                message_input.set(e.value());
-                            },
-                            onkeypress: move |e| {
-                                if e.key() == Key::Enter {
-                                    send_message(());
-                                }
-                            },
+                        div { class: "flex-1 flex gap-2 items-center bg-bg-input rounded-lg border border-border px-4 py-2.5 transition-all duration-200 focus-within:border-accent-primary focus-within:shadow-[0_0_0_2px_rgba(59,130,246,0.2)]",
+                            input {
+                                class: "flex-1 bg-transparent border-none outline-none text-text-primary placeholder:text-text-secondary",
+                                r#type: "text",
+                                placeholder: "Type a message...",
+                                value: "{message_input()}",
+                                oninput: move |e| {
+                                    message_input.set(e.value());
+                                },
+                                onkeypress: move |e| {
+                                    if e.key() == Key::Enter {
+                                        send_message(());
+                                    }
+                                },
+                            }
+                            button {
+                                class: "btn-icon w-8 h-8 rounded-lg [&>img]:w-5 [&>img]:h-5 [&>img]:brightness-0 [&>img]:saturate-100 [&>img]:invert-73 [&>img]:sepia-0 [&>img]:hue-rotate-180 [&>img]:contrast-88 [&>img]:transition-[filter] [&>img]:duration-200 [&:hover>img]:saturate-7500",
+                                onclick: move |_| {},
+                                img { src: CLIP_ICON }
+                            }
                         }
                         button {
                             class: "btn-primary py-3 px-6",
