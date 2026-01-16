@@ -43,7 +43,7 @@ impl AppController {
     pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
         Arc::clone(&self.desktop_client)
     }
-    
+
     pub fn get_progress_bar(&self) -> Receiver<u64> {
         self.progress_bar.clone()
     }
@@ -280,15 +280,21 @@ impl AppController {
                         p2p::AddProgressItem::Size(_) => continue,
                         p2p::AddProgressItem::CopyDone => continue,
                         p2p::AddProgressItem::OutboardProgress(progress) => {
-                            progress_sender.send(progress).expect("Message to the channel should not return an error");
+                            progress_sender
+                                .send(progress)
+                                .expect("Message to the channel should not return an error");
                             continue;
-                        },
+                        }
                         p2p::AddProgressItem::Done(temp_tag) => {
                             hash = Some(temp_tag.hash());
-                            progress_sender.send(u64::MAX).expect("Message to the channel should not return an error");
+                            progress_sender
+                                .send(u64::MAX)
+                                .expect("Message to the channel should not return an error");
                             break;
-                        },
-                        p2p::AddProgressItem::Error(error) => return Err(Error::BlobSave(error.to_string())),
+                        }
+                        p2p::AddProgressItem::Error(error) => {
+                            return Err(Error::BlobSave(error.to_string()));
+                        }
                     }
                 }
 
@@ -693,3 +699,45 @@ impl std::fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+impl ui::desktop::models::Controller for AppController {
+    fn create_topic(&self, name: String) {
+        self.create_topic(name);
+    }
+
+    fn join_topic(&self, topic_id: String) {
+        self.join_topic(topic_id);
+    }
+
+    fn leave_topic(&self, topic_id: String) {
+        self.leave_topic(topic_id);
+    }
+
+    fn remove_contact(&self, profile_id: String) {
+        self.remove_contact(profile_id);
+    }
+
+    fn send_message_to_topic(&self, ticket_id: String, message: String) {
+        self.send_message_to_topic(ticket_id, message);
+    }
+
+    fn modify_topic(&self, topic: Topic) {
+        self.modify_topic(topic);
+    }
+
+    fn modify_profile(&self, profile: Profile) {
+        self.modify_profile(profile);
+    }
+
+    fn send_message_to_user(&self, user_addr: String, message: String) {
+        self.send_message_to_user(user_addr, message);
+    }
+
+    fn connect_to_user(&self, user_id: String) {
+        self.connect_to_user(user_id);
+    }
+
+    fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>) {
+        self.send_image_to_topic(ticket_id, image_data);
+    }
+}

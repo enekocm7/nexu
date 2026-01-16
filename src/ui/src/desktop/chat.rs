@@ -1,17 +1,15 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
-use super::models::{AppState, Message};
+use super::models::{AppState, Controller, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name, process_image};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use std::rc::Rc;
 
 #[component]
-pub fn Chat(
+pub fn Chat<C: Controller + 'static>(
     app_state: Signal<AppState>,
     topic_id: Option<String>,
-    on_send_message: EventHandler<(String, String)>,
-    on_send_message_dm: EventHandler<(String, String)>,
-    on_image_send: EventHandler<(String, Vec<u8>)>,
+    controller: Signal<C>,
     show_image_details: Signal<Option<String>>,
 ) -> Element {
     let state = app_state();
@@ -105,13 +103,14 @@ pub fn Chat(
         let send_message = use_callback({
             let id = chat_id.clone();
             let is_dm = contact.is_some();
+            let controller = controller;
             move |_| {
                 let content = message_input().trim().to_string();
                 if !content.is_empty() {
                     if is_dm {
-                        on_send_message_dm.call((id.clone(), content));
+                        controller.read().send_message_to_user(id.clone(), content);
                     } else {
-                        on_send_message.call((id.clone(), content));
+                        controller.read().send_message_to_topic(id.clone(), content);
                     }
                     message_input.set(String::new());
                 }
@@ -119,6 +118,7 @@ pub fn Chat(
         });
 
         let handle_media_submit = {
+            let controller = controller;
             move |files: Vec<FileData>| {
                 let chat_id = chat_id.clone();
                 let mut show_attachment = show_attachment;
@@ -127,7 +127,9 @@ pub fn Chat(
                         if let Ok(data) = file.read_bytes().await {
                             let processed_data =
                                 process_image(&data).expect("Failed to process image");
-                            on_image_send.call((chat_id.clone(), processed_data));
+                            controller
+                                .read()
+                                .send_image_to_topic(chat_id.clone(), processed_data);
                         }
                     }
                     show_attachment.set(false);

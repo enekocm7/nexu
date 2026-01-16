@@ -9,7 +9,7 @@ use iroh::discovery::pkarr::PkarrPublisher;
 use iroh::endpoint::SendStream;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
-use iroh_blobs::api::blobs::{AddProgress, ExportProgress};
+use iroh_blobs::api::blobs::{AddProgress, BlobStatus, ExportProgress};
 use iroh_blobs::api::downloader::{DownloadProgress, Downloader};
 use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::ticket::BlobTicket;
@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use tokio::time::sleep;
 
 pub struct ChatClient {
@@ -156,8 +157,25 @@ impl ChatClient {
 
     pub async fn get_blob_from_storage(&self, hash: impl Into<Hash>) -> anyhow::Result<Vec<u8>> {
         let hash: Hash = hash.into();
-        let bytes = self.store.get_bytes(hash).await?;
-        Ok(bytes.to_vec())
+        match self.store.status(hash).await? {
+            BlobStatus::NotFound => Err(anyhow::anyhow!("Blob not found in storage")),
+            BlobStatus::Partial { size } => Err(anyhow::anyhow!(
+                "Blob is partial in storage, size: {:?}",
+                size
+            )),
+            BlobStatus::Complete { size } => {
+                if size >= 1_000_000_000 {
+                    //TODO Handle bigger files with a streaming approach
+                    let mut reader = self.store.reader(hash);
+                    let mut buffer = Vec::with_capacity(size as usize);
+                    reader.read_to_end(&mut buffer).await?;
+                    Ok(buffer)
+                } else {
+                    let bytes = self.store.get_bytes(hash).await?;
+                    Ok(bytes.to_vec())
+                }
+            }
+        }
     }
 
     pub async fn save_blob_to_storage(

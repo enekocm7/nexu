@@ -1,5 +1,5 @@
 use super::desktop_web_components::{CLOSE_ICON, DEFAULT_AVATAR, DOWNLOAD_ICON};
-use super::models::{AppState, ConnectionStatus, Profile, Topic};
+use super::models::{AppState, ConnectionStatus, Controller, Profile, Topic};
 use super::utils::{copy_to_clipboard, format_relative_time, process_image};
 use arboard::Clipboard;
 use base64::Engine;
@@ -9,10 +9,10 @@ use dioxus_primitives::toast::{ToastOptions, use_toast};
 use std::rc::Rc;
 
 #[component]
-pub fn TopicDetails(
+pub fn TopicDetails<C: Controller + 'static>(
     topic: Topic,
     mut toggle: Signal<Option<Topic>>,
-    on_modify_topic: EventHandler<Topic>,
+    controller: Signal<C>,
     mut view_profile: Signal<Option<Profile>>,
     app_state: Signal<AppState>,
 ) -> Element {
@@ -36,7 +36,8 @@ pub fn TopicDetails(
     let handle_save = move |_event: Event<MouseData>| {
         let mut updated_topic = topic_clone.clone();
         updated_topic.name = edited_title().trim().to_string();
-        on_modify_topic.call(updated_topic);
+        let controller = controller;
+        controller.read().modify_topic(updated_topic);
         toast.success(
             "Topic updated successfully".to_owned(),
             ToastOptions::default(),
@@ -50,6 +51,7 @@ pub fn TopicDetails(
         if let Some(file) = files.first() {
             let file = file.clone();
             let topic_clone = topic_clone_for_image.clone();
+            let controller = controller;
             spawn(async move {
                 match file.read_bytes().await {
                     Ok(bytes) => {
@@ -78,7 +80,7 @@ pub fn TopicDetails(
 
                         let mut updated_topic = topic_clone.clone();
                         updated_topic.avatar_url = Some(url);
-                        on_modify_topic.call(updated_topic);
+                        controller.read().modify_topic(updated_topic);
                         toggle.set(None);
 
                         toast.success(
@@ -214,10 +216,10 @@ pub fn TopicDetails(
 }
 
 #[component]
-pub fn ProfileDetails(
+pub fn ProfileDetails<C: Controller + 'static>(
     profile: Profile,
     mut toggle: Signal<Option<Profile>>,
-    on_modify_profile: EventHandler<Profile>,
+    controller: Signal<C>,
     readonly: bool,
 ) -> Element {
     let toast = use_toast();
@@ -242,7 +244,8 @@ pub fn ProfileDetails(
         let mut updated_profile = profile_clone.clone();
         updated_profile.name = edited_name().trim().to_string();
         updated_profile.avatar = edited_avatar().clone();
-        on_modify_profile.call(updated_profile);
+        let controller = controller;
+        controller.read().modify_profile(updated_profile);
         toast.success(
             "Profile updated successfully".to_owned(),
             ToastOptions::default(),

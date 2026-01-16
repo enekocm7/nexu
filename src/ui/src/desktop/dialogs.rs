@@ -1,5 +1,5 @@
 use super::desktop_web_components::CLOSE_ICON;
-use super::models::RemovalType;
+use super::models::{Controller, RemovalType};
 use dioxus::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -9,10 +9,9 @@ pub enum TopicCreationMode {
 }
 
 #[component]
-pub fn TopicDialog(
+pub fn TopicDialog<C: Controller + 'static>(
     mut toggle: Signal<bool>,
-    on_create: EventHandler<String>,
-    on_join: EventHandler<String>,
+    controller: Signal<C>,
 ) -> Element {
     let mut topic_name = use_signal(String::new);
     let mut selected_mode = use_signal(|| TopicCreationMode::Create);
@@ -20,11 +19,12 @@ pub fn TopicDialog(
     let handle_submit = move |_| {
         let mode = selected_mode();
         let name = topic_name().trim().to_string();
+        let controller = controller;
 
         if !name.is_empty() {
             match mode {
-                TopicCreationMode::Create => on_create.call(name),
-                TopicCreationMode::Join => on_join.call(name),
+                TopicCreationMode::Create => controller.read().create_topic(name),
+                TopicCreationMode::Join => controller.read().join_topic(name),
             }
             toggle.set(false);
             topic_name.set(String::new());
@@ -117,13 +117,17 @@ pub fn TopicDialog(
 }
 
 #[component]
-pub fn ContactDialog(mut toggle: Signal<bool>, on_add: EventHandler<String>) -> Element {
+pub fn ContactDialog<C: Controller + 'static>(
+    mut toggle: Signal<bool>,
+    controller: Signal<C>,
+) -> Element {
     let mut address_str = use_signal(String::new);
 
     let handle_submit = move |_| {
         let addr = address_str().trim().to_string();
+        let controller = controller;
         if !addr.is_empty() {
-            on_add.call(addr);
+            controller.read().connect_to_user(addr);
             toggle.set(false);
             address_str.set(String::new());
         }
@@ -253,14 +257,14 @@ pub fn ProgressBar(title: String, progress: Signal<u64>) -> Element {
                 onclick: move |e| e.stop_propagation(),
                 div { class: "flex flex-col justify-between items-center py-5 px-6 border-b border-border",
                     h3 { class: "m-0 text-xl font-semibold text-text-primary pb-3", "{title}" }
-                    progress { 
+                    progress {
                         class: "w-full h-2 bg-gray-200 rounded-full overflow-hidden",
                         //TODO Ver cual es el valor maximo
                         max: "100",
-                        value: "{progress}" 
+                        value: "{progress}"
                     }
                 }
             }
-        }   
+        }
     }
 }

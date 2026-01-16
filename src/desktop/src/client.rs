@@ -3,7 +3,8 @@ use flume::Receiver;
 use futures_lite::Stream;
 use p2p::messages::DmMessageTypes;
 use p2p::{
-    AddProgressItem, BlobTicket, ChatClient, DownloadProgress, EndpointId, ExportProgress, MessageTypes, Ticket
+    AddProgressItem, BlobTicket, ChatClient, DownloadProgress, EndpointId, ExportProgress,
+    MessageTypes, Ticket,
 };
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -213,7 +214,10 @@ impl DesktopClient {
         Ok(guard.download_blob(blob_ticket))
     }
 
-    pub async fn get_blob_from_storage(&self, hash: impl Into<p2p::Hash>) -> anyhow::Result<Vec<u8>> {
+    pub async fn get_blob_from_storage(
+        &self,
+        hash: impl Into<p2p::Hash>,
+    ) -> anyhow::Result<Vec<u8>> {
         let client = self
             .client
             .get()
