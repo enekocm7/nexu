@@ -14,7 +14,7 @@ pub mod desktop_web_components {
     pub use super::details::{ProfileDetails, TopicDetails};
     pub use super::dialogs::{ConfirmationDialog, ContactDialog};
     pub use super::models::{
-        AppState, ColumnState, Profile, RemovalType, Topic, TopicCreationMode,
+        AppState, ColumnState, Controller, Profile, RemovalType, Topic, TopicCreationMode,
     };
 
     use crate::desktop::details::ImageDetails;
@@ -28,19 +28,9 @@ pub mod desktop_web_components {
     pub static COMPONENTS_CSS: Asset = asset!("/assets/dx-components-theme.css");
 
     #[component]
-    pub fn Desktop(
+    pub fn Desktop<C: Controller + 'static>(
         app_state: Signal<AppState>,
-        on_create_topic: EventHandler<String>,
-        on_join_topic: EventHandler<String>,
-        on_leave_topic: EventHandler<String>,
-        on_remove_contact: EventHandler<String>,
-        on_send_message: EventHandler<(String, String)>,
-        on_modify_topic: EventHandler<Topic>,
-        on_modify_profile: EventHandler<Profile>,
-        on_send_message_dm: EventHandler<(String, String)>,
-        on_connect_peer: EventHandler<String>,
-        on_add_contact: EventHandler<String>,
-        on_image_send: EventHandler<(String, Vec<u8>)>,
+        controller: Signal<C>,
         progress_bar: Signal<u64>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
@@ -161,7 +151,7 @@ pub mod desktop_web_components {
                             ProfileDetails {
                                 profile: profile.clone(),
                                 toggle: show_profile_details,
-                                on_modify_profile,
+                                controller: controller,
                                 readonly: profile.id != profile_data.id,
                             }
                         }
@@ -172,7 +162,7 @@ pub mod desktop_web_components {
                             TopicDetails {
                                 topic: topic.clone(),
                                 toggle: show_topic_details,
-                                on_modify_topic,
+                                controller: controller,
                                 view_profile: show_profile_details,
                                 app_state,
                             }
@@ -182,11 +172,10 @@ pub mod desktop_web_components {
                     if show_topic_dialog() {
                         TopicDialog {
                             toggle: show_topic_dialog,
-                            on_create: on_create_topic,
-                            on_join: on_join_topic,
+                            controller: controller,
                         }
                     }
-                    
+
                     if progress_bar() != u64::MAX {
                         ProgressBar {
                             title: "Loading...",
@@ -198,7 +187,7 @@ pub mod desktop_web_components {
                     if show_contact_dialog() {
                         ContactDialog {
                             toggle: show_contact_dialog,
-                            on_add: on_add_contact,
+                            controller: controller,
                         }
                     }
 
@@ -244,8 +233,8 @@ pub mod desktop_web_components {
                                     toggle: show_leave_confirmation,
                                     on_confirm: move |_| {
                                         match removal_type {
-                                            RemovalType::Topic => on_leave_topic.call(id.clone()),
-                                            RemovalType::Contact => on_remove_contact.call(id.clone()),
+                                            RemovalType::Topic => controller.read().leave_topic(id.clone()),
+                                            RemovalType::Contact => controller.read().remove_contact(id.clone()),
                                         }
                                         show_leave_confirmation.set(None);
                                         selected_topic_id.set(None);
@@ -259,9 +248,7 @@ pub mod desktop_web_components {
                 Chat {
                     app_state,
                     topic_id: selected_topic_id(),
-                    on_send_message,
-                    on_send_message_dm,
-                    on_image_send,
+                    controller: controller,
                     show_image_details,
                 }
             }

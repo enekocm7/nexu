@@ -17,7 +17,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
-use ui::desktop::models::{AppState, Profile, Topic};
+use ui::desktop::models::{AppState, Topic};
 
 fn main() {
     LaunchBuilder::new()
@@ -131,41 +131,9 @@ fn App() -> Element {
     });
 
     rsx! {
-        Desktop {
+        Desktop::<controller::AppController> {
             app_state: controller.read().get_app_state(),
-            on_create_topic: move |name: String| {
-                controller.read().create_topic(name);
-            },
-            on_join_topic: move |topic_id: String| {
-                controller.read().join_topic(topic_id);
-            },
-            on_leave_topic: move |topic_id: String| {
-                controller.read().leave_topic(topic_id);
-            },
-            on_send_message: move |(topic_id, message): (String, String)| {
-                controller.read().send_message_to_topic(topic_id, message);
-            },
-            on_modify_topic: move |topic: Topic| {
-                controller.read().modify_topic(topic);
-            },
-            on_modify_profile: move |profile: Profile| {
-                controller.read().modify_profile(profile);
-            },
-            on_send_message_dm: move |(recipient_id, message): (String, String)| {
-                controller.read().send_message_to_user(recipient_id, message);
-            },
-            on_connect_peer: move |username: String| {
-                controller.read().connect_to_user(username);
-            },
-            on_add_contact: move |username: String| {
-                controller.read().connect_to_user(username);
-            },
-            on_remove_contact: move |profile_id: String| {
-                controller.read().remove_contact(profile_id);
-            },
-            on_image_send: move |(topic_id, image_data): (String, Vec<u8>)| {
-                controller.read().send_image_to_topic(topic_id.clone(), image_data);
-            },
+            controller: controller,
             progress_bar: progress_bar,
         }
     }

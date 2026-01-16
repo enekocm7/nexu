@@ -621,3 +621,16 @@ pub enum RemovalType {
     Topic,
     Contact,
 }
+
+pub trait Controller {
+    fn create_topic(&self, name: String);
+    fn join_topic(&self, topic_id: String);
+    fn leave_topic(&self, topic_id: String);
+    fn remove_contact(&self, profile_id: String);
+    fn send_message_to_topic(&self, ticket_id: String, message: String);
+    fn modify_topic(&self, topic: Topic);
+    fn modify_profile(&self, profile: Profile);
+    fn send_message_to_user(&self, user_addr: String, message: String);
+    fn connect_to_user(&self, user_id: String);
+    fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>);
+}

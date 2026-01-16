@@ -3,7 +3,6 @@ use iroh::SecretKey;
 use std::path::PathBuf;
 
 pub async fn load_secret_key(path_buf: PathBuf) -> anyhow::Result<SecretKey> {
-    return Ok(SecretKey::generate(&mut rand::rng()));
     if path_buf.exists() {
         let secret_key_bytes = tokio::fs::read(path_buf).await?;
         let secret_key = SecretKey::try_from(&secret_key_bytes[0..32])?;
