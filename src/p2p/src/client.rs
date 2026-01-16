@@ -1039,4 +1039,52 @@ mod tests {
 
         assert_eq!(result1.hash, result2.hash);
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_blob_from_storage() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data = b"Data for get_blob_from_storage test";
+        let progress = client.save_blob(test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        let retrieved_bytes = client
+            .get_blob_from_storage(result.hash)
+            .await
+            .expect("Failed to get blob from storage");
+
+        assert_eq!(retrieved_bytes, test_data);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_blob_to_storage() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data = b"Data for save_blob_to_storage test";
+        let progress = client.save_blob(test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        let export_progress = client.save_blob_to_storage(result.hash).await;
+
+        export_progress.await.expect("Failed to export blob");
+
+        let expected_file_path = temp_dir.path().join(result.hash.to_string());
+
+        assert!(
+            expected_file_path.exists(),
+            "Exported file should exist at {:?}",
+            expected_file_path
+        );
+
+        let content = std::fs::read(expected_file_path).expect("Failed to read exported file");
+        assert_eq!(content, test_data);
+    }
 }
