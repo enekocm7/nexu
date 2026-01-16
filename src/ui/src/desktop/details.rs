@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use super::desktop_web_components::{CLOSE_ICON, DEFAULT_AVATAR, DOWNLOAD_ICON};
 use super::models::{AppState, ConnectionStatus, Profile, Topic};
 use super::utils::{copy_to_clipboard, format_relative_time, process_image};
@@ -7,6 +6,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use dioxus::prelude::*;
 use dioxus_primitives::toast::{ToastOptions, use_toast};
+use std::rc::Rc;
 
 #[component]
 pub fn TopicDetails(
@@ -389,7 +389,6 @@ pub fn ProfileDetails(
     }
 }
 
-
 #[component]
 pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
     let image_rc = Rc::new(image);
@@ -399,42 +398,42 @@ pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
             class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
             onclick: move |_| on_close.call(()),
             button {
-                class: "absolute top-5 right-16 w-10 h-10 rounded-full text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:shadow",
+                class: "absolute top-5 right-16 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-white/20 hover:scale-110 hover:shadow-lg active:scale-95",
                 title: "Download",
                 onclick: move |e| {
                     e.stop_propagation();
                     let image_clone = image_clone.clone();
                     spawn(async move {
-                        let dir = dirs::download_dir().unwrap_or_else(|| std::path::PathBuf::from("."));
+                        let dir = dirs::download_dir()
+
+                            .unwrap_or_else(|| std::path::PathBuf::from("."));
                         let file = rfd::AsyncFileDialog::new()
                             .set_file_name("image.png")
                             .set_directory(dir)
                             .save_file()
                             .await;
-
-                        let bytes = image_clone.to_string().split(",").nth(1)
+                        let bytes = image_clone
+                            .to_string()
+                            .split(",")
+                            .nth(1)
                             .and_then(|b64| BASE64_STANDARD.decode(b64).ok())
                             .unwrap_or_default();
-                        if let Some(path) = file {
-                            if let Err(err) = std::fs::write(path.path(), bytes) {
-                                println!("Error saving file: {}", err);
-                            }
+                        if let Some(path) = file && let Err(err) = std::fs::write(path.path(), bytes)
+                        {
+                            println!("Error saving file: {}", err);
                         }
                     });
                 },
-                img { class: "w-10 h-10", src: DOWNLOAD_ICON }
+                img { class: "w-6 h-6 drop-shadow-md", src: DOWNLOAD_ICON }
             }
             button {
-                class: "absolute top-5 right-5 w-10 h-10 rounded-full  text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:shadow pb-0.5",
+                class: "absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-danger/80 hover:scale-110 hover:shadow-lg active:scale-95",
                 title: "Close",
                 onclick: move |e| {
                     e.stop_propagation();
                     on_close.call(());
                 },
-                img {
-                    class: "w-10 h-10 fill-danger",
-                    src: CLOSE_ICON
-                }
+                img { class: "w-5 h-5", src: CLOSE_ICON }
             }
             div {
                 class: "w-max max-w-300 p-6 animate-[slideIn_0.3s_ease]",
@@ -446,5 +445,4 @@ pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
             }
         }
     }
-
 }

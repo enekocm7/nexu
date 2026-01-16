@@ -17,9 +17,9 @@ pub mod desktop_web_components {
         AppState, ColumnState, Profile, RemovalType, Topic, TopicCreationMode,
     };
 
+    use crate::desktop::details::ImageDetails;
     use dioxus::prelude::*;
     use dioxus_primitives::toast::ToastProvider;
-    use crate::desktop::details::ImageDetails;
 
     pub static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     pub static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");

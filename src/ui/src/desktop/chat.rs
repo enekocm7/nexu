@@ -1,9 +1,9 @@
-use std::rc::Rc;
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name, process_image};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
+use std::rc::Rc;
 
 #[component]
 pub fn Chat(
@@ -12,7 +12,7 @@ pub fn Chat(
     on_send_message: EventHandler<(String, String)>,
     on_send_message_dm: EventHandler<(String, String)>,
     on_image_send: EventHandler<(String, Vec<u8>)>,
-    show_image_details: Signal<Option<String>>
+    show_image_details: Signal<Option<String>>,
 ) -> Element {
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
@@ -239,7 +239,11 @@ pub fn AttachComponent(
 }
 
 #[component]
-pub fn ChatMessageComponent(message: Message, app_state: Signal<AppState>, show_image_details: Signal<Option<String>>) -> Element {
+pub fn ChatMessageComponent(
+    message: Message,
+    app_state: Signal<AppState>,
+    show_image_details: Signal<Option<String>>,
+) -> Element {
     let state = app_state();
     match message {
         Message::Chat(message) => {

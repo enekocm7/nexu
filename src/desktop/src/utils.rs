@@ -324,7 +324,12 @@ pub mod contacts {
             }
         }
 
-        fn create_test_profile_chat(id: &str, name: &str, avatar: Option<&str>, messages: Vec<DmMessage>) -> ProfileChat {
+        fn create_test_profile_chat(
+            id: &str,
+            name: &str,
+            avatar: Option<&str>,
+            messages: Vec<DmMessage>,
+        ) -> ProfileChat {
             ProfileChat {
                 profile: Profile {
                     id: id.to_string(),
@@ -385,8 +390,18 @@ pub mod contacts {
             let test_file_path = temp_dir.path().join("test_contacts.bin");
 
             let contacts = vec![
-                create_test_profile_chat("contact1", "Alice", Some("https://example.com/alice.png"), Vec::new()),
-                create_test_profile_chat("contact2", "Bob", Some("https://example.com/bob.png"), Vec::new()),
+                create_test_profile_chat(
+                    "contact1",
+                    "Alice",
+                    Some("https://example.com/alice.png"),
+                    Vec::new(),
+                ),
+                create_test_profile_chat(
+                    "contact2",
+                    "Bob",
+                    Some("https://example.com/bob.png"),
+                    Vec::new(),
+                ),
                 create_test_profile_chat("contact3", "Charlie", None, Vec::new()),
             ];
 
@@ -399,17 +414,26 @@ pub mod contacts {
             let loaded_contacts = load_result.unwrap();
             assert_eq!(loaded_contacts.len(), 3, "Loaded contacts count mismatch");
 
-            let contact1 = loaded_contacts.iter().find(|c| c.profile.id == "contact1").unwrap();
+            let contact1 = loaded_contacts
+                .iter()
+                .find(|c| c.profile.id == "contact1")
+                .unwrap();
             assert_eq!(contact1.profile.name, "Alice");
             assert_eq!(
                 contact1.profile.avatar,
                 Some("https://example.com/alice.png".to_string())
             );
 
-            let contact2 = loaded_contacts.iter().find(|c| c.profile.id == "contact2").unwrap();
+            let contact2 = loaded_contacts
+                .iter()
+                .find(|c| c.profile.id == "contact2")
+                .unwrap();
             assert_eq!(contact2.profile.name, "Bob");
 
-            let contact3 = loaded_contacts.iter().find(|c| c.profile.id == "contact3").unwrap();
+            let contact3 = loaded_contacts
+                .iter()
+                .find(|c| c.profile.id == "contact3")
+                .unwrap();
             assert_eq!(contact3.profile.name, "Charlie");
             assert_eq!(contact3.profile.avatar, None);
         }
@@ -467,8 +491,13 @@ pub mod contacts {
         #[test]
         fn test_save_contacts_to_invalid_path() {
             let invalid_path = PathBuf::from("/nonexistent/directory/test_contacts.bin");
-            let contacts = vec![create_test_profile_chat("contact1", "Alice", None, Vec::new())];
-            
+            let contacts = vec![create_test_profile_chat(
+                "contact1",
+                "Alice",
+                None,
+                Vec::new(),
+            )];
+
             let result = save_contacts_to_path(&contacts, &invalid_path);
             assert!(
                 result.is_err(),
@@ -526,13 +555,18 @@ pub mod contacts {
             );
             assert_eq!(loaded_profile.name, "Jane Smith");
         }
-        
+
         #[test]
         fn test_save_contacts_overwrites_existing() {
             let temp_dir = TempDir::new().unwrap();
             let test_file_path = temp_dir.path().join("overwrite_contacts.bin");
 
-            let contacts1 = vec![create_test_profile_chat("contact1", "Alice", None, Vec::new())];
+            let contacts1 = vec![create_test_profile_chat(
+                "contact1",
+                "Alice",
+                None,
+                Vec::new(),
+            )];
             save_contacts_to_path(&contacts1, &test_file_path).unwrap();
 
             let contacts2 = vec![
