@@ -4,10 +4,13 @@ use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
+use flume::{Receiver, Sender};
+use futures_lite::StreamExt;
 use p2p::{
     BlobTicket, DmMessageTypes, DmProfileMetadataMessage, Hash, MessageTypes, Raw, Ticket,
     TopicMetadataMessage,
 };
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -18,13 +21,18 @@ use ui::desktop::models::{
 pub struct AppController {
     app_state: Signal<AppState>,
     desktop_client: Arc<Mutex<DesktopClient>>,
+    progress_bar: Receiver<u64>,
+    progress_bar_sender: Sender<u64>,
 }
 
 impl AppController {
     pub fn new() -> Self {
+        let (progress_bar_sender, progress_bar) = flume::unbounded();
         Self {
             app_state: Signal::new(AppState::new("Error")),
             desktop_client: Arc::new(Mutex::new(DesktopClient::new())),
+            progress_bar,
+            progress_bar_sender,
         }
     }
 
@@ -34,6 +42,10 @@ impl AppController {
 
     pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
         Arc::clone(&self.desktop_client)
+    }
+    
+    pub fn get_progress_bar(&self) -> Receiver<u64> {
+        self.progress_bar.clone()
     }
 
     pub fn create_topic(&self, name: String) {
@@ -240,6 +252,7 @@ impl AppController {
     pub fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>) {
         let mut app_state = self.app_state;
         let desktop_client = Arc::clone(&self.desktop_client);
+        let progress_sender = self.progress_bar_sender.clone();
         let now = Utc::now().timestamp_millis() as u64;
         spawn(async move {
             let result: Result<(), Error> = async {
@@ -254,18 +267,59 @@ impl AppController {
                     .await
                     .map_err(|e| Error::PeerId(e.to_string()))?;
 
-                let hash = Hash::new(image_data);
+                let add_stream = client
+                    .save_blob(image_data.clone())
+                    .await
+                    .map_err(|e| Error::BlobSave(e.to_string()))?;
 
-                let blob_ticket = BlobTicket::new(peer_id.into(), hash, Raw);
+                let mut stream = add_stream;
+                let mut hash = None;
+                while let Some(item) = stream.next().await {
+                    match item {
+                        p2p::AddProgressItem::CopyProgress(_) => continue,
+                        p2p::AddProgressItem::Size(_) => continue,
+                        p2p::AddProgressItem::CopyDone => continue,
+                        p2p::AddProgressItem::OutboardProgress(progress) => {
+                            progress_sender.send(progress).expect("Message to the channel should not return an error");
+                            continue;
+                        },
+                        p2p::AddProgressItem::Done(temp_tag) => {
+                            hash = Some(temp_tag.hash());
+                            progress_sender.send(u64::MAX).expect("Message to the channel should not return an error");
+                            break;
+                        },
+                        p2p::AddProgressItem::Error(error) => return Err(Error::BlobSave(error.to_string())),
+                    }
+                }
+
+                let hash = hash
+                    .ok_or_else(|| Error::BlobSave("Failed to get hash from stream".to_string()))?;
+
+                client
+                    .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
+                    .await
+                    .map_err(|e| {
+                        Error::BlobSave(format!("Failed to save blob to storage: {}", e))
+                    })?;
+
+                let blob_ticket = BlobTicket::new(
+                    client
+                        .endpoint_addr()
+                        .await
+                        .map_err(|e| Error::PeerId(e.to_string()))?,
+                    hash,
+                    Raw,
+                );
 
                 let msg = p2p::ImageMessage::new(ticket.topic, peer_id, blob_ticket, now);
 
-                let send_result = client.send(MessageTypes::ImageMessages(msg.clone())).await;
-
-                send_result.map_err(|e| {
-                    eprintln!("Failed to send message: {}", e);
-                    Error::MessageSend(e.to_string())
-                })?;
+                client
+                    .send(MessageTypes::ImageMessages(msg))
+                    .await
+                    .map_err(|e| {
+                        eprintln!("Failed to send message: {}", e);
+                        Error::MessageSend(e.to_string())
+                    })?;
 
                 app_state.with_mut(|state| {
                     if let Some(topic) = state.get_topic_mutable(&ticket_id) {
@@ -290,9 +344,38 @@ impl AppController {
             .await;
 
             if let Err(e) = result {
-                eprintln!("Failed to send message to topic {}: {}", ticket_id, e);
+                eprintln!("Failed to send image to topic {}: {}", ticket_id, e);
             }
         });
+    }
+
+    pub async fn download_blob(&self, ticket_str: String) -> anyhow::Result<p2p::DownloadProgress> {
+        let ticket = BlobTicket::from_str(&ticket_str)?;
+        self.desktop_client
+            .lock()
+            .await
+            .download_blob(&ticket)
+            .await
+    }
+
+    pub async fn get_blob_from_storage(&self, hash: Hash) -> anyhow::Result<Vec<u8>> {
+        self.desktop_client
+            .lock()
+            .await
+            .get_blob_from_storage(hash)
+            .await
+    }
+
+    pub async fn save_blob_to_storage(
+        &self,
+        hash: Hash,
+        path: PathBuf,
+    ) -> anyhow::Result<p2p::ExportProgress> {
+        self.desktop_client
+            .lock()
+            .await
+            .save_blob_to_storage(hash, path)
+            .await
     }
 
     pub fn send_message_to_user(&self, user_addr: String, message: String) {
@@ -586,6 +669,7 @@ pub enum Error {
     MessageCreation(String),
     ImageSizeExceeded,
     ProfileSave(String),
+    BlobSave(String),
 }
 
 impl std::fmt::Display for Error {
@@ -603,6 +687,7 @@ impl std::fmt::Display for Error {
             Error::MessageCreation(msg) => write!(f, "Message creation error: {}", msg),
             Error::ImageSizeExceeded => write!(f, "Image size exceeds 512 KB limit"),
             Error::ProfileSave(msg) => write!(f, "Profile save error: {}", msg),
+            Error::BlobSave(msg) => write!(f, "Blob save error: {}", msg),
         }
     }
 }

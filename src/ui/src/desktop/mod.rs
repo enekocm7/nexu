@@ -7,7 +7,7 @@ pub mod utils;
 
 #[cfg(feature = "desktop-web")]
 pub mod desktop_web_components {
-    use crate::desktop::dialogs::TopicDialog;
+    use crate::desktop::dialogs::{ProgressBar, TopicDialog};
 
     pub use super::chat::Chat;
     pub use super::columns::{ContactColumn, TopicColumn};
@@ -41,6 +41,7 @@ pub mod desktop_web_components {
         on_connect_peer: EventHandler<String>,
         on_add_contact: EventHandler<String>,
         on_image_send: EventHandler<(String, Vec<u8>)>,
+        progress_bar: Signal<u64>,
     ) -> Element {
         let mut show_topic_dialog = use_signal(|| false);
         let mut show_contact_dialog = use_signal(|| false);
@@ -183,6 +184,13 @@ pub mod desktop_web_components {
                             toggle: show_topic_dialog,
                             on_create: on_create_topic,
                             on_join: on_join_topic,
+                        }
+                    }
+                    
+                    if progress_bar() != u64::MAX {
+                        ProgressBar {
+                            title: "Loading...",
+                            progress: progress_bar,
                         }
                     }
 

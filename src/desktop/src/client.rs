@@ -1,8 +1,13 @@
 use dioxus::core::anyhow;
 use flume::Receiver;
+use futures_lite::Stream;
 use p2p::messages::DmMessageTypes;
-use p2p::{ChatClient, EndpointId, MessageTypes, Ticket};
+use p2p::{
+    AddProgressItem, BlobTicket, ChatClient, DownloadProgress, EndpointId, ExportProgress, MessageTypes, Ticket
+};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::str::FromStr;
 use tokio::sync::{Mutex, OnceCell};
 
@@ -36,6 +41,15 @@ impl DesktopClient {
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
         Ok(client.lock().await.peer_id())
+    }
+
+    pub async fn endpoint_addr(&self) -> anyhow::Result<p2p::EndpointAddr> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+
+        Ok(client.lock().await.endpoint_addr())
     }
 
     pub async fn create_topic(&mut self) -> anyhow::Result<String> {
@@ -171,5 +185,53 @@ impl DesktopClient {
         client.lock().await.send_dm(peer_id, message).await?;
 
         Ok(())
+    }
+
+    pub async fn save_blob(
+        &self,
+        blob: Vec<u8>,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = AddProgressItem> + Send>>> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let mut guard = client.lock().await;
+        let progress = guard.save_blob(blob.as_slice());
+        let stream = progress.stream().await;
+        Ok(Box::pin(stream))
+    }
+
+    pub async fn download_blob(
+        &self,
+        blob_ticket: &BlobTicket,
+    ) -> anyhow::Result<DownloadProgress> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let mut guard = client.lock().await;
+        Ok(guard.download_blob(blob_ticket))
+    }
+
+    pub async fn get_blob_from_storage(&self, hash: impl Into<p2p::Hash>) -> anyhow::Result<Vec<u8>> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let guard = client.lock().await;
+        guard.get_blob_from_storage(hash).await
+    }
+
+    pub async fn save_blob_to_storage(
+        &self,
+        hash: impl Into<p2p::Hash>,
+        path: PathBuf,
+    ) -> anyhow::Result<ExportProgress> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let guard = client.lock().await;
+        Ok(guard.save_blob_to_storage(hash, path).await)
     }
 }

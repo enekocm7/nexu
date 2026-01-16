@@ -158,7 +158,7 @@ pub fn handle_image_message(mut state: Signal<AppState>, topic: &str, msg: p2p::
             let message = ui::desktop::models::ImageMessage::new(
                 msg.sender.to_string(),
                 topic_obj.id.clone(),
-                msg.ticket.hash().to_string(),
+                format!("blob:{}", msg.ticket.hash()),
                 msg.timestamp,
                 false,
             );

@@ -23,3 +23,4 @@ image = { workspace = true, features = ["webp"] }
 anyhow = { workspace = true }
 rfd = { version = "0.17.2", features = ["wayland"] }
 dirs = { workspace = true }
+flume = { workspace = true }

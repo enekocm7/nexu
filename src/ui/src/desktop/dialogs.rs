@@ -242,3 +242,25 @@ pub fn ConfirmationDialog(
         }
     }
 }
+
+#[component]
+pub fn ProgressBar(title: String, progress: Signal<u64>) -> Element {
+    rsx! {
+        div {
+            class: "fixed inset-0 bg-black/70 flex items-center justify-center z-1001 animate-[fadeIn_0.2s_ease]",
+            div {
+                class: "card w-[90%] max-w-112.5 animate-[slideIn_0.3s_ease]",
+                onclick: move |e| e.stop_propagation(),
+                div { class: "flex flex-col justify-between items-center py-5 px-6 border-b border-border",
+                    h3 { class: "m-0 text-xl font-semibold text-text-primary pb-3", "{title}" }
+                    progress { 
+                        class: "w-full h-2 bg-gray-200 rounded-full overflow-hidden",
+                        //TODO Ver cual es el valor maximo
+                        max: "100",
+                        value: "{progress}" 
+                    }
+                }
+            }
+        }   
+    }
+}

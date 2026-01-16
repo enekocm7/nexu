@@ -364,7 +364,7 @@ impl ChatMessage {
 pub struct ImageMessage {
     pub sender_id: String,
     pub topic_id: String,
-    pub image_url: String,
+    pub image_hash: String,
     pub timestamp: u64,
     pub is_sent: bool,
 }
@@ -373,14 +373,14 @@ impl ImageMessage {
     pub fn new(
         sender_id: String,
         topic_id: String,
-        image_url: String,
+        image_hash: String,
         timestamp: u64,
         is_sent: bool,
     ) -> Self {
         Self {
             sender_id,
             topic_id,
-            image_url,
+            image_hash,
             timestamp,
             is_sent,
         }
