@@ -32,7 +32,6 @@ pub struct ChatClient {
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
     dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
     store: FsStore,
-    store_path: PathBuf,
     downloader: Downloader,
 }
 
@@ -74,7 +73,6 @@ impl ChatClient {
             listen_tasks: HashMap::new(),
             dm_incoming: dm_rx,
             store: store.clone(),
-            store_path: path_buf,
             downloader: store.downloader(&endpoint),
         })
     }
@@ -156,20 +154,19 @@ impl ChatClient {
         downloader.download(blob_ticket.hash(), Some(blob_ticket.addr().id))
     }
 
-    pub async fn get_blob_from_storage(
-        &mut self,
-        hash: impl Into<Hash>,
-    ) -> anyhow::Result<Vec<u8>> {
+    pub async fn get_blob_from_storage(&self, hash: impl Into<Hash>) -> anyhow::Result<Vec<u8>> {
         let hash: Hash = hash.into();
         let bytes = self.store.get_bytes(hash).await?;
         Ok(bytes.to_vec())
     }
 
-    pub async fn save_blob_to_storage(&mut self, hash: impl Into<Hash>) -> ExportProgress {
+    pub async fn save_blob_to_storage(
+        &self,
+        hash: impl Into<Hash>,
+        path: PathBuf,
+    ) -> ExportProgress {
         let hash: Hash = hash.into();
-        self.store()
-            .blobs()
-            .export(hash, self.store_path.join(hash.to_string()))
+        self.store.blobs().export(hash, path)
     }
 
     pub fn peer_id(&self) -> EndpointId {
@@ -1072,11 +1069,12 @@ mod tests {
         let progress = client.save_blob(test_data).await;
         let result = progress.expect("Failed to save blob");
 
-        let export_progress = client.save_blob_to_storage(result.hash).await;
+        let expected_file_path = temp_dir.path().join(result.hash.to_string());
+        let export_progress = client
+            .save_blob_to_storage(result.hash, expected_file_path.clone())
+            .await;
 
         export_progress.await.expect("Failed to export blob");
-
-        let expected_file_path = temp_dir.path().join(result.hash.to_string());
 
         assert!(
             expected_file_path.exists(),

@@ -1,4 +1,5 @@
 use iroh::EndpointId;
+use iroh_blobs::ticket::BlobTicket;
 use iroh_gossip::proto::TopicId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -23,16 +24,16 @@ pub trait GossipMessage: Serialize {
 pub struct ImageMessage {
     pub topic: TopicId,
     pub sender: EndpointId,
-    pub image_data: Vec<u8>,
+    pub ticket: BlobTicket,
     pub timestamp: u64,
 }
 
 impl ImageMessage {
-    pub fn new(topic: TopicId, sender: EndpointId, image_data: Vec<u8>, timestamp: u64) -> Self {
+    pub fn new(topic: TopicId, sender: EndpointId, ticket: BlobTicket, timestamp: u64) -> Self {
         ImageMessage {
             topic,
             sender,
-            image_data,
+            ticket,
             timestamp,
         }
     }
