@@ -2,7 +2,6 @@ use dioxus::prelude::*;
 use ui::mobile::mobile_components::Mobile;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
-const MAIN_CSS: Asset = asset!("/assets/main.css");
 
 fn main() {
     launch(App)
@@ -25,7 +24,6 @@ fn App() -> Element {
     rsx! {
         head {
             document::Link { rel: "icon", href: FAVICON }
-            document::Link { rel: "stylesheet", href: MAIN_CSS }
             Title { "Nexu" }
         }
         match *device_type.read() {

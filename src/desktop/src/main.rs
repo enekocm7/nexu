@@ -19,8 +19,6 @@ use tokio::sync::Mutex;
 use ui::desktop::desktop_web_components::Desktop;
 use ui::desktop::models::{AppState, Profile, Topic};
 
-const MAIN_CSS: Asset = asset!("/assets/main.css");
-
 fn main() {
     LaunchBuilder::new()
         .with_cfg(
@@ -127,8 +125,6 @@ fn App() -> Element {
     });
 
     rsx! {
-        document::Link { rel: "stylesheet", href: MAIN_CSS }
-
         Desktop {
             app_state: controller.read().get_app_state(),
             on_create_topic: move |name: String| {
