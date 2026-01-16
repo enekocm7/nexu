@@ -35,6 +35,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     let controller = use_signal(controller::AppController::new);
+    let mut progress_bar = use_signal::<u64>(|| u64::MAX);
 
     use_effect(move || {
         let client_ref = controller.read().get_desktop_client();
@@ -91,6 +92,11 @@ fn App() -> Element {
                 let state = controller.read().get_app_state();
                 message_handler::process_all_messages(&client_ref, state).await;
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            }
+        });
+        spawn(async move {
+            while let Ok(progress) = controller.read().get_progress_bar().recv_async().await {
+                progress_bar.set(progress);
             }
         });
     });
@@ -160,6 +166,7 @@ fn App() -> Element {
             on_image_send: move |(topic_id, image_data): (String, Vec<u8>)| {
                 controller.read().send_image_to_topic(topic_id.clone(), image_data);
             },
+            progress_bar: progress_bar,
         }
     }
 }

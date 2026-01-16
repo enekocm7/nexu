@@ -314,7 +314,7 @@ pub fn ChatMessageComponent(
             }
         }
         Message::Image(message) => {
-            let url = Rc::new(format!("data:image/webp;base64,{}", message.image_url));
+            let url = Rc::new(format!("data:image/webp;base64,{}", message.image_hash));
             let sender_display = get_sender_display_name(&state, &message.sender_id);
             let alignment = if message.is_sent {
                 "self-end"
