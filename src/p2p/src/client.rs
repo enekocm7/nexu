@@ -9,6 +9,11 @@ use iroh::discovery::pkarr::PkarrPublisher;
 use iroh::endpoint::SendStream;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
+use iroh_blobs::api::blobs::{AddProgress, ExportProgress};
+use iroh_blobs::api::downloader::{DownloadProgress, Downloader};
+use iroh_blobs::store::fs::FsStore;
+use iroh_blobs::ticket::BlobTicket;
+use iroh_blobs::{BlobsProtocol, Hash};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use std::collections::HashMap;
@@ -26,6 +31,9 @@ pub struct ChatClient {
     dm_sender: HashMap<EndpointId, SendStream>,
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
     dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
+    store: FsStore,
+    store_path: PathBuf,
+    downloader: Downloader,
 }
 
 impl ChatClient {
@@ -46,13 +54,18 @@ impl ChatClient {
         let (dm_tx, dm_rx) = flume::unbounded();
         let dm_protocol = DMProtocol { tx: dm_tx };
 
+        let store = FsStore::load(path_buf.join("store")).await?;
+
+        let blobs = BlobsProtocol::new(&store, None);
+
         let router = Router::builder(endpoint.clone())
             .accept(ALPN, gossip.clone())
             .accept(DM_ALPN, dm_protocol.clone())
+            .accept(iroh_blobs::ALPN, blobs)
             .spawn();
 
         Ok(ChatClient {
-            endpoint,
+            endpoint: endpoint.clone(),
             gossip,
             _router: router,
             gossip_sender: HashMap::new(),
@@ -60,6 +73,9 @@ impl ChatClient {
             dm_sender: HashMap::new(),
             listen_tasks: HashMap::new(),
             dm_incoming: dm_rx,
+            store: store.clone(),
+            store_path: path_buf,
+            downloader: store.downloader(&endpoint),
         })
     }
 
@@ -129,6 +145,31 @@ impl ChatClient {
         let serialized = postcard::to_stdvec(&message)?;
         sender.broadcast(serialized.into()).await?;
         Ok(())
+    }
+
+    pub fn save_blob(&mut self, data: &[u8]) -> AddProgress<'_> {
+        self.store.blobs().add_slice(data)
+    }
+
+    pub fn download_blob(&mut self, blob_ticket: &BlobTicket) -> DownloadProgress {
+        let downloader = self.downloader.clone();
+        downloader.download(blob_ticket.hash(), Some(blob_ticket.addr().id))
+    }
+
+    pub async fn get_blob_from_storage(
+        &mut self,
+        hash: impl Into<Hash>,
+    ) -> anyhow::Result<Vec<u8>> {
+        let hash: Hash = hash.into();
+        let bytes = self.store.get_bytes(hash).await?;
+        Ok(bytes.to_vec())
+    }
+
+    pub async fn save_blob_to_storage(&mut self, hash: impl Into<Hash>) -> ExportProgress {
+        let hash: Hash = hash.into();
+        self.store()
+            .blobs()
+            .export(hash, self.store_path.join(hash.to_string()))
     }
 
     pub fn peer_id(&self) -> EndpointId {
@@ -215,6 +256,10 @@ impl ChatClient {
 
     pub fn incoming_dms(&self) -> Receiver<(EndpointId, DmMessageTypes)> {
         self.dm_incoming.clone()
+    }
+
+    pub fn store(&self) -> &FsStore {
+        &self.store
     }
 }
 
@@ -796,5 +841,202 @@ mod tests {
             }
             _ => panic!("Expected Chat message"),
         }
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_blob() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data = b"Hello, this is test blob data!";
+
+        let progress = client.save_blob(test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        assert!(!result.hash.to_string().is_empty());
+
+        let bytes = client.store().get_bytes(result.hash).await.unwrap();
+        let slice = bytes.iter().as_slice();
+
+        assert_eq!(slice, test_data);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_blob_large_data() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data: Vec<u8> = (0..1024 * 1024).map(|i| (i % 256) as u8).collect();
+
+        let progress = client.save_blob(&test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        let bytes = client
+            .store()
+            .get_bytes(result.hash)
+            .await
+            .expect("Failed to get bytes");
+        assert_eq!(bytes.as_ref(), test_data.as_slice());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_blob_empty_data() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data = b"";
+
+        let progress = client.save_blob(test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        assert!(!result.hash.to_string().is_empty());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_download_blob_between_clients() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let mut client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        sleep(Duration::from_secs(1)).await;
+
+        let test_data = b"Test blob data for download test";
+        let progress = client1.save_blob(test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        let blob_ticket = BlobTicket::new(
+            client1.endpoint_addr(),
+            result.hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+
+        let download_result = client2.download_blob(&blob_ticket).await;
+        download_result.expect("Failed to download blob");
+
+        let bytes = client2
+            .store()
+            .get_bytes(result.hash)
+            .await
+            .expect("Failed to get bytes");
+        assert_eq!(bytes.as_ref(), test_data);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_download_blob_large_data_between_clients() {
+        let temp_dir1 = tempfile::tempdir().expect("Failed to create temp dir");
+        let temp_dir2 = tempfile::tempdir().expect("Failed to create temp dir");
+
+        let mut client1 = ChatClient::new(temp_dir1.path().to_path_buf())
+            .await
+            .expect("Failed to create client1");
+        let mut client2 = ChatClient::new(temp_dir2.path().to_path_buf())
+            .await
+            .expect("Failed to create client2");
+
+        sleep(Duration::from_secs(1)).await;
+
+        let test_data: Vec<u8> = (0..100 * 1024).map(|i| (i % 256) as u8).collect();
+        let progress = client1.save_blob(&test_data).await;
+        let result = progress.expect("Failed to save blob");
+
+        let blob_ticket = BlobTicket::new(
+            client1.endpoint_addr(),
+            result.hash,
+            iroh_blobs::BlobFormat::Raw,
+        );
+
+        let download_result = client2.download_blob(&blob_ticket).await;
+        download_result.expect("Failed to download blob");
+
+        let bytes = client2
+            .store()
+            .get_bytes(result.hash)
+            .await
+            .expect("Failed to get bytes");
+        assert_eq!(bytes.as_ref(), test_data.as_slice());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_multiple_blobs() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data1 = b"First blob data";
+        let test_data2 = b"Second blob data";
+        let test_data3 = b"Third blob data";
+
+        let progress1 = client.save_blob(test_data1).await;
+        let result1 = progress1.expect("Failed to save blob 1");
+
+        let progress2 = client.save_blob(test_data2).await;
+        let result2 = progress2.expect("Failed to save blob 2");
+
+        let progress3 = client.save_blob(test_data3).await;
+        let result3 = progress3.expect("Failed to save blob 3");
+
+        assert_ne!(result1.hash, result2.hash);
+        assert_ne!(result2.hash, result3.hash);
+        assert_ne!(result1.hash, result3.hash);
+        assert_ne!(result2.hash, result3.hash);
+
+        let bytes1 = client
+            .store()
+            .get_bytes(result1.hash)
+            .await
+            .expect("Failed to get bytes 1");
+        assert_eq!(bytes1.as_ref(), test_data1);
+
+        let bytes2 = client
+            .store()
+            .get_bytes(result2.hash)
+            .await
+            .expect("Failed to get bytes 2");
+        assert_eq!(bytes2.as_ref(), test_data2);
+
+        let bytes3 = client
+            .store()
+            .get_bytes(result3.hash)
+            .await
+            .expect("Failed to get bytes 3");
+        assert_eq!(bytes3.as_ref(), test_data3);
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_save_same_data_twice() {
+        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
+            .await
+            .expect("Failed to create chat client");
+
+        let test_data = b"Duplicate blob data";
+
+        let progress1 = client.save_blob(test_data).await;
+        let result1 = progress1.expect("Failed to save blob 1");
+
+        let progress2 = client.save_blob(test_data).await;
+        let result2 = progress2.expect("Failed to save blob 2");
+
+        assert_eq!(result1.hash, result2.hash);
     }
 }
