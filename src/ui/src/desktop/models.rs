@@ -635,4 +635,6 @@ pub trait Controller {
     fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>);
     fn download_image(&self, image_hash: String);
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>>;
+    ///Returns an empty vector if the image could not be found or downloaded
+    fn get_or_download_image(&self, image_hash: String) -> Vec<u8>;
 }

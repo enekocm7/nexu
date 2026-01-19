@@ -804,4 +804,73 @@ impl ui::desktop::models::Controller for AppController {
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>> {
         self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
     }
+
+    fn get_or_download_image(&self, image_hash: String) -> Vec<u8> {
+        let hash = image_hash.parse().expect("Image hash should be parseable");
+
+        if let Some(data) = self.get_blob_from_storage(hash) {
+            return data;
+        }
+        let desktop_client = Arc::clone(&self.desktop_client);
+        let progress_sender = self.progress_bar_sender.clone();
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let ticket = match BlobTicket::from_str(&image_hash) {
+                    Ok(t) => t,
+                    Err(_) => return vec![],
+                };
+
+                let progress = match desktop_client.lock().await.download_blob(&ticket).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Failed to start blob download: {}", e);
+                        return vec![];
+                    }
+                };
+
+                let mut stream = match progress.stream().await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("Failed to get download progress stream: {}", e);
+                        return vec![];
+                    }
+                };
+
+                while let Some(item) = stream.next().await {
+                    match item {
+                        DownloadProgressItem::Progress(progress) => {
+                            let _ = progress_sender.send(progress);
+                        }
+                        DownloadProgressItem::Error(e) => {
+                            eprintln!("Error during blob download: {}", e);
+                            return vec![];
+                        }
+                        DownloadProgressItem::DownloadError => {
+                            eprintln!("Download error occurred");
+                            return vec![];
+                        }
+                        _ => {}
+                    }
+                }
+
+                if let Err(e) = desktop_client
+                    .lock()
+                    .await
+                    .save_blob_to_storage(ticket.hash(), PathBuf::from(ticket.hash().to_string()))
+                    .await
+                {
+                    eprintln!("Failed to save downloaded blob: {}", e);
+                    return vec![];
+                }
+
+                desktop_client
+                    .lock()
+                    .await
+                    .get_blob_from_storage(hash)
+                    .await
+                    .unwrap_or_default()
+            })
+        })
+    }
 }
