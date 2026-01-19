@@ -1,7 +1,5 @@
 use crate::client::DesktopClient;
 use crate::utils::topics::save_topics_to_file;
-use base64::Engine;
-use base64::prelude::BASE64_STANDARD;
 use chrono::Utc;
 use dioxus::core::spawn;
 use dioxus::prelude::{Signal, WritableExt};
@@ -160,7 +158,7 @@ pub fn handle_image_message(mut state: Signal<AppState>, topic: &str, msg: p2p::
             let message = ui::desktop::models::ImageMessage::new(
                 msg.sender.to_string(),
                 topic_obj.id.clone(),
-                BASE64_STANDARD.encode(msg.image_data.clone()),
+                msg.ticket.hash().to_string(),
                 msg.timestamp,
                 false,
             );

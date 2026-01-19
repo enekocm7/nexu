@@ -2,10 +2,12 @@ use crate::client::DesktopClient;
 use crate::utils;
 use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
-use base64::prelude::BASE64_STANDARD;
 use chrono::Utc;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
-use p2p::{DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket, TopicMetadataMessage};
+use p2p::{
+    BlobTicket, DmMessageTypes, DmProfileMetadataMessage, Hash, MessageTypes, Raw, Ticket,
+    TopicMetadataMessage,
+};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -252,7 +254,11 @@ impl AppController {
                     .await
                     .map_err(|e| Error::PeerId(e.to_string()))?;
 
-                let msg = p2p::ImageMessage::new(ticket.topic, peer_id, image_data, now);
+                let hash = Hash::new(image_data);
+
+                let blob_ticket = BlobTicket::new(peer_id.into(), hash, Raw);
+
+                let msg = p2p::ImageMessage::new(ticket.topic, peer_id, blob_ticket, now);
 
                 let send_result = client.send(MessageTypes::ImageMessages(msg.clone())).await;
 
@@ -266,7 +272,7 @@ impl AppController {
                         let image_msg = ImageMessage::new(
                             peer_id.to_string(),
                             ticket_id.clone(),
-                            BASE64_STANDARD.encode(msg.image_data.clone()),
+                            hash.to_string(),
                             now,
                             true,
                         );
