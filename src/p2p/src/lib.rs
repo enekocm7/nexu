@@ -15,7 +15,7 @@ pub use types::Ticket;
 pub use utils::load_secret_key;
 
 pub use iroh_blobs::api::blobs::{AddProgress, AddProgressItem, ExportProgress};
-pub use iroh_blobs::api::downloader::DownloadProgress;
+pub use iroh_blobs::api::downloader::{DownloadProgress, DownloadProgressItem};
 
 pub use iroh_blobs::BlobFormat::Raw;
 pub use iroh_blobs::Hash;

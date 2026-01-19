@@ -7,8 +7,8 @@ use dioxus::prelude::{ReadableExt, Signal, WritableExt, spawn};
 use flume::{Receiver, Sender};
 use futures_lite::StreamExt;
 use p2p::{
-    BlobTicket, DmMessageTypes, DmProfileMetadataMessage, Hash, MessageTypes, Raw, Ticket,
-    TopicMetadataMessage,
+    BlobTicket, DmMessageTypes, DmProfileMetadataMessage, DownloadProgressItem, Hash, MessageTypes,
+    Raw, Ticket, TopicMetadataMessage,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -355,33 +355,87 @@ impl AppController {
         });
     }
 
-    pub async fn download_blob(&self, ticket_str: String) -> anyhow::Result<p2p::DownloadProgress> {
-        let ticket = BlobTicket::from_str(&ticket_str)?;
-        self.desktop_client
-            .lock()
-            .await
-            .download_blob(&ticket)
-            .await
+    pub fn download_blob(&self, blob_ticket: String) {
+        let desktop_client = Arc::clone(&self.desktop_client);
+        let progress_sender = self.progress_bar_sender.clone();
+        spawn(async move {
+            let result: Result<(), Error> = async {
+                let ticket = BlobTicket::from_str(&blob_ticket)
+                    .map_err(|_| Error::InvalidTicket("Failed to parse blob ticket".to_string()))?;
+
+                let progress = desktop_client
+                    .lock()
+                    .await
+                    .download_blob(&ticket)
+                    .await
+                    .map_err(|e| {
+                        Error::DownloadBlob(format!("Failed to start blob download: {e}"))
+                    })?;
+
+                let mut stream = progress.stream().await.map_err(|e| {
+                    Error::DownloadBlob(format!("Failed to get download progress stream: {e}"))
+                })?;
+
+                while let Some(item) = stream.next().await {
+                    match item {
+                        DownloadProgressItem::Progress(progress) => {
+                            progress_sender
+                                .send(progress)
+                                .expect("Message to the channel should not return an error");
+                        }
+                        DownloadProgressItem::Error(e) => {
+                            return Err(Error::DownloadBlob(format!(
+                                "Error during blob download: {}",
+                                e
+                            )));
+                        }
+                        DownloadProgressItem::TryProvider { id, request } => {
+                            println!("Trying provider {} for request {:?}", id, request);
+                        }
+                        DownloadProgressItem::ProviderFailed { id, request } => {
+                            eprintln!("Provider {} failed for request {:?}", id, request);
+                        }
+                        DownloadProgressItem::PartComplete { request } => {
+                            println!("Part complete for request {:?}", request);
+                        }
+                        DownloadProgressItem::DownloadError => {
+                            return Err(Error::DownloadBlob("Download error occurred".to_string()));
+                        }
+                    }
+                }
+
+                desktop_client
+                    .lock()
+                    .await
+                    .save_blob_to_storage(ticket.hash(), PathBuf::from(ticket.hash().to_string()))
+                    .await
+                    .map_err(|e| {
+                        Error::BlobSave(format!("Failed to save downloaded blob: {}", e))
+                    })?;
+
+                Ok(())
+            }
+            .await;
+
+            if let Err(e) = result {
+                eprintln!("Failed to download blob {}: {}", blob_ticket, e);
+            }
+        });
     }
 
-    pub async fn get_blob_from_storage(&self, hash: Hash) -> anyhow::Result<Vec<u8>> {
-        self.desktop_client
-            .lock()
-            .await
-            .get_blob_from_storage(hash)
-            .await
-    }
+    pub fn get_blob_from_storage(&self, hash: Hash) -> Option<Vec<u8>> {
+        let desktop_client = Arc::clone(&self.desktop_client);
 
-    pub async fn save_blob_to_storage(
-        &self,
-        hash: Hash,
-        path: PathBuf,
-    ) -> anyhow::Result<p2p::ExportProgress> {
-        self.desktop_client
-            .lock()
-            .await
-            .save_blob_to_storage(hash, path)
-            .await
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                desktop_client
+                    .lock()
+                    .await
+                    .get_blob_from_storage(hash)
+                    .await
+                    .ok()
+            })
+        })
     }
 
     pub fn send_message_to_user(&self, user_addr: String, message: String) {
@@ -676,6 +730,7 @@ pub enum Error {
     ImageSizeExceeded,
     ProfileSave(String),
     BlobSave(String),
+    DownloadBlob(String),
 }
 
 impl std::fmt::Display for Error {
@@ -694,6 +749,7 @@ impl std::fmt::Display for Error {
             Error::ImageSizeExceeded => write!(f, "Image size exceeds 512 KB limit"),
             Error::ProfileSave(msg) => write!(f, "Profile save error: {}", msg),
             Error::BlobSave(msg) => write!(f, "Blob save error: {}", msg),
+            Error::DownloadBlob(msg) => write!(f, "Download blob error: {}", msg),
         }
     }
 }
@@ -739,5 +795,13 @@ impl ui::desktop::models::Controller for AppController {
 
     fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>) {
         self.send_image_to_topic(ticket_id, image_data);
+    }
+
+    fn download_image(&self, image_hash: String) {
+        self.download_blob(image_hash)
+    }
+
+    fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>> {
+        self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
     }
 }
