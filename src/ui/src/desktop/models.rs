@@ -1,5 +1,4 @@
 use ConnectionStatus::{Offline, Online};
-use dioxus::signals::Signal;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -624,7 +623,6 @@ pub enum RemovalType {
 }
 
 pub trait Controller {
-    fn get_app_state(&self) -> Signal<AppState>;
     fn create_topic(&self, name: String);
     fn join_topic(&self, topic_id: String);
     fn leave_topic(&self, topic_id: String);

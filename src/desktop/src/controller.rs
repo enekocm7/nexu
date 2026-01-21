@@ -43,7 +43,6 @@ pub enum Command {
 }
 
 pub struct AppController {
-    app_state: Signal<AppState>,
     desktop_client: Arc<Mutex<DesktopClient>>,
     progress_bar: Receiver<u64>,
     pub progress_bar_sender: Sender<u64>,
@@ -52,21 +51,16 @@ pub struct AppController {
 }
 
 impl AppController {
-    pub fn new(app_state: Signal<AppState>) -> Self {
+    pub fn new() -> Self {
         let (progress_bar_sender, progress_bar) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
         Self {
-            app_state,
             desktop_client: Arc::new(Mutex::new(DesktopClient::new())),
             progress_bar,
             progress_bar_sender,
             command_sender,
             command_receiver,
         }
-    }
-
-    pub fn get_app_state(&self) -> Signal<AppState> {
-        self.app_state
     }
 
     pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
@@ -790,8 +784,8 @@ impl AppController {
         }
     }
 
-    pub async fn reconnect_to_user_async(&self, chat: ProfileChat) {
-        Self::do_reconnect_to_user(chat, self.app_state, Arc::clone(&self.desktop_client)).await;
+    pub async fn reconnect_to_user_async(&self, app_state: Signal<AppState>, chat: ProfileChat) {
+        Self::do_reconnect_to_user(chat, app_state, Arc::clone(&self.desktop_client)).await;
     }
 }
 
@@ -837,10 +831,6 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 impl ui::desktop::models::Controller for AppController {
-    fn get_app_state(&self) -> Signal<AppState> {
-        self.get_app_state()
-    }
-
     fn create_topic(&self, name: String) {
         self.send_command(Command::CreateTopic(name));
     }
