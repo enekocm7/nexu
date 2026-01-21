@@ -35,7 +35,7 @@ fn main() {
 #[component]
 fn App() -> Element {
     let app_state = use_signal(|| AppState::new("Error"));
-    let controller = use_signal(|| controller::AppController::new());
+    let controller = use_signal(controller::AppController::new);
     let mut progress_bar = use_signal::<u64>(|| u64::MAX);
 
     use_effect(move || {
