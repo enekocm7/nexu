@@ -320,7 +320,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             }
         }
         Message::Image(message) => {
-            let img_bytes = controller.read().get_or_download_image(message.image_hash);
+            let img_bytes = controller.read().get_or_download_image(&message.image_hash, &message.sender_id);
             let base64_img = BASE64_STANDARD.encode(img_bytes);
             let url = Rc::new(format!("data:image/webp;base64,{}", base64_img));
             let sender_display = get_sender_display_name(&state, &message.sender_id);

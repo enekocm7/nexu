@@ -7,8 +7,8 @@ use dioxus::prelude::{ReadableExt, Signal, WritableExt};
 use flume::{Receiver, Sender};
 use futures_lite::StreamExt;
 use p2p::{
-    BlobTicket, DmMessageTypes, DmProfileMetadataMessage, DownloadProgressItem, Hash, MessageTypes,
-    Raw, Ticket, TopicMetadataMessage,
+    BlobTicket, DmMessageTypes, DmProfileMetadataMessage, DownloadProgressItem, EndpointAddr,
+    EndpointId, Hash, MessageTypes, Raw, Ticket, TopicMetadataMessage,
 };
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -31,7 +31,10 @@ pub enum Command {
         ticket_id: String,
         image_data: Vec<u8>,
     },
-    DownloadBlob(String),
+    DownloadBlob {
+        image_hash: String,
+        user_id: String,
+    },
     SendMessageToUser {
         user_addr: String,
         message: String,
@@ -113,8 +116,12 @@ impl AppController {
                 )
                 .await;
             }
-            Command::DownloadBlob(blob_ticket) => {
-                Self::do_download_blob(blob_ticket, desktop_client, progress_sender).await;
+            Command::DownloadBlob {
+                image_hash,
+                user_id,
+            } => {
+                Self::do_download_blob(&image_hash, &user_id, desktop_client, progress_sender)
+                    .await;
             }
             Command::SendMessageToUser { user_addr, message } => {
                 Self::do_send_message_to_user(user_addr, message, app_state, desktop_client).await;
@@ -440,13 +447,17 @@ impl AppController {
     }
 
     async fn do_download_blob(
-        blob_ticket: String,
+        image_hash: &str,
+        user_id: &str,
         desktop_client: Arc<Mutex<DesktopClient>>,
         progress_sender: Sender<u64>,
     ) {
         let result: Result<(), Error> = async {
-            let ticket = BlobTicket::from_str(&blob_ticket)
-                .map_err(|_| Error::InvalidTicket("Failed to parse blob ticket".to_string()))?;
+            let hash = Hash::new(image_hash);
+            let endpoint_id = EndpointId::from_str(user_id)
+                .map_err(|e| Error::InvalidUserId(format!("Invalid user ID: {e}")))?;
+            let addr = EndpointAddr::from(endpoint_id);
+            let ticket = BlobTicket::new(addr, hash, Raw);
 
             let progress = desktop_client
                 .lock()
@@ -499,7 +510,7 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to download blob {}: {}", blob_ticket, e);
+            eprintln!("Failed to download blob {}: {}", image_hash, e);
         }
     }
 
@@ -805,6 +816,7 @@ pub enum Error {
     ProfileSave(String),
     BlobSave(String),
     DownloadBlob(String),
+    InvalidUserId(String),
 }
 
 impl std::fmt::Display for Error {
@@ -824,6 +836,7 @@ impl std::fmt::Display for Error {
             Error::ProfileSave(msg) => write!(f, "Profile save error: {}", msg),
             Error::BlobSave(msg) => write!(f, "Blob save error: {}", msg),
             Error::DownloadBlob(msg) => write!(f, "Download blob error: {}", msg),
+            Error::InvalidUserId(id) => write!(f, "Invalid user ID: {}", id),
         }
     }
 }
@@ -874,15 +887,18 @@ impl ui::desktop::models::Controller for AppController {
         });
     }
 
-    fn download_image(&self, image_hash: String) {
-        self.send_command(Command::DownloadBlob(image_hash));
+    fn download_image(&self, image_hash: String, user_id: String) {
+        self.send_command(Command::DownloadBlob {
+            image_hash,
+            user_id,
+        });
     }
 
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>> {
         self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
     }
 
-    fn get_or_download_image(&self, image_hash: String) -> Vec<u8> {
+    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8> {
         let hash = image_hash.parse().expect("Image hash should be parseable");
 
         if let Some(data) = self.get_blob_from_storage(hash) {
@@ -893,10 +909,10 @@ impl ui::desktop::models::Controller for AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let ticket = match BlobTicket::from_str(&image_hash) {
-                    Ok(t) => t,
-                    Err(_) => return vec![],
-                };
+                let hash = Hash::new(image_hash);
+                let endpoint_id = EndpointId::from_str(user_id).expect("Endpoint ID should be parseable");
+                let addr = EndpointAddr::from(endpoint_id);
+                let ticket = BlobTicket::new(addr, hash, Raw);
 
                 let progress = match desktop_client.lock().await.download_blob(&ticket).await {
                     Ok(p) => p,
