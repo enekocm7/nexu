@@ -44,15 +44,6 @@ impl DesktopClient {
         Ok(client.lock().await.peer_id())
     }
 
-    pub async fn endpoint_addr(&self) -> anyhow::Result<p2p::EndpointAddr> {
-        let client = self
-            .client
-            .get()
-            .ok_or_else(|| anyhow!("Client is not initialized"))?;
-
-        Ok(client.lock().await.endpoint_addr())
-    }
-
     pub async fn create_topic(&mut self) -> anyhow::Result<String> {
         let client = self
             .client

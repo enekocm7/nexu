@@ -400,16 +400,7 @@ impl AppController {
                 .await
                 .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
 
-            let blob_ticket = BlobTicket::new(
-                client
-                    .endpoint_addr()
-                    .await
-                    .map_err(|e| Error::PeerId(e.to_string()))?,
-                hash,
-                Raw,
-            );
-
-            let msg = p2p::ImageMessage::new(ticket.topic, peer_id, blob_ticket, now);
+            let msg = p2p::ImageMessage::new(ticket.topic, peer_id, hash, now);
 
             client
                 .send(MessageTypes::ImageMessages(msg))
