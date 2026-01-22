@@ -1,6 +1,8 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, Controller, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name, process_image};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use std::rc::Rc;
@@ -155,6 +157,7 @@ pub fn Chat<C: Controller + 'static>(
                             message: message.clone(),
                             app_state,
                             show_image_details,
+                            controller,
                         }
                     }
                 }
@@ -241,10 +244,11 @@ pub fn AttachComponent(
 }
 
 #[component]
-pub fn ChatMessageComponent(
+pub fn ChatMessageComponent<C: Controller + 'static>(
     message: Message,
     app_state: Signal<AppState>,
     show_image_details: Signal<Option<String>>,
+    controller: Signal<C>,
 ) -> Element {
     let state = app_state();
     match message {
@@ -316,7 +320,9 @@ pub fn ChatMessageComponent(
             }
         }
         Message::Image(message) => {
-            let url = Rc::new(format!("data:image/webp;base64,{}", message.image_hash));
+            let img_bytes = controller.read().get_or_download_image(message.image_hash);
+            let base64_img = BASE64_STANDARD.encode(img_bytes);
+            let url = Rc::new(format!("data:image/webp;base64,{}", base64_img));
             let sender_display = get_sender_display_name(&state, &message.sender_id);
             let alignment = if message.is_sent {
                 "self-end"
