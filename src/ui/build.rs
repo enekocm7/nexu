@@ -21,35 +21,15 @@ fn main() {
 }
 
 fn install_dependencies() -> &'static str {
-    let yarn = if cfg!(target_os = "windows") {
-        "yarn.cmd"
-    } else {
-        "yarn"
-    };
+    let yarn = "yarn";
 
-    let bunx = if cfg!(target_os = "windows") {
-        "bunx.cmd"
-    } else {
-        "bunx"
-    };
+    let bunx = "bunx";
 
-    let bun = if cfg!(target_os = "windows") {
-        "bun.cmd"
-    } else {
-        "bun"
-    };
+    let bun = "bun";
 
-    let npm = if cfg!(target_os = "windows") {
-        "npm.cmd"
-    } else {
-        "npm"
-    };
+    let npm = "npm";
 
-    let npx = if cfg!(target_os = "windows") {
-        "npx.cmd"
-    } else {
-        "npx"
-    };
+    let npx = "npx";
 
     if std::process::Command::new(bun)
         .arg("install")
