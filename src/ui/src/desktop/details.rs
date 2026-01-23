@@ -1,6 +1,6 @@
 use super::desktop_web_components::{CLOSE_ICON, DEFAULT_AVATAR, DOWNLOAD_ICON};
 use super::models::{AppState, ConnectionStatus, Controller, Profile, Topic};
-use super::utils::{copy_to_clipboard, format_relative_time, process_image};
+use super::utils::{copy_to_clipboard, format_relative_time};
 use arboard::Clipboard;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
@@ -55,19 +55,8 @@ pub fn TopicDetails<C: Controller + 'static>(
             spawn(async move {
                 match file.read_bytes().await {
                     Ok(bytes) => {
-                        let processed_bytes = match process_image(&bytes) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                toast.error(
-                                    format!("Failed to process image: {}", e),
-                                    ToastOptions::default(),
-                                );
-                                return;
-                            }
-                        };
-
                         const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
-                        if processed_bytes.len() > MAX_SIZE {
+                        if bytes.len() > MAX_SIZE {
                             toast.error(
                                 "Image size must be less than 512 KB".to_owned(),
                                 ToastOptions::default(),
@@ -75,8 +64,8 @@ pub fn TopicDetails<C: Controller + 'static>(
                             return;
                         }
 
-                        let base64 = BASE64_STANDARD.encode(&processed_bytes);
-                        let url = format!("data:image/webp;base64,{}", base64);
+                        let base64 = BASE64_STANDARD.encode(&bytes);
+                        let url = format!("data:image/jpeg;base64,{}", base64);
 
                         let mut updated_topic = topic_clone.clone();
                         updated_topic.avatar_url = Some(url);
@@ -260,19 +249,8 @@ pub fn ProfileDetails<C: Controller + 'static>(
             spawn(async move {
                 match file.read_bytes().await {
                     Ok(bytes) => {
-                        let processed_bytes = match process_image(&bytes) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                toast.error(
-                                    format!("Failed to process image: {}", e),
-                                    ToastOptions::default(),
-                                );
-                                return;
-                            }
-                        };
-
                         const MAX_SIZE: usize = 512 * 1024 * 4 / 3; // 512 KB
-                        if processed_bytes.len() > MAX_SIZE {
+                        if bytes.len() > MAX_SIZE {
                             toast.error(
                                 "Image size must be less than 512 KB".to_owned(),
                                 ToastOptions::default(),
@@ -280,8 +258,8 @@ pub fn ProfileDetails<C: Controller + 'static>(
                             return;
                         }
 
-                        let base64 = BASE64_STANDARD.encode(&processed_bytes);
-                        let url = format!("data:image/webp;base64,{}", base64);
+                        let base64 = BASE64_STANDARD.encode(&bytes);
+                        let url = format!("data:image/jpeg;base64,{}", base64);
 
                         edited_avatar.set(Some(url));
 

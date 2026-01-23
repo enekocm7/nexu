@@ -107,10 +107,10 @@ pub fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
     }
 }
 
-pub fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-    let image = image::load_from_memory(file_bytes)?;
-    let resized = image.thumbnail(500, 500);
-    let mut buffer = std::io::Cursor::new(Vec::new());
-    resized.write_to(&mut buffer, image::ImageFormat::WebP)?;
-    Ok(buffer.into_inner())
-}
+// pub fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+//     let image = image::load_from_memory(file_bytes)?;
+//     let resized = image.thumbnail(500, 500);
+//     let mut buffer = std::io::Cursor::new(Vec::new());
+//     resized.write_to(&mut buffer, image::ImageFormat::WebP)?;
+//     Ok(buffer.into_inner())
+// }

@@ -1,6 +1,6 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, Controller, Message};
-use super::utils::{format_message_timestamp, get_sender_display_name, process_image};
+use super::utils::{format_message_timestamp, get_sender_display_name};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use dioxus::html::FileData;
@@ -127,11 +127,9 @@ pub fn Chat<C: Controller + 'static>(
                 spawn(async move {
                     for file in files {
                         if let Ok(data) = file.read_bytes().await {
-                            let processed_data =
-                                process_image(&data).expect("Failed to process image");
                             controller
                                 .read()
-                                .send_image_to_topic(chat_id.clone(), processed_data);
+                                .send_image_to_topic(chat_id.clone(), data.to_vec());
                         }
                     }
                     show_attachment.set(false);
@@ -322,7 +320,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
         Message::Image(message) => {
             let img_bytes = controller.read().get_or_download_image(&message.image_hash, &message.sender_id);
             let base64_img = BASE64_STANDARD.encode(img_bytes);
-            let url = Rc::new(format!("data:image/webp;base64,{}", base64_img));
+            let url = Rc::new(format!("data:image/jpeg;base64,{}", base64_img));
             let sender_display = get_sender_display_name(&state, &message.sender_id);
             let alignment = if message.is_sent {
                 "self-end"
