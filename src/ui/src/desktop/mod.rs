@@ -245,11 +245,13 @@ pub mod desktop_web_components {
                     }
                 }
 
-                Chat {
-                    app_state,
-                    topic_id: selected_topic_id(),
-                    controller: controller,
-                    show_image_details,
+                ToastProvider {
+                    Chat {
+                        app_state,
+                        topic_id: selected_topic_id(),
+                        controller: controller,
+                        show_image_details,
+                    }
                 }
             }
         }
