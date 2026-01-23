@@ -401,7 +401,7 @@ impl AppController {
                 .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
 
             let msg = p2p::ImageMessage::new(ticket.topic, peer_id, hash, now);
-
+            
             client
                 .send(MessageTypes::ImageMessages(msg))
                 .await
@@ -444,7 +444,7 @@ impl AppController {
         progress_sender: Sender<u64>,
     ) {
         let result: Result<(), Error> = async {
-            let hash = Hash::new(image_hash);
+            let hash = image_hash.parse::<Hash>().expect("image hash should be parseable");
             let endpoint_id = EndpointId::from_str(user_id)
                 .map_err(|e| Error::InvalidUserId(format!("Invalid user ID: {e}")))?;
             let addr = EndpointAddr::from(endpoint_id);
@@ -890,7 +890,7 @@ impl ui::desktop::models::Controller for AppController {
     }
 
     fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8> {
-        let hash = image_hash.parse().expect("Image hash should be parseable");
+        let hash = image_hash.parse::<Hash>().expect("Image hash should be parseable");
 
         if let Some(data) = self.get_blob_from_storage(hash) {
             return data;
@@ -900,7 +900,6 @@ impl ui::desktop::models::Controller for AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let hash = Hash::new(image_hash);
                 let endpoint_id = EndpointId::from_str(user_id).expect("Endpoint ID should be parseable");
                 let addr = EndpointAddr::from(endpoint_id);
                 let ticket = BlobTicket::new(addr, hash, Raw);

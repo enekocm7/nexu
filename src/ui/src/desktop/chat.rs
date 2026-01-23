@@ -345,7 +345,6 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                     img {
                         class: "max-w-96 rounded-xl shadow-md",
                         src: "{url}",
-                        alt: "Image message",
                     }
                     p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
                         "{format_message_timestamp(message.timestamp)}"
