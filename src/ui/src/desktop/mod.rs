@@ -19,7 +19,7 @@ pub mod desktop_web_components {
 
     use crate::desktop::details::ImageDetails;
     use dioxus::prelude::*;
-    use dioxus_primitives::toast::ToastProvider;
+    use crate::components::toast::ToastProvider;
 
     pub static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     pub static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
