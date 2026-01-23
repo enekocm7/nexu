@@ -401,7 +401,7 @@ impl AppController {
                 .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
 
             let msg = p2p::ImageMessage::new(ticket.topic, peer_id, hash, now);
-            
+
             client
                 .send(MessageTypes::ImageMessages(msg))
                 .await
@@ -444,7 +444,9 @@ impl AppController {
         progress_sender: Sender<u64>,
     ) {
         let result: Result<(), Error> = async {
-            let hash = image_hash.parse::<Hash>().expect("image hash should be parseable");
+            let hash = image_hash
+                .parse::<Hash>()
+                .expect("image hash should be parseable");
             let endpoint_id = EndpointId::from_str(user_id)
                 .map_err(|e| Error::InvalidUserId(format!("Invalid user ID: {e}")))?;
             let addr = EndpointAddr::from(endpoint_id);
@@ -469,6 +471,7 @@ impl AppController {
                             .expect("Message to the channel should not return an error");
                     }
                     DownloadProgressItem::Error(e) => {
+                        let _ = progress_sender.send(u64::MAX);
                         return Err(Error::DownloadBlob(format!(
                             "Error during blob download: {}",
                             e
@@ -484,6 +487,7 @@ impl AppController {
                         println!("Part complete for request {:?}", request);
                     }
                     DownloadProgressItem::DownloadError => {
+                        let _ = progress_sender.send(u64::MAX);
                         return Err(Error::DownloadBlob("Download error occurred".to_string()));
                     }
                 }
@@ -492,9 +496,11 @@ impl AppController {
             desktop_client
                 .lock()
                 .await
-                .save_blob_to_storage(ticket.hash(), PathBuf::from(ticket.hash().to_string()))
+                .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
                 .await
                 .map_err(|e| Error::BlobSave(format!("Failed to save downloaded blob: {}", e)))?;
+
+            let _ = progress_sender.send(u64::MAX);
 
             Ok(())
         }
@@ -890,7 +896,9 @@ impl ui::desktop::models::Controller for AppController {
     }
 
     fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8> {
-        let hash = image_hash.parse::<Hash>().expect("Image hash should be parseable");
+        let hash = image_hash
+            .parse::<Hash>()
+            .expect("Image hash should be parseable");
 
         if let Some(data) = self.get_blob_from_storage(hash) {
             return data;
@@ -900,7 +908,8 @@ impl ui::desktop::models::Controller for AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                let endpoint_id = EndpointId::from_str(user_id).expect("Endpoint ID should be parseable");
+                let endpoint_id =
+                    EndpointId::from_str(user_id).expect("Endpoint ID should be parseable");
                 let addr = EndpointAddr::from(endpoint_id);
                 let ticket = BlobTicket::new(addr, hash, Raw);
 
@@ -927,20 +936,33 @@ impl ui::desktop::models::Controller for AppController {
                         }
                         DownloadProgressItem::Error(e) => {
                             eprintln!("Error during blob download: {}", e);
+                            let _ = progress_sender.send(u64::MAX);
                             return vec![];
                         }
                         DownloadProgressItem::DownloadError => {
                             eprintln!("Download error occurred");
+                            let _ = progress_sender.send(u64::MAX);
                             return vec![];
                         }
-                        _ => {}
+                        DownloadProgressItem::PartComplete { request } => {
+                            println!("Part complete for request {:?}", request);
+                        }
+                        DownloadProgressItem::TryProvider { id, request } => {
+                            println!("Trying provider {} for request {:?}", id, request);
+                        }
+                        DownloadProgressItem::ProviderFailed { id, request } => {
+                            eprintln!("Provider {} failed for request {:?}", id, request);
+                        }
                     }
                 }
+
+                // Send completion signal
+                let _ = progress_sender.send(u64::MAX);
 
                 if let Err(e) = desktop_client
                     .lock()
                     .await
-                    .save_blob_to_storage(ticket.hash(), PathBuf::from(ticket.hash().to_string()))
+                    .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
                     .await
                 {
                     eprintln!("Failed to save downloaded blob: {}", e);
