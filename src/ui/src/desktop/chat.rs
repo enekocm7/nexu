@@ -12,7 +12,7 @@ pub fn Chat<C: Controller + 'static>(
     app_state: Signal<AppState>,
     topic_id: Option<String>,
     controller: Signal<C>,
-    show_image_details: Signal<Option<String>>,
+    show_image_details: Signal<Option<(String, String)>>,
 ) -> Element {
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
@@ -247,7 +247,7 @@ pub fn AttachComponent(
 pub fn ChatMessageComponent<C: Controller + 'static>(
     message: Message,
     app_state: Signal<AppState>,
-    show_image_details: Signal<Option<String>>,
+    show_image_details: Signal<Option<(String, String)>>,
     controller: Signal<C>,
 ) -> Element {
     let state = app_state();
@@ -360,7 +360,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 rsx! {
                     div {
                         class: "max-w-[50%] flex flex-col gap-1 {alignment}",
-                        onclick: move |_| show_image_details.set(Some(url_clone.to_string())),
+                        onclick: move |_| show_image_details.set(Some((url_clone.to_string(), message.blob_name.clone()))),
                         if !message.is_sent {
                             p {
                                 class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",

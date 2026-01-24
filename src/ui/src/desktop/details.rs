@@ -371,9 +371,11 @@ pub fn ProfileDetails<C: Controller + 'static>(
 }
 
 #[component]
-pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
+pub fn ImageDetails(image: String, name: String, on_close: EventHandler<()>) -> Element {
     let image_rc = Rc::new(image);
     let image_clone = image_rc.clone();
+    let name_rc = Rc::new(name);
+    let name_clone = name_rc.clone();
     rsx! {
         div {
             class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
@@ -384,12 +386,12 @@ pub fn ImageDetails(image: String, on_close: EventHandler<()>) -> Element {
                 onclick: move |e| {
                     e.stop_propagation();
                     let image_clone = image_clone.clone();
+                    let name_clone = name_clone.clone();
                     spawn(async move {
                         let dir = dirs::download_dir()
-
                             .unwrap_or_else(|| std::path::PathBuf::from("."));
                         let file = rfd::AsyncFileDialog::new()
-                            .set_file_name("image.png")
+                            .set_file_name(name_clone.to_string())
                             .set_directory(dir)
                             .save_file()
                             .await;

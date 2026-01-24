@@ -42,7 +42,7 @@ pub mod desktop_web_components {
         let mut show_leave_confirmation =
             use_signal::<Option<(String, String, RemovalType)>>(|| None);
         let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
-        let mut show_image_details = use_signal::<Option<String>>(|| None);
+        let mut show_image_details = use_signal::<Option<(String, String)>>(|| None);
 
         let profile_data: Profile = {
             let state = app_state();
@@ -181,9 +181,10 @@ pub mod desktop_web_components {
                         ContactDialog { toggle: show_contact_dialog, controller }
                     }
 
-                    if let Some(image_url) = show_image_details() {
+                    if let Some((image_url, name)) = show_image_details() {
                         ImageDetails {
                             image: image_url,
+                            name: name,
                             on_close: move |_| show_image_details.set(None),
                         }
                     }
