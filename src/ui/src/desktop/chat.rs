@@ -1,11 +1,10 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
-use super::models::{AppState, Controller, Message};
+use super::models::{AppState, BlobType, Controller, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
-use dioxus_primitives::toast::{ToastOptions, use_toast};
 use std::rc::Rc;
 
 #[component]
@@ -17,7 +16,6 @@ pub fn Chat<C: Controller + 'static>(
 ) -> Element {
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
-    let toast = use_toast();
 
     let topic = if let Some(id) = &topic_id {
         state.get_topic(id)
@@ -128,14 +126,13 @@ pub fn Chat<C: Controller + 'static>(
                 let mut show_attachment = show_attachment;
                 spawn(async move {
                     for file in files {
-                        if file.size() > 5_000_000 {
-                            toast.error("File too large".to_owned(), ToastOptions::default());
-                            //TODO Implement streaming files
-                        } else if let Ok(data) = file.read_bytes().await {
-                            controller
-                                .read()
-                                .send_image_to_topic(chat_id.clone(), data.to_vec());
-                        }
+                        let name = file.name().to_owned();
+                        controller.read().send_blob_to_topic(
+                            chat_id.clone(),
+                            file,
+                            name,
+                            BlobType::Image,
+                        );
                     }
                     show_attachment.set(false);
                 });
@@ -323,9 +320,18 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             }
         }
         Message::Image(message) => {
+            if message.blob_size >= 5_000_000 {
+                return rsx! {
+                    div { class: "max-w-full self-center bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-text-muted",
+                            "Image too large to display."
+                        }
+                    }
+                };
+            }
             let img_bytes = controller
                 .read()
-                .get_or_download_image(&message.image_hash, &message.sender_id);
+                .get_or_download_image(&message.blob_hash, &message.sender_id);
             let base64_img = BASE64_STANDARD.encode(img_bytes);
             let url = Rc::new(format!("data:image/jpeg;base64,{}", base64_img));
             let sender_display = get_sender_display_name(&state, &message.sender_id);

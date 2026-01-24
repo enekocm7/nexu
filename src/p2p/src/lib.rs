@@ -7,8 +7,8 @@ pub mod utils;
 pub use client::ChatClient;
 pub use iroh::{EndpointAddr, EndpointId};
 pub use messages::{
-    ChatMessage, DisconnectMessage, DmChatMessage, DmJoinMessage, DmMessageTypes,
-    DmProfileMetadataMessage, GossipMessage, ImageMessage, JoinMessage, LeaveMessage, MessageTypes,
+    BlobMessage, ChatMessage, DisconnectMessage, DmChatMessage, DmJoinMessage, DmMessageTypes,
+    DmProfileMetadataMessage, GossipMessage, JoinMessage, LeaveMessage, MessageTypes,
     TopicMessagesMessage, TopicMetadataMessage,
 };
 pub use types::Ticket;

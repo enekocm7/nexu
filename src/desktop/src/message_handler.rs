@@ -152,15 +152,26 @@ pub fn handle_disconnect_topic(
     });
 }
 
-pub fn handle_image_message(mut state: Signal<AppState>, topic: &str, msg: p2p::ImageMessage) {
+pub fn handle_blob_message(mut state: Signal<AppState>, topic: &str, msg: p2p::BlobMessage) {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
-            let message = ui::desktop::models::ImageMessage::new(
+            let ui_blob_type = match msg.blob_type {
+                p2p::messages::BlobType::Image => ui::desktop::models::BlobType::Image,
+                p2p::messages::BlobType::BigImage => ui::desktop::models::BlobType::BigImage,
+                p2p::messages::BlobType::File => ui::desktop::models::BlobType::File,
+                p2p::messages::BlobType::Audio => ui::desktop::models::BlobType::Audio,
+                p2p::messages::BlobType::Video => ui::desktop::models::BlobType::Video,
+                p2p::messages::BlobType::Other => ui::desktop::models::BlobType::Other,
+            };
+            let message = ui::desktop::models::BlobMessage::new(
                 msg.sender.to_string(),
                 topic_obj.id.clone(),
                 msg.hash.to_string(),
+                msg.name,
+                msg.size,
                 msg.timestamp,
                 false,
+                ui_blob_type,
             );
             topic_obj.add_image_message(message);
         }
@@ -296,8 +307,8 @@ pub async fn process_message(
                 }
             }
         }
-        MessageTypes::ImageMessages(image_message) => {
-            handle_image_message(state, &topic, image_message);
+        MessageTypes::Blob(image_message) => {
+            handle_blob_message(state, &topic, image_message);
         }
     }
 }

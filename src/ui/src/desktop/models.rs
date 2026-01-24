@@ -1,4 +1,5 @@
 use ConnectionStatus::{Offline, Online};
+use dioxus::html::FileData;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -62,7 +63,7 @@ impl Topic {
         self.messages.push(Message::Disconnect(message));
     }
 
-    pub fn add_image_message(&mut self, message: ImageMessage) {
+    pub fn add_image_message(&mut self, message: BlobMessage) {
         self.last_message = Some("[Image]".to_string());
         self.messages.push(Message::Image(message));
         self.messages.sort()
@@ -290,7 +291,7 @@ pub enum Message {
     Leave(LeaveMessage),
     Join(JoinMessage),
     Disconnect(DisconnectMessage),
-    Image(ImageMessage),
+    Image(BlobMessage),
 }
 
 impl Message {
@@ -361,30 +362,49 @@ impl ChatMessage {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ImageMessage {
+pub struct BlobMessage {
     pub sender_id: String,
     pub topic_id: String,
-    pub image_hash: String,
+    pub blob_hash: String,
+    pub blob_name: String,
+    pub blob_size: u64, //Size in bytes
     pub timestamp: u64,
     pub is_sent: bool,
+    pub blob_type: BlobType,
 }
 
-impl ImageMessage {
+impl BlobMessage {
     pub fn new(
         sender_id: String,
         topic_id: String,
-        image_hash: String,
+        blob_hash: String,
+        blob_name: String,
+        blob_size: u64,
         timestamp: u64,
         is_sent: bool,
+        blob_type: BlobType,
     ) -> Self {
         Self {
             sender_id,
             topic_id,
-            image_hash,
+            blob_hash,
+            blob_name,
+            blob_size,
             timestamp,
             is_sent,
+            blob_type,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum BlobType {
+    Image,
+    BigImage,
+    File,
+    Audio,
+    Video,
+    Other,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -632,7 +652,13 @@ pub trait Controller {
     fn modify_profile(&self, profile: Profile);
     fn send_message_to_user(&self, user_addr: String, message: String);
     fn connect_to_user(&self, user_id: String);
-    fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>);
+    fn send_blob_to_topic(
+        &self,
+        ticket_id: String,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
+    );
     fn download_image(&self, image_hash: String, user_id: String);
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>>;
     ///Returns an empty vector if the image could not be found or downloaded

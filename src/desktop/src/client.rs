@@ -193,6 +193,20 @@ impl DesktopClient {
         Ok(Box::pin(stream))
     }
 
+    pub async fn save_blob_from_path(
+        &self,
+        blob_path: PathBuf,
+    ) -> anyhow::Result<Pin<Box<dyn Stream<Item = AddProgressItem> + Send>>> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let mut guard = client.lock().await;
+        let progress = guard.save_blob_from_path(&blob_path);
+        let stream = progress.stream().await;
+        Ok(Box::pin(stream))
+    }
+
     pub async fn download_blob(
         &self,
         blob_ticket: &BlobTicket,

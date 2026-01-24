@@ -17,7 +17,7 @@ use iroh_blobs::{BlobsProtocol, Hash};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
@@ -133,7 +133,7 @@ impl ChatClient {
             MessageTypes::LeaveTopic(msg) => msg.topic_id(),
             MessageTypes::DisconnectTopic(msg) => msg.topic_id(),
             MessageTypes::TopicMessages(msg) => msg.topic_id(),
-            MessageTypes::ImageMessages(msg) => msg.topic_id(),
+            MessageTypes::Blob(msg) => msg.topic_id(),
         };
 
         let sender = self
@@ -148,6 +148,10 @@ impl ChatClient {
 
     pub fn save_blob(&mut self, data: &[u8]) -> AddProgress<'_> {
         self.store.blobs().add_slice(data)
+    }
+
+    pub fn save_blob_from_path<P: AsRef<Path>>(&mut self, path: P) -> AddProgress<'_> {
+        self.store.blobs().add_path(path)
     }
 
     pub fn download_blob(&mut self, blob_ticket: &BlobTicket) -> DownloadProgress {

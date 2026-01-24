@@ -13,7 +13,7 @@ pub enum MessageTypes {
     DisconnectTopic(DisconnectMessage),
     TopicMetadata(TopicMetadataMessage),
     TopicMessages(TopicMessagesMessage),
-    ImageMessages(ImageMessage),
+    Blob(BlobMessage),
 }
 
 pub trait GossipMessage: Serialize {
@@ -21,25 +21,49 @@ pub trait GossipMessage: Serialize {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ImageMessage {
+pub struct BlobMessage {
     pub topic: TopicId,
     pub sender: EndpointId,
+    pub name: String,
+    pub size: u64,
     pub hash: Hash,
     pub timestamp: u64,
+    pub blob_type: BlobType,
 }
 
-impl ImageMessage {
-    pub fn new(topic: TopicId, sender: EndpointId, hash: Hash, timestamp: u64) -> Self {
-        ImageMessage {
+impl BlobMessage {
+    pub fn new(
+        topic: TopicId,
+        sender: EndpointId,
+        name: String,
+        size: u64,
+        hash: Hash,
+        timestamp: u64,
+        blob_type: BlobType,
+    ) -> Self {
+        BlobMessage {
             topic,
             sender,
+            name,
+            size,
             hash,
             timestamp,
+            blob_type,
         }
     }
 }
 
-impl GossipMessage for ImageMessage {
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum BlobType {
+    Image,
+    BigImage,
+    File,
+    Audio,
+    Video,
+    Other,
+}
+
+impl GossipMessage for BlobMessage {
     fn topic_id(&self) -> &TopicId {
         &self.topic
     }

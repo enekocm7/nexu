@@ -3,6 +3,7 @@ use crate::utils;
 use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
 use chrono::Utc;
+use dioxus::html::FileData;
 use dioxus::prelude::{ReadableExt, Signal, WritableExt};
 use flume::{Receiver, Sender};
 use futures_lite::StreamExt;
@@ -15,7 +16,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::models::{
-    AppState, ChatMessage, DmChatMessage, ImageMessage, Profile, ProfileChat, Topic,
+    AppState, BlobMessage, BlobType, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic,
 };
 
 #[derive(Debug, Clone)]
@@ -27,9 +28,11 @@ pub enum Command {
         ticket_id: String,
         message: String,
     },
-    SendImageToTopic {
+    SendBlobToTopic {
         ticket_id: String,
-        image_data: Vec<u8>,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
     },
     DownloadBlob {
         image_hash: String,
@@ -103,19 +106,44 @@ impl AppController {
             Command::SendMessageToTopic { ticket_id, message } => {
                 Self::do_send_message_to_topic(ticket_id, message, app_state, desktop_client).await;
             }
-            Command::SendImageToTopic {
+            Command::SendBlobToTopic {
                 ticket_id,
-                image_data,
-            } => {
-                Self::do_send_image_to_topic(
-                    ticket_id,
-                    image_data,
-                    app_state,
-                    desktop_client,
-                    progress_sender,
-                )
-                .await;
-            }
+                blob_data,
+                name,
+                blob_type,
+            } => match blob_type {
+                BlobType::Image => {
+                    Self::do_send_image_to_topic(
+                        ticket_id,
+                        blob_data
+                            .read_bytes()
+                            .await
+                            .expect("Failed to read image bytes")
+                            .to_vec(),
+                        name,
+                        app_state,
+                        desktop_client,
+                        progress_sender,
+                    )
+                    .await;
+                }
+                BlobType::BigImage => {}
+                BlobType::File => {
+                    Self::do_send_blob_to_topic(
+                        ticket_id,
+                        blob_data,
+                        name,
+                        blob_type,
+                        app_state,
+                        desktop_client,
+                        progress_sender,
+                    )
+                    .await;
+                }
+                BlobType::Audio => {}
+                BlobType::Video => {}
+                BlobType::Other => {}
+            },
             Command::DownloadBlob {
                 image_hash,
                 user_id,
@@ -343,6 +371,7 @@ impl AppController {
     async fn do_send_image_to_topic(
         ticket_id: String,
         image_data: Vec<u8>,
+        image_name: String,
         mut app_state: Signal<AppState>,
         desktop_client: Arc<Mutex<DesktopClient>>,
         progress_sender: Sender<u64>,
@@ -400,24 +429,32 @@ impl AppController {
                 .await
                 .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
 
-            let msg = p2p::ImageMessage::new(ticket.topic, peer_id, hash, now);
+            let msg = p2p::BlobMessage::new(
+                ticket.topic,
+                peer_id,
+                image_name.clone(),
+                image_data.len() as u64,
+                hash,
+                now,
+                p2p::messages::BlobType::Image,
+            );
 
-            client
-                .send(MessageTypes::ImageMessages(msg))
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to send message: {}", e);
-                    Error::MessageSend(e.to_string())
-                })?;
+            client.send(MessageTypes::Blob(msg)).await.map_err(|e| {
+                eprintln!("Failed to send message: {}", e);
+                Error::MessageSend(e.to_string())
+            })?;
 
             app_state.with_mut(|state| {
                 if let Some(topic) = state.get_topic_mutable(&ticket_id) {
-                    let image_msg = ImageMessage::new(
+                    let image_msg = BlobMessage::new(
                         peer_id.to_string(),
                         ticket_id.clone(),
                         hash.to_string(),
+                        image_name,
+                        image_data.len() as u64,
                         now,
                         true,
+                        BlobType::Image,
                     );
                     topic.add_image_message(image_msg);
                 }
@@ -434,6 +471,113 @@ impl AppController {
 
         if let Err(e) = result {
             eprintln!("Failed to send image to topic {}: {}", ticket_id, e);
+        }
+    }
+
+    async fn do_send_blob_to_topic(
+        ticket_id: String,
+        blob_data: FileData,
+        blob_name: String,
+        blob_type: BlobType,
+        mut app_state: Signal<AppState>,
+        desktop_client: Arc<Mutex<DesktopClient>>,
+        progress_sender: Sender<u64>,
+    ) {
+        let now = Utc::now().timestamp_millis() as u64;
+
+        let result: Result<(), Error> = async {
+            let client_ref = desktop_client.clone();
+            let client = client_ref.lock().await;
+
+            let ticket = Ticket::from_str(&ticket_id)
+                .map_err(|_| Error::InvalidTicket("Failed to parse ticket_id".to_string()))?;
+
+            let peer_id = client
+                .peer_id()
+                .await
+                .map_err(|e| Error::PeerId(e.to_string()))?;
+
+            let add_stream = client
+                .save_blob_from_path(blob_data.path().to_path_buf())
+                .await
+                .map_err(|e| Error::BlobSave(e.to_string()))?;
+
+            let mut stream = add_stream;
+            let mut hash = None;
+            while let Some(item) = stream.next().await {
+                match item {
+                    p2p::AddProgressItem::CopyProgress(_) => continue,
+                    p2p::AddProgressItem::Size(_) => continue,
+                    p2p::AddProgressItem::CopyDone => continue,
+                    p2p::AddProgressItem::OutboardProgress(progress) => {
+                        progress_sender
+                            .send(progress)
+                            .expect("Message to the channel should not return an error");
+                        continue;
+                    }
+                    p2p::AddProgressItem::Done(temp_tag) => {
+                        hash = Some(temp_tag.hash());
+                        progress_sender
+                            .send(u64::MAX)
+                            .expect("Message to the channel should not return an error");
+                        break;
+                    }
+                    p2p::AddProgressItem::Error(error) => {
+                        return Err(Error::BlobSave(error.to_string()));
+                    }
+                }
+            }
+
+            let hash =
+                hash.ok_or_else(|| Error::BlobSave("Failed to get hash from stream".to_string()))?;
+
+            client
+                .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
+                .await
+                .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
+
+            let p2p_blob_type = match blob_type {
+                BlobType::File => p2p::messages::BlobType::File,
+                _ => p2p::messages::BlobType::Other,
+            };
+
+            let msg = p2p::BlobMessage::new(
+                ticket.topic,
+                peer_id,
+                blob_name.clone(),
+                blob_data.size(),
+                hash,
+                now,
+                p2p_blob_type,
+            );
+
+            client.send(MessageTypes::Blob(msg)).await.map_err(|e| {
+                eprintln!("Failed to send message: {}", e);
+                Error::MessageSend(e.to_string())
+            })?;
+
+            app_state.with_mut(|state| {
+                if let Some(topic) = state.get_topic_mutable(&ticket_id) {
+                    let image_msg = BlobMessage::new(
+                        peer_id.to_string(),
+                        ticket_id.clone(),
+                        hash.to_string(),
+                        blob_name.clone(),
+                        blob_data.size(),
+                        now,
+                        true,
+                        BlobType::File,
+                    );
+                    topic.add_image_message(image_msg);
+                }
+            });
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            eprintln!("Failed to send blob to topic {}: {}", ticket_id, e);
         }
     }
 
@@ -877,10 +1021,18 @@ impl ui::desktop::models::Controller for AppController {
         self.send_command(Command::ConnectToUser(user_id));
     }
 
-    fn send_image_to_topic(&self, ticket_id: String, image_data: Vec<u8>) {
-        self.send_command(Command::SendImageToTopic {
+    fn send_blob_to_topic(
+        &self,
+        ticket_id: String,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
+    ) {
+        self.send_command(Command::SendBlobToTopic {
             ticket_id,
-            image_data,
+            blob_data,
+            name,
+            blob_type,
         });
     }
 
