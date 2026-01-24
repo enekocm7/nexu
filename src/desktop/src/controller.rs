@@ -1108,7 +1108,6 @@ impl ui::desktop::models::Controller for AppController {
                     }
                 }
 
-                // Send completion signal
                 let _ = progress_sender.send(u64::MAX);
 
                 if let Err(e) = desktop_client

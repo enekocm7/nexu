@@ -17,9 +17,9 @@ pub mod desktop_web_components {
         AppState, ColumnState, Controller, Profile, RemovalType, Topic, TopicCreationMode,
     };
 
+    use crate::components::toast::ToastProvider;
     use crate::desktop::details::ImageDetails;
     use dioxus::prelude::*;
-    use crate::components::toast::ToastProvider;
 
     pub static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
     pub static CLOSE_ICON: Asset = asset!("/assets/close_icon.svg");
@@ -151,7 +151,7 @@ pub mod desktop_web_components {
                             ProfileDetails {
                                 profile: profile.clone(),
                                 toggle: show_profile_details,
-                                controller: controller,
+                                controller,
                                 readonly: profile.id != profile_data.id,
                             }
                         }
@@ -162,7 +162,7 @@ pub mod desktop_web_components {
                             TopicDetails {
                                 topic: topic.clone(),
                                 toggle: show_topic_details,
-                                controller: controller,
+                                controller,
                                 view_profile: show_profile_details,
                                 app_state,
                             }
@@ -170,25 +170,15 @@ pub mod desktop_web_components {
                     }
 
                     if show_topic_dialog() {
-                        TopicDialog {
-                            toggle: show_topic_dialog,
-                            controller: controller,
-                        }
+                        TopicDialog { toggle: show_topic_dialog, controller }
                     }
 
                     if progress_bar() != u64::MAX {
-                        ProgressBar {
-                            title: "Loading...",
-                            progress: progress_bar,
-                        }
+                        ProgressBar { title: "Loading...", progress: progress_bar }
                     }
 
-
                     if show_contact_dialog() {
-                        ContactDialog {
-                            toggle: show_contact_dialog,
-                            controller: controller,
-                        }
+                        ContactDialog { toggle: show_contact_dialog, controller }
                     }
 
                     if let Some(image_url) = show_image_details() {
@@ -249,7 +239,7 @@ pub mod desktop_web_components {
                     Chat {
                         app_state,
                         topic_id: selected_topic_id(),
-                        controller: controller,
+                        controller,
                         show_image_details,
                     }
                 }

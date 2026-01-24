@@ -320,45 +320,61 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             }
         }
         Message::Image(message) => {
-            if message.blob_size >= 5_000_000 {
-                return rsx! {
-                    div { class: "max-w-full self-center bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
-                        p { class: "m-0 text-[clamp(12px,1.8vw,13px)] opacity-85 text-text-muted",
-                            "Image too large to display."
-                        }
-                    }
-                };
-            }
-            let img_bytes = controller
-                .read()
-                .get_or_download_image(&message.blob_hash, &message.sender_id);
-            let base64_img = BASE64_STANDARD.encode(img_bytes);
-            let url = Rc::new(format!("data:image/jpeg;base64,{}", base64_img));
             let sender_display = get_sender_display_name(&state, &message.sender_id);
             let alignment = if message.is_sent {
                 "self-end"
             } else {
                 "self-start"
             };
-            let url_clone = url.clone();
 
-            rsx! {
-                div {
-                    class: "max-w-[50%] flex flex-col gap-1 {alignment}",
-                    onclick: move |_| show_image_details.set(Some(url_clone.to_string())),
-                    if !message.is_sent {
-                        p {
-                            class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
-                            title: "{message.sender_id}",
-                            "{sender_display}"
+            if message.blob_size >= 5_000_000 {
+                rsx! {
+                    div { class: "max-w-full {alignment} bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        if !message.is_sent {
+                            p {
+                                class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                                title: "{message.sender_id}",
+                                "{sender_display}"
+                            }
+                        }
+                        h3 { class: "m-0 text-[clamp(16px,1.8vw,13px)] opacity-85 text-text-muted",
+                            "{message.blob_name}"
+                        }
+                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
+                            "Size: {message.blob_size / 1_000_000} MB"
                         }
                     }
-                    img {
-                        class: "max-w-96 rounded-xl shadow-md",
-                        src: "{url}",
-                    }
-                    p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
+                    p { class: "m-0 -mt-2 {alignment} text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
                         "{format_message_timestamp(message.timestamp)}"
+                    }
+                }
+            } else {
+                let img_bytes = controller
+                    .read()
+                    .get_or_download_image(&message.blob_hash, &message.sender_id);
+                let base64_img = BASE64_STANDARD.encode(img_bytes);
+                let url = Rc::new(format!("data:image/jpeg;base64,{}", base64_img));
+
+                let url_clone = url.clone();
+
+                rsx! {
+                    div {
+                        class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                        onclick: move |_| show_image_details.set(Some(url_clone.to_string())),
+                        if !message.is_sent {
+                            p {
+                                class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                                title: "{message.sender_id}",
+                                "{sender_display}"
+                            }
+                        }
+                        img {
+                            class: "max-w-96 rounded-xl shadow-md",
+                            src: "{url}",
+                        }
+                        p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
+                            "{format_message_timestamp(message.timestamp)}"
+                        }
                     }
                 }
             }

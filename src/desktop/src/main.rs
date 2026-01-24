@@ -150,11 +150,7 @@ fn App() -> Element {
     });
 
     rsx! {
-        Desktop::<controller::AppController> {
-            app_state: app_state,
-            controller: controller,
-            progress_bar: progress_bar,
-        }
+        Desktop::<controller::AppController> { app_state, controller, progress_bar }
     }
 }
 

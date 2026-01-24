@@ -76,11 +76,14 @@ pub fn TopicColumn(
                                         value: "Leave Topic".to_string(),
                                         index: 2usize,
                                         on_select: move |_| {
-                                            show_leave_confirmation.set(Some((
-                                                topic_id_leave.clone(),
-                                                topic_name_leave.clone(),
-                                                RemovalType::Topic,
-                                            )));
+                                            show_leave_confirmation
+                                                .set(
+                                                    Some((
+                                                        topic_id_leave.clone(),
+                                                        topic_name_leave.clone(),
+                                                        RemovalType::Topic,
+                                                    )),
+                                                );
                                         },
                                         "Leave Topic"
                                     }
@@ -189,11 +192,14 @@ pub fn ContactColumn(
                                         value: "Remove Contact".to_string(),
                                         index: 2usize,
                                         on_select: move |_| {
-                                            show_leave_confirmation.set(Some((
-                                                profile_id_leave.clone(),
-                                                profile_name_leave.clone(),
-                                                RemovalType::Contact,
-                                            )));
+                                            show_leave_confirmation
+                                                .set(
+                                                    Some((
+                                                        profile_id_leave.clone(),
+                                                        profile_name_leave.clone(),
+                                                        RemovalType::Contact,
+                                                    )),
+                                                );
                                         },
                                         "Remove Contact"
                                     }
