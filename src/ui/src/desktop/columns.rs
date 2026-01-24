@@ -33,22 +33,19 @@ pub fn TopicColumn(
                     .map(|topic| {
                         let topic_id = topic.id;
                         let topic_name = topic.name;
-                        let avatar_url = topic.avatar_url;
-                        let last_message = topic.last_message;
-                        let last_connection = topic.last_connection;
-                        let id_for_chat = topic_id.clone();
-                        let id_for_details = topic_id.clone();
-                        let id_for_leave = topic_id.clone();
-                        let name_for_leave = topic_name.clone();
+                        let topic_id_open = topic_id.clone();
+                        let topic_id_details = topic_id.clone();
+                        let topic_id_leave = topic_id.clone();
+                        let topic_name_leave = topic_name.clone();
                         rsx! {
                             ContextMenu {
                                 ContextMenuTrigger {
                                     ColumnItem {
-                                        id: topic_id.clone(),
-                                        name: topic_name.clone(),
-                                        avatar_url,
-                                        last_message,
-                                        last_connection,
+                                        id: topic_id,
+                                        name: topic_name,
+                                        avatar_url: topic.avatar_url,
+                                        last_message: topic.last_message,
+                                        last_connection: topic.last_connection,
                                         on_select: selected_topic_id,
                                         highlight: search_query(),
                                     }
@@ -59,7 +56,7 @@ pub fn TopicColumn(
                                         value: "Open Chat".to_string(),
                                         index: 0usize,
                                         on_select: move |_| {
-                                            selected_topic_id.set(Some(id_for_chat.clone()));
+                                            selected_topic_id.set(Some(topic_id_open.clone()));
                                         },
                                         "Open Chat"
                                     }
@@ -68,8 +65,7 @@ pub fn TopicColumn(
                                         value: "Open Details".to_string(),
                                         index: 1usize,
                                         on_select: move |_| {
-                                            let state = app_state();
-                                            if let Some(topic) = state.get_topic(&id_for_details) {
+                                            if let Some(topic) = app_state().get_topic(&topic_id_details) {
                                                 show_topic_details.set(Some(topic.clone()));
                                             }
                                         },
@@ -79,17 +75,12 @@ pub fn TopicColumn(
                                         class: "context-menu-item-danger",
                                         value: "Leave Topic".to_string(),
                                         index: 2usize,
-                                        on_select: {
-                                            move |_| {
-                                                show_leave_confirmation
-                                                    .set(
-                                                        Some((
-                                                            id_for_leave.clone(),
-                                                            name_for_leave.clone(),
-                                                            RemovalType::Topic,
-                                                        )),
-                                                    )
-                                            }
+                                        on_select: move |_| {
+                                            show_leave_confirmation.set(Some((
+                                                topic_id_leave.clone(),
+                                                topic_name_leave.clone(),
+                                                RemovalType::Topic,
+                                            )));
                                         },
                                         "Leave Topic"
                                     }
@@ -117,34 +108,36 @@ pub fn ContactColumn(
         contacts
     };
 
+    let filtered_contacts = contact_list
+        .into_iter()
+        .filter(|contact_chat| {
+            contact_chat
+                .profile
+                .name
+                .to_lowercase()
+                .contains(&search_query().to_lowercase())
+                || contact_chat
+                    .profile
+                    .id
+                    .to_lowercase()
+                    .contains(&search_query().to_lowercase())
+        })
+        .collect::<Vec<ProfileChat>>();
+
+    if filtered_contacts.is_empty() {
+        let message = if search_query().is_empty() {
+            "You have no contacts. Add some to start chatting!"
+        } else {
+            "No contacts found."
+        };
+        return rsx! {
+            div { class: "p-4 text-text-secondary text-center", "{message}" }
+        };
+    }
+
     rsx! {
         ul {
             {
-                let filtered_contacts = contact_list
-                    .into_iter()
-                    .filter(|contact_chat| {
-                        contact_chat
-                            .profile
-                            .name
-                            .to_lowercase()
-                            .contains(&search_query().to_lowercase())
-                            || contact_chat
-                                .profile
-                                .id
-                                .to_lowercase()
-                                .contains(&search_query().to_lowercase())
-                    })
-                    .collect::<Vec<ProfileChat>>();
-                if filtered_contacts.is_empty() {
-                    let message = if search_query().is_empty() {
-                        "You have no contacts. Add some to start chatting!"
-                    } else {
-                        "No contacts found."
-                    };
-                    return rsx! {
-                        div { class: "p-4 text-text-secondary text-center", "{message}" }
-                    };
-                }
                 filtered_contacts
                     .into_iter()
                     .map(|contact_chat| {
@@ -153,16 +146,16 @@ pub fn ContactColumn(
                         let profile_name = contact_chat.profile.name;
                         let avatar_url = contact_chat.profile.avatar;
                         let last_connection = contact_chat.profile.last_connection.get_u64();
-                        let id_for_chat = profile_id.clone();
-                        let id_for_details = profile_id.clone();
-                        let id_for_leave = profile_id.clone();
-                        let name_for_leave = profile_name.clone();
+                        let profile_id_open = profile_id.clone();
+                        let profile_id_details = profile_id.clone();
+                        let profile_id_leave = profile_id.clone();
+                        let profile_name_leave = profile_name.clone();
                         rsx! {
                             ContextMenu {
                                 ContextMenuTrigger {
                                     ColumnItem {
-                                        id: profile_id.clone(),
-                                        name: profile_name.clone(),
+                                        id: profile_id,
+                                        name: profile_name,
                                         avatar_url,
                                         last_message,
                                         last_connection,
@@ -176,7 +169,7 @@ pub fn ContactColumn(
                                         value: "Open Chat".to_string(),
                                         index: 0usize,
                                         on_select: move |_| {
-                                            selected_topic_id.set(Some(id_for_chat.clone()));
+                                            selected_topic_id.set(Some(profile_id_open.clone()));
                                         },
                                         "Open Chat"
                                     }
@@ -185,8 +178,7 @@ pub fn ContactColumn(
                                         value: "Open Details".to_string(),
                                         index: 1usize,
                                         on_select: move |_| {
-                                            let state = app_state();
-                                            if let Some(contact) = state.get_contact(&id_for_details) {
+                                            if let Some(contact) = app_state().get_contact(&profile_id_details) {
                                                 show_profile_details.set(Some(contact.clone()));
                                             }
                                         },
@@ -194,19 +186,14 @@ pub fn ContactColumn(
                                     }
                                     ContextMenuItem {
                                         class: "context-menu-item-danger",
-                                        value: "Leave Topic".to_string(),
+                                        value: "Remove Contact".to_string(),
                                         index: 2usize,
-                                        on_select: {
-                                            move |_| {
-                                                show_leave_confirmation
-                                                    .set(
-                                                        Some((
-                                                            id_for_leave.clone(),
-                                                            name_for_leave.clone(),
-                                                            RemovalType::Contact,
-                                                        )),
-                                                    )
-                                            }
+                                        on_select: move |_| {
+                                            show_leave_confirmation.set(Some((
+                                                profile_id_leave.clone(),
+                                                profile_name_leave.clone(),
+                                                RemovalType::Contact,
+                                            )));
                                         },
                                         "Remove Contact"
                                     }
