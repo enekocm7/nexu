@@ -163,8 +163,7 @@ impl ChatClient {
 
     pub async fn get_blob_path(&self, hash: impl Into<Hash>) -> anyhow::Result<PathBuf> {
         let hash: Hash = hash.into();
-        let mut path = self.temp_store_path.join(hash.to_string());
-        //path.add_extension("jpeg");
+        let path = self.temp_store_path.join(hash.to_string());
         self.store.blobs().export(hash, path.clone()).await?;
         Ok(path.clone())
     }
