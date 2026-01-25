@@ -655,21 +655,15 @@ impl AppController {
         }
     }
 
-    pub fn get_blob_from_storage(&self, hash: Hash) -> Option<Vec<u8>> {
+    pub fn get_blob_from_storage(&self, hash: Hash) -> Option<PathBuf> {
         let desktop_client = Arc::clone(&self.desktop_client);
 
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                desktop_client
-                    .lock()
-                    .await
-                    .get_blob_from_storage(hash)
-                    .await
-                    .ok()
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { desktop_client.lock().await.get_blob_path(hash).await.ok() })
         })
     }
-    
+
     pub fn has_blob_impl(&self, hash: &str) -> bool {
         let hash = match hash.parse::<Hash>() {
             Ok(h) => h,
@@ -680,10 +674,7 @@ impl AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                match desktop_client.lock().await.get_blob_from_storage(hash).await {
-                    Ok(_) => true,
-                    Err(_) => false,
-                }
+                desktop_client.lock().await.get_blob_path(hash).await.is_ok()
             })
         })
     }
@@ -1061,7 +1052,7 @@ impl ui::desktop::models::Controller for AppController {
         });
     }
 
-    fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>> {
+    fn get_image_from_storage(&self, image_hash: String) -> Option<PathBuf> {
         self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
     }
 
@@ -1069,13 +1060,13 @@ impl ui::desktop::models::Controller for AppController {
         self.has_blob_impl(image_hash)
     }
 
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8> {
+    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> anyhow::Result<PathBuf> {
         let hash = image_hash
             .parse::<Hash>()
             .expect("Image hash should be parseable");
 
         if let Some(data) = self.get_blob_from_storage(hash) {
-            return data;
+            return Ok(data);
         }
         let desktop_client = Arc::clone(&self.desktop_client);
         let progress_sender = self.progress_bar_sender.clone();
@@ -1087,21 +1078,16 @@ impl ui::desktop::models::Controller for AppController {
                 let addr = EndpointAddr::from(endpoint_id);
                 let ticket = BlobTicket::new(addr, hash, Raw);
 
-                let progress = match desktop_client.lock().await.download_blob(&ticket).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("Failed to start blob download: {}", e);
-                        return vec![];
-                    }
-                };
+                let progress = desktop_client
+                    .lock()
+                    .await
+                    .download_blob(&ticket)
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to start blob download: {}", e))?;
 
-                let mut stream = match progress.stream().await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("Failed to get download progress stream: {}", e);
-                        return vec![];
-                    }
-                };
+                let mut stream = progress.stream().await.map_err(|e| {
+                    anyhow::anyhow!("Failed to get download progress stream: {}", e)
+                })?;
 
                 while let Some(item) = stream.next().await {
                     match item {
@@ -1109,14 +1095,12 @@ impl ui::desktop::models::Controller for AppController {
                             let _ = progress_sender.send(progress);
                         }
                         DownloadProgressItem::Error(e) => {
-                            eprintln!("Error during blob download: {}", e);
                             let _ = progress_sender.send(u64::MAX);
-                            return vec![];
+                            return Err(anyhow::anyhow!(e));
                         }
                         DownloadProgressItem::DownloadError => {
-                            eprintln!("Download error occurred");
                             let _ = progress_sender.send(u64::MAX);
-                            return vec![];
+                            return Err(anyhow::anyhow!("Download error occurred"));
                         }
                         DownloadProgressItem::PartComplete { request } => {
                             println!("Part complete for request {:?}", request);
@@ -1132,22 +1116,19 @@ impl ui::desktop::models::Controller for AppController {
 
                 let _ = progress_sender.send(u64::MAX);
 
-                if let Err(e) = desktop_client
+                desktop_client
                     .lock()
                     .await
                     .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
                     .await
-                {
-                    eprintln!("Failed to save downloaded blob: {}", e);
-                    return vec![];
-                }
+                    .map_err(|e| anyhow::anyhow!("Failed to save blob: {}", e))?;
+                
 
                 desktop_client
                     .lock()
                     .await
-                    .get_blob_from_storage(hash)
+                    .get_blob_path(hash)
                     .await
-                    .unwrap_or_default()
             })
         })
     }

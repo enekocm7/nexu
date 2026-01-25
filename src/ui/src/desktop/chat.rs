@@ -1,11 +1,15 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, BlobType, Controller, Message};
 use super::utils::{format_message_timestamp, get_sender_display_name};
-use base64::Engine;
+use crate::components::toast::ToastProvider;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
-use std::rc::Rc;
+use dioxus_primitives::toast::{use_toast, ToastOptions};
+use image::ImageFormat::WebP;
+use image::{ImageReader, Limits};
+use std::io::Cursor;
 
 #[component]
 pub fn Chat<C: Controller + 'static>(
@@ -153,11 +157,13 @@ pub fn Chat<C: Controller + 'static>(
                     class: "flex-1 overflow-y-auto p-5 flex flex-col gap-3 bg-bg-dark scrollbar-custom",
                     id: "chat-messages-container",
                     for message in messages.iter() {
-                        ChatMessageComponent {
-                            message: message.clone(),
-                            app_state,
-                            show_image_details,
-                            controller,
+                        ToastProvider {
+                            ChatMessageComponent {
+                                message: message.clone(),
+                                app_state,
+                                show_image_details,
+                                controller,
+                            }
                         }
                     }
                 }
@@ -251,6 +257,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
     controller: Signal<C>,
 ) -> Element {
     let state = app_state();
+    let toast = use_toast();
     match message {
         Message::Chat(message) => {
             let timestamp_str = format_message_timestamp(message.timestamp);
@@ -327,82 +334,97 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 "self-start"
             };
 
-            if message.blob_size >= 5_000_000 {
-                let has_blob = use_signal(|| controller.read().has_blob(&message.blob_hash));
-                let mut message_text = use_signal(|| "Open in external viewer");
+            let img_path = controller
+                .read()
+                .get_or_download_image(&message.blob_hash, &message.sender_id);
 
-                if has_blob() {
-                    message_text.set("Open in external viewer");
-                } else {
-                    message_text.set("Download");
-                };
-
-                let handle_click = move || {
-                    if has_blob() {
-                        
-                    } else {
-
-                    }
-                };
-
-                rsx! {
-                    div {
-                        class: "max-w-full {alignment} bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
-                        onclick: move |_| {
-                            handle_click();
-                        },
-                        if !message.is_sent {
-                            p {
-                                class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
-                                title: "{message.sender_id}",
-                                "{sender_display}"
-                            }
-                        }
-                        h3 { class: "m-0 text-[clamp(16px,1.8vw,13px)] opacity-85 text-text-muted",
-                            "{message.blob_name}"
-                        }
-
-                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
-                            "Size: {message.blob_size / 1_000_000} MB"
-                        }
-
-                        p { class: "text-white text-lg font-semibold select-none py-2 px-4",
-                            "{message_text}"
-                        }
-                    }
-                    p { class: "m-0 -mt-2 {alignment} text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
-                        "{format_message_timestamp(message.timestamp)}"
-                    }
+            let img_path = match img_path {
+                Ok(path) => path,
+                Err(_) => {
+                    toast.error(
+                        "Failed to load image blob.".to_string(),
+                        ToastOptions::default(),
+                    );
+                    return rsx! {};
                 }
-            } else {
-                let img_bytes = controller
-                    .read()
-                    .get_or_download_image(&message.blob_hash, &message.sender_id);
-                let base64_img = BASE64_STANDARD.encode(img_bytes);
-                let url = Rc::new(format!("data:image/jpeg;base64,{}", base64_img));
+            };
 
-                let url_clone = url.clone();
+            let mut thumbnail_data = use_signal(|| String::from(""));
 
-                rsx! {
-                    div {
-                        class: "max-w-[50%] flex flex-col gap-1 {alignment}",
-                        onclick: move |_| {
-                            show_image_details.set(Some((url_clone.to_string(), message.blob_name.clone())))
-                        },
-                        if !message.is_sent {
-                            p {
-                                class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
-                                title: "{message.sender_id}",
-                                "{sender_display}"
-                            }
+            let path = img_path.clone();
+            use_effect(move || {
+                let path = path.clone();
+                spawn(async move {
+                    let reader = match ImageReader::open(&path) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            toast.error(
+                                format!("Failed to open image: {}", e),
+                                ToastOptions::default(),
+                            );
+                            return;
                         }
-                        img {
-                            class: "max-w-96 rounded-xl shadow-md",
-                            src: "{url}",
+                    };
+
+                    let mut reader = match reader.with_guessed_format() {
+                        Ok(r) => r,
+                        Err(e) => {
+                            toast.error(
+                                format!("Failed to detect image format: {}", e),
+                                ToastOptions::default(),
+                            );
+                            return;
                         }
-                        p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
-                            "{format_message_timestamp(message.timestamp)}"
+                    };
+
+                    reader.limits(Limits::no_limits());
+
+                    let img = match reader.decode() {
+                        Ok(i) => i,
+                        Err(e) => {
+                            toast.error(
+                                format!("Failed to decode image: {}", e),
+                                ToastOptions::default(),
+                            );
+                            return;
                         }
+                    };
+
+                    let thumbnail = img.thumbnail(1024, 1024);
+                    let mut buf = Cursor::new(Vec::new());
+
+                    if let Err(e) = thumbnail.write_to(&mut buf, WebP) {
+                        toast.error(
+                            format!("Failed to create thumbnail: {}", e),
+                            ToastOptions::default(),
+                        );
+                        return;
+                    }
+
+                    let b64 = BASE64_STANDARD.encode(buf.get_ref());
+                    thumbnail_data.set(format!("data:image/webp;base64,{}", b64));
+                });
+            });
+
+            rsx! {
+                div {
+                    class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                    onclick: move |_| {
+                        show_image_details.set(Some((thumbnail_data(), message.blob_name.clone())))
+                    },
+                    if !message.is_sent {
+                        p {
+                            class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                            title: "{message.sender_id}",
+                            "{sender_display}"
+                        }
+                    }
+                    img {
+                        class: "max-w-96 rounded-xl shadow-md",
+                        src: "{thumbnail_data.read()}",
+                    }
+                    p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
+                        "{format_message_timestamp(message.timestamp)}"
                     }
                 }
             }

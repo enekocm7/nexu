@@ -219,16 +219,16 @@ impl DesktopClient {
         Ok(guard.download_blob(blob_ticket))
     }
 
-    pub async fn get_blob_from_storage(
+    pub async fn get_blob_path(
         &self,
         hash: impl Into<p2p::Hash>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<PathBuf> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
         let guard = client.lock().await;
-        guard.get_blob_from_storage(hash).await
+        guard.get_blob_path(hash).await
     }
 
     pub async fn save_blob_to_storage(

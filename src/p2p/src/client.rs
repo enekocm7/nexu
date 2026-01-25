@@ -1,5 +1,5 @@
 use crate::messages::{DmMessageTypes, GossipMessage, MessageTypes};
-use crate::protocol::{DM_ALPN, DMProtocol, write_frame};
+use crate::protocol::{write_frame, DMProtocol, DM_ALPN};
 use crate::types::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
@@ -15,12 +15,11 @@ use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobsProtocol, Hash};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
-use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
+use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
 use tokio::time::sleep;
 
 pub struct ChatClient {
@@ -33,12 +32,13 @@ pub struct ChatClient {
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
     dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
     store: FsStore,
+    temp_store_path: PathBuf,
     downloader: Downloader,
 }
 
 impl ChatClient {
     pub async fn new(path_buf: PathBuf) -> anyhow::Result<Self> {
-        let secret = load_secret_key(path_buf.join("secret.key")).await?;
+        let secret = load_secret_key(path_buf.join("key")).await?;
 
         let endpoint = Endpoint::empty_builder(RelayMode::Default)
             .secret_key(secret)
@@ -55,6 +55,7 @@ impl ChatClient {
         let dm_protocol = DMProtocol { tx: dm_tx };
 
         let store = FsStore::load(path_buf.join("store")).await?;
+        let temp_store_path = path_buf.join("temp");
 
         let blobs = BlobsProtocol::new(&store, None);
 
@@ -74,6 +75,7 @@ impl ChatClient {
             listen_tasks: HashMap::new(),
             dm_incoming: dm_rx,
             store: store.clone(),
+            temp_store_path,
             downloader: store.downloader(&endpoint),
         })
     }
@@ -159,27 +161,12 @@ impl ChatClient {
         downloader.download(blob_ticket.hash(), Some(blob_ticket.addr().id))
     }
 
-    pub async fn get_blob_from_storage(&self, hash: impl Into<Hash>) -> anyhow::Result<Vec<u8>> {
+    pub async fn get_blob_path(&self, hash: impl Into<Hash>) -> anyhow::Result<PathBuf> {
         let hash: Hash = hash.into();
-        match self.store.status(hash).await? {
-            BlobStatus::NotFound => Err(anyhow::anyhow!("Blob not found in storage")),
-            BlobStatus::Partial { size } => Err(anyhow::anyhow!(
-                "Blob is partial in storage, size: {:?}",
-                size
-            )),
-            BlobStatus::Complete { size } => {
-                if size >= 1_000_000_000 {
-                    //TODO Handle bigger files with a streaming approach
-                    let mut reader = self.store.reader(hash);
-                    let mut buffer = Vec::with_capacity(size as usize);
-                    reader.read_to_end(&mut buffer).await?;
-                    Ok(buffer)
-                } else {
-                    let bytes = self.store.get_bytes(hash).await?;
-                    Ok(bytes.to_vec())
-                }
-            }
-        }
+        let mut path = self.temp_store_path.join(hash.to_string());
+        //path.add_extension("jpeg");
+        self.store.blobs().export(hash, path.clone()).await?;
+        Ok(path.clone())
     }
 
     pub async fn save_blob_to_storage(
@@ -296,7 +283,7 @@ mod tests {
     use super::*;
     use crate::ChatMessage;
     use serial_test::serial;
-    use tokio::time::{Duration, sleep};
+    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     #[serial]
@@ -1080,10 +1067,12 @@ mod tests {
         let progress = client.save_blob(test_data).await;
         let result = progress.expect("Failed to save blob");
 
-        let retrieved_bytes = client
-            .get_blob_from_storage(result.hash)
+        let path = client
+            .get_blob_path(result.hash)
             .await
             .expect("Failed to get blob from storage");
+
+        let retrieved_bytes = std::fs::read(path).expect("Failed to read blob from path");
 
         assert_eq!(retrieved_bytes, test_data);
     }

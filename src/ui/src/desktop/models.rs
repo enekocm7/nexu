@@ -5,6 +5,7 @@ use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -660,8 +661,8 @@ pub trait Controller {
         blob_type: BlobType,
     );
     fn download_image(&self, image_hash: String, user_id: String);
-    fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>>;
+    fn get_image_from_storage(&self, image_hash: String) -> Option<PathBuf>;
     fn has_blob(&self, image_hash: &str) -> bool;
     ///Returns an empty vector if the image could not be found or downloaded
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8>;
+    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> anyhow::Result<PathBuf>;
 }
