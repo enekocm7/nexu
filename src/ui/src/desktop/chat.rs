@@ -328,15 +328,29 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             };
 
             if message.blob_size >= 5_000_000 {
-                let has_blob = controller.read().has_blob(&message.blob_hash);
-                let message_text = if has_blob {
-                    "View"
+                let has_blob = use_signal(|| controller.read().has_blob(&message.blob_hash));
+                let mut message_text = use_signal(|| "Open in external viewer");
+
+                if has_blob() {
+                    message_text.set("Open in external viewer");
                 } else {
-                    "Download."
+                    message_text.set("Download");
+                };
+
+                let handle_click = move || {
+                    if has_blob() {
+                        
+                    } else {
+
+                    }
                 };
 
                 rsx! {
-                    div { class: "max-w-full {alignment} bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
+                    div {
+                        class: "max-w-full {alignment} bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
+                        onclick: move |_| {
+                            handle_click();
+                        },
                         if !message.is_sent {
                             p {
                                 class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
@@ -347,16 +361,12 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                         h3 { class: "m-0 text-[clamp(16px,1.8vw,13px)] opacity-85 text-text-muted",
                             "{message.blob_name}"
                         }
-                        if !has_blob {
-                            p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
-                            "Size: {message.blob_size / 1_000_000} MB"
-                            }
-                        }
-                        button {
-                            class: "mt-2 btn-secondary py-2 px-4",
-                            onclick: move |_| {
 
-                            },
+                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
+                            "Size: {message.blob_size / 1_000_000} MB"
+                        }
+
+                        p { class: "text-white text-lg font-semibold select-none py-2 px-4",
                             "{message_text}"
                         }
                     }
@@ -376,7 +386,9 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 rsx! {
                     div {
                         class: "max-w-[50%] flex flex-col gap-1 {alignment}",
-                        onclick: move |_| show_image_details.set(Some((url_clone.to_string(), message.blob_name.clone()))),
+                        onclick: move |_| {
+                            show_image_details.set(Some((url_clone.to_string(), message.blob_name.clone())))
+                        },
                         if !message.is_sent {
                             p {
                                 class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",

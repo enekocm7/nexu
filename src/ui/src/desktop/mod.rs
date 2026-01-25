@@ -184,7 +184,7 @@ pub mod desktop_web_components {
                     if let Some((image_url, name)) = show_image_details() {
                         ImageDetails {
                             image: image_url,
-                            name: name,
+                            name,
                             on_close: move |_| show_image_details.set(None),
                         }
                     }
