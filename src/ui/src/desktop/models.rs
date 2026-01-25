@@ -661,6 +661,7 @@ pub trait Controller {
     );
     fn download_image(&self, image_hash: String, user_id: String);
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>>;
+    fn has_blob(&self, image_hash: &str) -> bool;
     ///Returns an empty vector if the image could not be found or downloaded
     fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8>;
 }

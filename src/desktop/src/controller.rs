@@ -669,6 +669,24 @@ impl AppController {
             })
         })
     }
+    
+    pub fn has_blob_impl(&self, hash: &str) -> bool {
+        let hash = match hash.parse::<Hash>() {
+            Ok(h) => h,
+            Err(_) => return false,
+        };
+
+        let desktop_client = Arc::clone(&self.desktop_client);
+
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                match desktop_client.lock().await.get_blob_from_storage(hash).await {
+                    Ok(_) => true,
+                    Err(_) => false,
+                }
+            })
+        })
+    }
 
     async fn do_send_message_to_user(
         user_addr: String,
@@ -1045,6 +1063,10 @@ impl ui::desktop::models::Controller for AppController {
 
     fn get_image_from_storage(&self, image_hash: String) -> Option<Vec<u8>> {
         self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
+    }
+
+    fn has_blob(&self, image_hash: &str) -> bool {
+        self.has_blob_impl(image_hash)
     }
 
     fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> Vec<u8> {

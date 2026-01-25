@@ -243,4 +243,13 @@ impl DesktopClient {
         let guard = client.lock().await;
         Ok(guard.save_blob_to_storage(hash, path).await)
     }
+
+    pub async fn has_blob(&self, hash: impl Into<p2p::Hash>) -> anyhow::Result<bool> {
+        let client = self
+            .client
+            .get()
+            .ok_or_else(|| anyhow!("Client is not initialized"))?;
+        let guard = client.lock().await;
+        Ok(guard.has_blob(hash).await?)
+    }
 }

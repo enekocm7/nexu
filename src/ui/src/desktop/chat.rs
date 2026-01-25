@@ -328,6 +328,13 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             };
 
             if message.blob_size >= 5_000_000 {
+                let has_blob = controller.read().has_blob(&message.blob_hash);
+                let message_text = if has_blob {
+                    "View"
+                } else {
+                    "Download."
+                };
+
                 rsx! {
                     div { class: "max-w-full {alignment} bg-bg-panel text-text-muted py-2 px-3 rounded-lg border border-border shadow-sm text-[clamp(12px,1.8vw,13px)] italic text-center",
                         if !message.is_sent {
@@ -340,8 +347,17 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                         h3 { class: "m-0 text-[clamp(16px,1.8vw,13px)] opacity-85 text-text-muted",
                             "{message.blob_name}"
                         }
-                        p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
+                        if !has_blob {
+                            p { class: "mt-1 mb-0 text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",
                             "Size: {message.blob_size / 1_000_000} MB"
+                            }
+                        }
+                        button {
+                            class: "mt-2 btn-secondary py-2 px-4",
+                            onclick: move |_| {
+
+                            },
+                            "{message_text}"
                         }
                     }
                     p { class: "m-0 -mt-2 {alignment} text-[clamp(10px,1.5vw,11px)] opacity-60 text-text-muted",

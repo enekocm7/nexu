@@ -191,6 +191,15 @@ impl ChatClient {
         self.store.blobs().export(hash, path)
     }
 
+    pub async fn has_blob(&self, hash: impl Into<Hash>) -> anyhow::Result<bool> {
+        if let BlobStatus::Complete{ .. } = self.store().status(hash).await? {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+
+    }
+
     pub fn peer_id(&self) -> EndpointId {
         self.endpoint.id()
     }
