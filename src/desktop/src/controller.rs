@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use crate::client::DesktopClient;
 use crate::utils;
 use crate::utils::topics::save_topics_to_file;
@@ -35,7 +36,7 @@ pub enum Command {
         blob_type: BlobType,
     },
     DownloadBlob {
-        image_hash: String,
+        blob_hash: String,
         user_id: String,
     },
     SendMessageToUser {
@@ -145,10 +146,10 @@ impl AppController {
                 BlobType::Other => {}
             },
             Command::DownloadBlob {
-                image_hash,
+                blob_hash,
                 user_id,
             } => {
-                Self::do_download_blob(&image_hash, &user_id, desktop_client, progress_sender)
+                Self::do_download_blob(&blob_hash, &user_id, desktop_client, progress_sender)
                     .await;
             }
             Command::SendMessageToUser { user_addr, message } => {
@@ -424,11 +425,6 @@ impl AppController {
             let hash =
                 hash.ok_or_else(|| Error::BlobSave("Failed to get hash from stream".to_string()))?;
 
-            client
-                .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
-                .await
-                .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
-
             let msg = p2p::BlobMessage::new(
                 ticket.topic,
                 peer_id,
@@ -498,7 +494,7 @@ impl AppController {
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
             let add_stream = client
-                .save_blob_from_path(blob_data.path().to_path_buf())
+                .save_blob_from_path(blob_data.path())
                 .await
                 .map_err(|e| Error::BlobSave(e.to_string()))?;
 
@@ -530,11 +526,6 @@ impl AppController {
 
             let hash =
                 hash.ok_or_else(|| Error::BlobSave("Failed to get hash from stream".to_string()))?;
-
-            client
-                .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
-                .await
-                .map_err(|e| Error::BlobSave(format!("Failed to save blob to storage: {}", e)))?;
 
             let p2p_blob_type = match blob_type {
                 BlobType::File => p2p::messages::BlobType::File,
@@ -582,13 +573,13 @@ impl AppController {
     }
 
     async fn do_download_blob(
-        image_hash: &str,
+        blob_hash: &str,
         user_id: &str,
         desktop_client: Arc<Mutex<DesktopClient>>,
         progress_sender: Sender<u64>,
     ) {
         let result: Result<(), Error> = async {
-            let hash = image_hash
+            let hash = blob_hash
                 .parse::<Hash>()
                 .expect("image hash should be parseable");
             let endpoint_id = EndpointId::from_str(user_id)
@@ -637,13 +628,6 @@ impl AppController {
                 }
             }
 
-            desktop_client
-                .lock()
-                .await
-                .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
-                .await
-                .map_err(|e| Error::BlobSave(format!("Failed to save downloaded blob: {}", e)))?;
-
             let _ = progress_sender.send(u64::MAX);
 
             Ok(())
@@ -651,20 +635,20 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to download blob {}: {}", image_hash, e);
+            eprintln!("Failed to download blob {}: {}", blob_hash, e);
         }
     }
 
-    pub fn get_blob_from_storage(&self, hash: Hash) -> Option<PathBuf> {
+    pub fn get_blob_from_storage(&self, hash: Hash, extension: impl AsRef<OsStr>) -> Option<PathBuf> {
         let desktop_client = Arc::clone(&self.desktop_client);
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current()
-                .block_on(async { desktop_client.lock().await.get_blob_path(hash).await.ok() })
+                .block_on(async { desktop_client.lock().await.get_blob_path(hash, extension).await.ok() })
         })
     }
 
-    pub fn has_blob_impl(&self, hash: &str) -> bool {
+    pub fn has_blob_impl(&self, hash: &str, extension: impl AsRef<OsStr>) -> bool {
         let hash = match hash.parse::<Hash>() {
             Ok(h) => h,
             Err(_) => return false,
@@ -674,7 +658,7 @@ impl AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                desktop_client.lock().await.get_blob_path(hash).await.is_ok()
+                desktop_client.lock().await.get_blob_path(hash, extension).await.is_ok()
             })
         })
     }
@@ -1047,25 +1031,35 @@ impl ui::desktop::models::Controller for AppController {
 
     fn download_image(&self, image_hash: String, user_id: String) {
         self.send_command(Command::DownloadBlob {
-            image_hash,
+            blob_hash: image_hash,
             user_id,
         });
     }
 
-    fn get_image_from_storage(&self, image_hash: String) -> Option<PathBuf> {
-        self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"))
+    fn get_image_from_storage(&self, image_hash: String, image_name: &str) -> Option<PathBuf> {
+        let extension = image_name
+            .split('.')
+            .next_back()
+            .unwrap_or("");
+        self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"), extension)
     }
 
-    fn has_blob(&self, image_hash: &str) -> bool {
-        self.has_blob_impl(image_hash)
+    fn has_blob(&self, image_hash: &str, image_name: &str) -> bool {
+        let extension = image_name
+            .split('.')
+            .next_back()
+            .unwrap_or("");
+        self.has_blob_impl(image_hash, extension)
     }
 
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> anyhow::Result<PathBuf> {
+    fn get_or_download_image(&self, image_hash: &str, user_id: &str, image_name: &str) -> anyhow::Result<PathBuf> {
         let hash = image_hash
             .parse::<Hash>()
             .expect("Image hash should be parseable");
 
-        if let Some(data) = self.get_blob_from_storage(hash) {
+        let extension = image_name.split('.').next_back().unwrap_or("");
+
+        if let Some(data) = self.get_blob_from_storage(hash, extension) {
             return Ok(data);
         }
         let desktop_client = Arc::clone(&self.desktop_client);
@@ -1119,15 +1113,7 @@ impl ui::desktop::models::Controller for AppController {
                 desktop_client
                     .lock()
                     .await
-                    .save_blob_to_storage(hash, PathBuf::from(hash.to_string()))
-                    .await
-                    .map_err(|e| anyhow::anyhow!("Failed to save blob: {}", e))?;
-                
-
-                desktop_client
-                    .lock()
-                    .await
-                    .get_blob_path(hash)
+                    .get_blob_path(hash, extension)
                     .await
             })
         })

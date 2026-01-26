@@ -3,10 +3,11 @@ use flume::Receiver;
 use futures_lite::Stream;
 use p2p::messages::DmMessageTypes;
 use p2p::{
-    AddProgressItem, BlobTicket, ChatClient, DownloadProgress, EndpointId, ExportProgress,
+    AddProgressItem, BlobTicket, ChatClient, DownloadProgress, EndpointId,
     MessageTypes, Ticket,
 };
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -222,34 +223,13 @@ impl DesktopClient {
     pub async fn get_blob_path(
         &self,
         hash: impl Into<p2p::Hash>,
+        extension: impl AsRef<OsStr>,
     ) -> anyhow::Result<PathBuf> {
         let client = self
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
         let guard = client.lock().await;
-        guard.get_blob_path(hash).await
-    }
-
-    pub async fn save_blob_to_storage(
-        &self,
-        hash: impl Into<p2p::Hash>,
-        path: PathBuf,
-    ) -> anyhow::Result<ExportProgress> {
-        let client = self
-            .client
-            .get()
-            .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let guard = client.lock().await;
-        Ok(guard.save_blob_to_storage(hash, path).await)
-    }
-
-    pub async fn has_blob(&self, hash: impl Into<p2p::Hash>) -> anyhow::Result<bool> {
-        let client = self
-            .client
-            .get()
-            .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let guard = client.lock().await;
-        Ok(guard.has_blob(hash).await?)
+        guard.get_blob_path(hash, extension).await
     }
 }

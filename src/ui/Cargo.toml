@@ -19,8 +19,8 @@ arboard = { version = "3.6.1", features = [
 ] }
 serde = { workspace = true, features = ["derive"] }
 base64 = "0.22.1"
+open = "5.3.3"
 image = { workspace = true, features = ["webp"] }
 anyhow = { workspace = true }
 rfd = { version = "0.17.2", features = ["wayland"] }
 dirs = { workspace = true }
-flume = { workspace = true }

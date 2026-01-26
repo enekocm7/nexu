@@ -661,8 +661,8 @@ pub trait Controller {
         blob_type: BlobType,
     );
     fn download_image(&self, image_hash: String, user_id: String);
-    fn get_image_from_storage(&self, image_hash: String) -> Option<PathBuf>;
-    fn has_blob(&self, image_hash: &str) -> bool;
+    fn get_image_from_storage(&self, image_hash: String, image_name: &str) -> Option<PathBuf>;
+    fn has_blob(&self, image_hash: &str, image_name: &str) -> bool;
     ///Returns an empty vector if the image could not be found or downloaded
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str) -> anyhow::Result<PathBuf>;
+    fn get_or_download_image(&self, image_hash: &str, user_id: &str, image_name: &str) -> anyhow::Result<PathBuf>;
 }

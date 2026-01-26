@@ -9,7 +9,7 @@ use iroh::discovery::pkarr::PkarrPublisher;
 use iroh::endpoint::SendStream;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode};
-use iroh_blobs::api::blobs::{AddProgress, BlobStatus, ExportProgress};
+use iroh_blobs::api::blobs::{AddProgress, BlobStatus};
 use iroh_blobs::api::downloader::{DownloadProgress, Downloader};
 use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::ticket::BlobTicket;
@@ -17,6 +17,7 @@ use iroh_blobs::{BlobsProtocol, Hash};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
 use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -161,20 +162,12 @@ impl ChatClient {
         downloader.download(blob_ticket.hash(), Some(blob_ticket.addr().id))
     }
 
-    pub async fn get_blob_path(&self, hash: impl Into<Hash>) -> anyhow::Result<PathBuf> {
+    pub async fn get_blob_path(&self, hash: impl Into<Hash>, extension: impl AsRef<OsStr>) -> anyhow::Result<PathBuf> {
         let hash: Hash = hash.into();
-        let path = self.temp_store_path.join(hash.to_string());
+        let mut path = self.temp_store_path.join(hash.to_string());
+        path.add_extension(extension);
         self.store.blobs().export(hash, path.clone()).await?;
         Ok(path.clone())
-    }
-
-    pub async fn save_blob_to_storage(
-        &self,
-        hash: impl Into<Hash>,
-        path: PathBuf,
-    ) -> ExportProgress {
-        let hash: Hash = hash.into();
-        self.store.blobs().export(hash, path)
     }
 
     pub async fn has_blob(&self, hash: impl Into<Hash>) -> anyhow::Result<bool> {
@@ -183,7 +176,6 @@ impl ChatClient {
         } else {
             Ok(false)
         }
-
     }
 
     pub fn peer_id(&self) -> EndpointId {
@@ -1067,41 +1059,12 @@ mod tests {
         let result = progress.expect("Failed to save blob");
 
         let path = client
-            .get_blob_path(result.hash)
+            .get_blob_path(result.hash, "bin")
             .await
             .expect("Failed to get blob from storage");
 
         let retrieved_bytes = std::fs::read(path).expect("Failed to read blob from path");
 
         assert_eq!(retrieved_bytes, test_data);
-    }
-
-    #[tokio::test]
-    #[serial]
-    async fn test_save_blob_to_storage() {
-        let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-        let mut client = ChatClient::new(temp_dir.path().to_path_buf())
-            .await
-            .expect("Failed to create chat client");
-
-        let test_data = b"Data for save_blob_to_storage test";
-        let progress = client.save_blob(test_data).await;
-        let result = progress.expect("Failed to save blob");
-
-        let expected_file_path = temp_dir.path().join(result.hash.to_string());
-        let export_progress = client
-            .save_blob_to_storage(result.hash, expected_file_path.clone())
-            .await;
-
-        export_progress.await.expect("Failed to export blob");
-
-        assert!(
-            expected_file_path.exists(),
-            "Exported file should exist at {:?}",
-            expected_file_path
-        );
-
-        let content = std::fs::read(expected_file_path).expect("Failed to read exported file");
-        assert_eq!(content, test_data);
     }
 }
