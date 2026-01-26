@@ -1,14 +1,17 @@
 use super::desktop_web_components::{CLIP_ICON, DEFAULT_AVATAR};
 use super::models::{AppState, BlobType, Controller, Message};
-use super::utils::{format_message_timestamp, get_sender_display_name};
+use super::utils::{format_message_timestamp, get_sender_display_name, is_video_file};
 use crate::components::toast::ToastProvider;
-use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
+use dioxus::desktop::wry::http::Response;
+use dioxus::desktop::{AssetRequest, RequestAsyncResponder, use_asset_handler};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
-use dioxus_primitives::toast::{use_toast, ToastOptions};
+use dioxus_primitives::toast::{ToastOptions, use_toast};
 use image::ImageFormat::WebP;
 use image::ImageReader;
+use std::borrow::Cow;
 use std::io::Cursor;
 
 #[component]
@@ -17,6 +20,7 @@ pub fn Chat<C: Controller + 'static>(
     topic_id: Option<String>,
     controller: Signal<C>,
     show_image_details: Signal<Option<(String, String)>>,
+    show_video_details: Signal<Option<(String, String)>>,
 ) -> Element {
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
@@ -131,14 +135,19 @@ pub fn Chat<C: Controller + 'static>(
                 spawn(async move {
                     for file in files {
                         let name = file.name().to_owned();
+                        let blob_type = if is_video_file(&name) {
+                            BlobType::Video
+                        } else {
+                            BlobType::Image
+                        };
                         controller.read().send_blob_to_topic(
                             chat_id.clone(),
                             file,
                             name,
-                            BlobType::Image,
+                            blob_type,
                         );
                     }
-                    show_attachment.set(false);
+                    show_attachment.set(false)
                 });
             }
         };
@@ -162,6 +171,7 @@ pub fn Chat<C: Controller + 'static>(
                                 message: message.clone(),
                                 app_state,
                                 show_image_details,
+                                show_video_details,
                                 controller,
                             }
                         }
@@ -254,6 +264,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
     message: Message,
     app_state: Signal<AppState>,
     show_image_details: Signal<Option<(String, String)>>,
+    show_video_details: Signal<Option<(String, String)>>,
     controller: Signal<C>,
 ) -> Element {
     let state = app_state();
@@ -334,9 +345,11 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 "self-start"
             };
 
-            let img_path = controller
-                .read()
-                .get_or_download_image(&message.blob_hash, &message.sender_id, &message.blob_name);
+            let img_path = controller.read().get_or_download(
+                &message.blob_hash,
+                &message.sender_id,
+                &message.blob_name,
+            );
 
             let img_path = match img_path {
                 Ok(path) => path,
@@ -430,9 +443,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                     }
                     if is_too_large() {
                         div { class: "bg-bg-panel rounded-xl p-4 border border-border flex flex-col gap-2 items-center",
-                            p { class: "m-0 text-text-secondary text-sm",
-                                "{message.blob_name}"
-                            }
+                            p { class: "m-0 text-text-secondary text-sm", "{message.blob_name}" }
                             p { class: "m-0 text-text-secondary text-sm",
                                 "{message.blob_size / 1_000_000} MB"
                             }
@@ -441,7 +452,11 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                 onclick: move |_| {
                                     let path = external_path.as_os_str();
                                     if open::that(path).is_err() {
-                                        toast.error("Failed to open external viewer.".to_string(), ToastOptions::default());
+                                        toast
+                                            .error(
+                                                "Failed to open external viewer.".to_string(),
+                                                ToastOptions::default(),
+                                            );
                                     }
                                 },
                                 "Open in External Viewer"
@@ -454,6 +469,86 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                             onclick: move |_| {
                                 show_image_details.set(Some((thumbnail_data(), message.blob_name.clone())))
                             },
+                        }
+                    }
+                    p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",
+                        "{format_message_timestamp(message.timestamp)}"
+                    }
+                }
+            }
+        }
+        Message::Video(message) => {
+            let sender_display = get_sender_display_name(&state, &message.sender_id);
+            let alignment = if message.is_sent {
+                "self-end"
+            } else {
+                "self-start"
+            };
+
+            let video_path = controller.read().get_or_download(
+                &message.blob_hash,
+                &message.sender_id,
+                &message.blob_name,
+            );
+
+            let video_path = match video_path {
+                Ok(path) => path,
+                Err(_) => {
+                    toast.error(
+                        "Failed to load video blob.".to_string(),
+                        ToastOptions::default(),
+                    );
+                    return rsx! {};
+                }
+            };
+
+            let video_path_clone = video_path.clone();
+            
+            use_asset_handler(
+                "video",
+                move |request: AssetRequest, request_async_responder: RequestAsyncResponder| {
+                    let request = request.clone();
+                    let video_path = video_path_clone.clone();
+                    spawn(async move {
+                        let mut file = tokio::fs::File::open(&video_path).await.unwrap();
+                        let response: Response<Cow<'static, [u8]>> =
+                            C::get_stream_response(&mut file, &request)
+                                .await
+                                .unwrap()
+                                .map(Cow::Owned);
+
+                        request_async_responder.respond(response);
+                    });
+                },
+            );
+
+            let video_path_str = format!("video://{}", video_path.to_string_lossy());
+            let video_path_for_click = video_path_str.clone();
+            let blob_name = message.blob_name.clone();
+
+            rsx! {
+                div { class: "max-w-[50%] flex flex-col gap-1 {alignment}",
+                    if !message.is_sent {
+                        p {
+                            class: "m-0 text-[clamp(11px,1.6vw,12px)] font-medium opacity-80 text-text-secondary whitespace-nowrap overflow-hidden text-ellipsis",
+                            title: "{message.sender_id}",
+                            "{sender_display}"
+                        }
+                    }
+                    div {
+                        class: "relative cursor-pointer group",
+                        onclick: move |_| {
+                            show_video_details.set(Some((video_path_for_click.clone(), blob_name.clone())));
+                        },
+                        video {
+                            class: "max-w-96 rounded-xl shadow-md",
+                            src: "{video_path_str}",
+                            preload: "metadata",
+                        }
+                        div { class: "absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl group-hover:bg-black/40 transition-all duration-200",
+                            div { class: "w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-200",
+                                div { class: "w-0 h-0 border-t-8 border-t-transparent border-b-8 border-b-transparent border-l-12 border-l-gray-800 ml-1" }
+                            }
                         }
                     }
                     p { class: "m-0 text-[clamp(10px,1.5vw,11px)] opacity-70 text-text-secondary self-end",

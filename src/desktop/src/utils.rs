@@ -639,3 +639,129 @@ pub mod contacts {
         }
     }
 }
+pub mod video {
+    use std::io::SeekFrom;
+    use dioxus::desktop::AssetRequest;
+    use dioxus::desktop::wry::http::header::{CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE};
+    use dioxus::desktop::wry::http::{Response, StatusCode};
+    use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+
+    pub async fn get_stream_response(
+        asset: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Send + Sync + Unpin),
+        request: &AssetRequest,
+    ) -> anyhow::Result<Response<Vec<u8>>> {
+        let len = {
+            let old_pos = asset.stream_position().await?;
+            let len = asset.seek(SeekFrom::End(0)).await?;
+            asset.seek(SeekFrom::Start(old_pos)).await?;
+            len
+        };
+
+        let mut response = Response::builder().header(CONTENT_TYPE, "video/mp4");
+
+        let http_response = if let Some(range_header) = request.headers().get("range") {
+            let not_satisfiable = || {
+                Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header(CONTENT_RANGE, format!("bytes */{len}"))
+                    .body(vec![])
+            };
+
+            let ranges = if let Ok(ranges) = http_range::HttpRange::parse(range_header.to_str()?, len) {
+                ranges
+                    .iter()
+                    .map(|r| (r.start, r.start + r.length - 1))
+                    .collect::<Vec<_>>()
+            } else {
+                return Ok(not_satisfiable()?);
+            };
+
+            const MAX_LEN: u64 = 1000 * 1024;
+
+            if ranges.len() == 1 {
+                let &(start, mut end) = ranges.first().unwrap();
+
+                // check if a range is not satisfiable
+                //
+                // this should be already taken care of by HttpRange::parse
+                // but checking here again for extra assurance
+                if start >= len || end >= len || end < start {
+                    return Ok(not_satisfiable()?);
+                }
+
+                // adjust end byte for MAX_LEN
+                end = start + (end - start).min(len - start).min(MAX_LEN - 1);
+
+                // calculate number of bytes needed to be read
+                let bytes_to_read = end + 1 - start;
+
+                // allocate a buf with a suitable capacity
+                let mut buf = Vec::with_capacity(bytes_to_read as usize);
+                // seek the file to the starting byte
+                asset.seek(SeekFrom::Start(start)).await?;
+                // read the needed bytes
+                asset.take(bytes_to_read).read_to_end(&mut buf).await?;
+
+                response = response.header(CONTENT_RANGE, format!("bytes {start}-{end}/{len}"));
+                response = response.header(CONTENT_LENGTH, end + 1 - start);
+                response = response.status(StatusCode::PARTIAL_CONTENT);
+                response.body(buf)
+            } else {
+                let mut buf = Vec::new();
+                let ranges = ranges
+                    .iter()
+                    .filter_map(|&(start, mut end)| {
+                        if start >= len || end >= len || end < start {
+                            None
+                        } else {
+                            end = start + (end - start).min(len - start).min(MAX_LEN - 1);
+                            Some((start, end))
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let boundary = format!("{:x}", rand::random::<u64>());
+                let boundary_sep = format!("\r\n--{boundary}\r\n");
+                let boundary_closer = format!("\r\n--{boundary}\r\n");
+
+                response = response.header(
+                    CONTENT_TYPE,
+                    format!("multipart/byteranges; boundary={boundary}"),
+                );
+
+                for (end, start) in ranges {
+                    // a new range is being written, write the range boundary
+                    buf.write_all(boundary_sep.as_bytes()).await?;
+
+                    // write the needed headers `Content-Type` and `Content-Range`
+                    buf.write_all(format!("{CONTENT_TYPE}: video/mp4\r\n").as_bytes())
+                        .await?;
+                    buf.write_all(format!("{CONTENT_RANGE}: bytes {start}-{end}/{len}\r\n").as_bytes())
+                        .await?;
+
+                    // write the separator to indicate the start of the range body
+                    buf.write_all("\r\n".as_bytes()).await?;
+
+                    // calculate number of bytes needed to be read
+                    let bytes_to_read = end + 1 - start;
+
+                    let mut local_buf = vec![0_u8; bytes_to_read as usize];
+                    asset.seek(SeekFrom::Start(start)).await?;
+                    asset.read_exact(&mut local_buf).await?;
+                    buf.extend_from_slice(&local_buf);
+                }
+                // all ranges have been written, write the closing boundary
+                buf.write_all(boundary_closer.as_bytes()).await?;
+
+                response.body(buf)
+            }
+        } else {
+            response = response.header(CONTENT_LENGTH, len);
+            let mut buf = Vec::with_capacity(len as usize);
+            asset.read_to_end(&mut buf).await?;
+            response.body(buf)
+        };
+
+        http_response.map_err(Into::into)
+    }
+}

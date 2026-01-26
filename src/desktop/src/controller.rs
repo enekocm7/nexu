@@ -1,4 +1,3 @@
-use std::ffi::OsStr;
 use crate::client::DesktopClient;
 use crate::utils;
 use crate::utils::topics::save_topics_to_file;
@@ -12,9 +11,13 @@ use p2p::{
     BlobTicket, DmMessageTypes, DmProfileMetadataMessage, DownloadProgressItem, EndpointAddr,
     EndpointId, Hash, MessageTypes, Raw, Ticket, TopicMetadataMessage,
 };
+use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
+use dioxus::desktop::AssetRequest;
+use dioxus::desktop::wry::http::Response;
+use tokio::io::{AsyncRead, AsyncSeek};
 use tokio::sync::Mutex;
 use ui::desktop::models::{
     AppState, BlobMessage, BlobType, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic,
@@ -128,8 +131,7 @@ impl AppController {
                     )
                     .await;
                 }
-                BlobType::BigImage => {}
-                BlobType::File => {
+                _ => {
                     Self::do_send_blob_to_topic(
                         ticket_id,
                         blob_data,
@@ -141,16 +143,9 @@ impl AppController {
                     )
                     .await;
                 }
-                BlobType::Audio => {}
-                BlobType::Video => {}
-                BlobType::Other => {}
             },
-            Command::DownloadBlob {
-                blob_hash,
-                user_id,
-            } => {
-                Self::do_download_blob(&blob_hash, &user_id, desktop_client, progress_sender)
-                    .await;
+            Command::DownloadBlob { blob_hash, user_id } => {
+                Self::do_download_blob(&blob_hash, &user_id, desktop_client, progress_sender).await;
             }
             Command::SendMessageToUser { user_addr, message } => {
                 Self::do_send_message_to_user(user_addr, message, app_state, desktop_client).await;
@@ -529,7 +524,11 @@ impl AppController {
 
             let p2p_blob_type = match blob_type {
                 BlobType::File => p2p::messages::BlobType::File,
-                _ => p2p::messages::BlobType::Other,
+                BlobType::Image => p2p::messages::BlobType::Image,
+                BlobType::BigImage => p2p::messages::BlobType::BigImage,
+                BlobType::Audio => p2p::messages::BlobType::Audio,
+                BlobType::Video => p2p::messages::BlobType::Video,
+                BlobType::Other => p2p::messages::BlobType::Other,
             };
 
             let msg = p2p::BlobMessage::new(
@@ -549,7 +548,7 @@ impl AppController {
 
             app_state.with_mut(|state| {
                 if let Some(topic) = state.get_topic_mutable(&ticket_id) {
-                    let image_msg = BlobMessage::new(
+                    let msg = BlobMessage::new(
                         peer_id.to_string(),
                         ticket_id.clone(),
                         hash.to_string(),
@@ -557,9 +556,19 @@ impl AppController {
                         blob_data.size(),
                         now,
                         true,
-                        BlobType::File,
+                        blob_type,
                     );
-                    topic.add_image_message(image_msg);
+                    match blob_type {
+                        BlobType::Image | BlobType::BigImage => {
+                            topic.add_image_message(msg);
+                        }
+                        BlobType::Video => {
+                            topic.add_video_message(msg);
+                        }
+                        _ => {
+                            topic.add_image_message(msg);
+                        }
+                    }
                 }
             });
 
@@ -639,12 +648,22 @@ impl AppController {
         }
     }
 
-    pub fn get_blob_from_storage(&self, hash: Hash, extension: impl AsRef<OsStr>) -> Option<PathBuf> {
+    pub fn get_blob_from_storage(
+        &self,
+        hash: Hash,
+        extension: impl AsRef<OsStr>,
+    ) -> Option<PathBuf> {
         let desktop_client = Arc::clone(&self.desktop_client);
 
         tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-                .block_on(async { desktop_client.lock().await.get_blob_path(hash, extension).await.ok() })
+            tokio::runtime::Handle::current().block_on(async {
+                desktop_client
+                    .lock()
+                    .await
+                    .get_blob_path(hash, extension)
+                    .await
+                    .ok()
+            })
         })
     }
 
@@ -658,7 +677,12 @@ impl AppController {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                desktop_client.lock().await.get_blob_path(hash, extension).await.is_ok()
+                desktop_client
+                    .lock()
+                    .await
+                    .get_blob_path(hash, extension)
+                    .await
+                    .is_ok()
             })
         })
     }
@@ -1029,35 +1053,37 @@ impl ui::desktop::models::Controller for AppController {
         });
     }
 
-    fn download_image(&self, image_hash: String, user_id: String) {
+    fn download_blob(&self, hash: String, user_id: String) {
         self.send_command(Command::DownloadBlob {
-            blob_hash: image_hash,
+            blob_hash: hash,
             user_id,
         });
     }
 
-    fn get_image_from_storage(&self, image_hash: String, image_name: &str) -> Option<PathBuf> {
-        let extension = image_name
-            .split('.')
-            .next_back()
-            .unwrap_or("");
-        self.get_blob_from_storage(image_hash.parse().expect("Image hash should be parseable"), extension)
+    fn get_from_storage(&self, hash: String, name: &str) -> Option<PathBuf> {
+        let extension = name.split('.').next_back().unwrap_or("");
+        self.get_blob_from_storage(
+            hash.parse().expect("Image hash should be parseable"),
+            extension,
+        )
     }
 
     fn has_blob(&self, image_hash: &str, image_name: &str) -> bool {
-        let extension = image_name
-            .split('.')
-            .next_back()
-            .unwrap_or("");
+        let extension = image_name.split('.').next_back().unwrap_or("");
         self.has_blob_impl(image_hash, extension)
     }
 
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str, image_name: &str) -> anyhow::Result<PathBuf> {
-        let hash = image_hash
+    fn get_or_download(
+        &self,
+        hash: &str,
+        user_id: &str,
+        name: &str,
+    ) -> anyhow::Result<PathBuf> {
+        let hash = hash
             .parse::<Hash>()
             .expect("Image hash should be parseable");
 
-        let extension = image_name.split('.').next_back().unwrap_or("");
+        let extension = name.split('.').next_back().unwrap_or("");
 
         if let Some(data) = self.get_blob_from_storage(hash, extension) {
             return Ok(data);
@@ -1117,5 +1143,9 @@ impl ui::desktop::models::Controller for AppController {
                     .await
             })
         })
+    }
+
+    fn get_stream_response(asset: &mut (impl AsyncRead + AsyncSeek + Send + Sync + Unpin), request: &AssetRequest) -> impl Future<Output = anyhow::Result<Response<Vec<u8>>>> {
+        utils::video::get_stream_response(asset, request)
     }
 }

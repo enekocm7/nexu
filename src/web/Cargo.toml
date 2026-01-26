@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 dioxus = { workspace = true, features = [] }
-ui = { workspace = true, features = ["desktop-web", "mobile"] }
+ui = { workspace = true, features = ["desktop", "mobile"] }
 web-sys = { version = "0.3.82", features = ["Navigator", "Window"] }
 p2p_wasm = { workspace = true }
 
