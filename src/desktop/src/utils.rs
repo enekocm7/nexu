@@ -647,6 +647,7 @@ pub mod video {
     use std::io::SeekFrom;
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
+    // Got from: https://github.com/DioxusLabs/dioxus/blob/main/examples/08-apis/video_stream.rs
     pub async fn get_stream_response(
         asset: &mut (impl tokio::io::AsyncSeek + tokio::io::AsyncRead + Unpin + Send + Sync),
         request: &AssetRequest,

@@ -4,14 +4,12 @@ use super::utils::{format_message_timestamp, get_sender_display_name, is_video_f
 use crate::components::toast::ToastProvider;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
-use dioxus::desktop::wry::http::Response;
 use dioxus::desktop::{AssetRequest, RequestAsyncResponder, use_asset_handler};
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use dioxus_primitives::toast::{ToastOptions, use_toast};
 use image::ImageFormat::WebP;
 use image::ImageReader;
-use std::borrow::Cow;
 use std::io::Cursor;
 
 #[component]
