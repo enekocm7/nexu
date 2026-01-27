@@ -640,14 +640,15 @@ pub mod contacts {
     }
 }
 pub mod video {
-    use std::io::SeekFrom;
     use dioxus::desktop::AssetRequest;
+    use dioxus::desktop::wry::http::Response;
     use dioxus::desktop::wry::http::header::{CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE};
-    use dioxus::desktop::wry::http::{Response, StatusCode};
+    use http::{response::Builder as ResponseBuilder, status::StatusCode};
+    use std::io::SeekFrom;
     use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
     pub async fn get_stream_response(
-        asset: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Send + Sync + Unpin),
+        asset: &mut (impl tokio::io::AsyncSeek + tokio::io::AsyncRead + Unpin + Send + Sync),
         request: &AssetRequest,
     ) -> anyhow::Result<Response<Vec<u8>>> {
         let len = {
@@ -657,25 +658,31 @@ pub mod video {
             len
         };
 
-        let mut response = Response::builder().header(CONTENT_TYPE, "video/mp4");
+        let mut resp = ResponseBuilder::new().header(CONTENT_TYPE, "video/mp4");
 
+        // if the webview sent a range header, we need to send a 206 in return
+        // Actually only macOS and Windows are supported. Linux will ALWAYS return empty headers.
         let http_response = if let Some(range_header) = request.headers().get("range") {
             let not_satisfiable = || {
-                Response::builder()
+                ResponseBuilder::new()
                     .status(StatusCode::RANGE_NOT_SATISFIABLE)
                     .header(CONTENT_RANGE, format!("bytes */{len}"))
                     .body(vec![])
             };
 
-            let ranges = if let Ok(ranges) = http_range::HttpRange::parse(range_header.to_str()?, len) {
-                ranges
-                    .iter()
-                    .map(|r| (r.start, r.start + r.length - 1))
-                    .collect::<Vec<_>>()
-            } else {
-                return Ok(not_satisfiable()?);
-            };
+            // parse range header
+            let ranges =
+                if let Ok(ranges) = http_range::HttpRange::parse(range_header.to_str()?, len) {
+                    ranges
+                        .iter()
+                        // map the output back to spec range <start-end>, example: 0-499
+                        .map(|r| (r.start, r.start + r.length - 1))
+                        .collect::<Vec<_>>()
+                } else {
+                    return Ok(not_satisfiable()?);
+                };
 
+            /// The Maximum bytes we send in one range
             const MAX_LEN: u64 = 1000 * 1024;
 
             if ranges.len() == 1 {
@@ -702,18 +709,23 @@ pub mod video {
                 // read the needed bytes
                 asset.take(bytes_to_read).read_to_end(&mut buf).await?;
 
-                response = response.header(CONTENT_RANGE, format!("bytes {start}-{end}/{len}"));
-                response = response.header(CONTENT_LENGTH, end + 1 - start);
-                response = response.status(StatusCode::PARTIAL_CONTENT);
-                response.body(buf)
+                resp = resp.header(CONTENT_RANGE, format!("bytes {start}-{end}/{len}"));
+                resp = resp.header(CONTENT_LENGTH, end + 1 - start);
+                resp = resp.status(StatusCode::PARTIAL_CONTENT);
+                resp.body(buf)
             } else {
                 let mut buf = Vec::new();
                 let ranges = ranges
                     .iter()
                     .filter_map(|&(start, mut end)| {
+                        // filter out unsatisfiable ranges
+                        //
+                        // this should be already taken care of by HttpRange::parse
+                        // but checking here again for extra assurance
                         if start >= len || end >= len || end < start {
                             None
                         } else {
+                            // adjust end byte for MAX_LEN
                             end = start + (end - start).min(len - start).min(MAX_LEN - 1);
                             Some((start, end))
                         }
@@ -724,7 +736,7 @@ pub mod video {
                 let boundary_sep = format!("\r\n--{boundary}\r\n");
                 let boundary_closer = format!("\r\n--{boundary}\r\n");
 
-                response = response.header(
+                resp = resp.header(
                     CONTENT_TYPE,
                     format!("multipart/byteranges; boundary={boundary}"),
                 );
@@ -736,8 +748,10 @@ pub mod video {
                     // write the needed headers `Content-Type` and `Content-Range`
                     buf.write_all(format!("{CONTENT_TYPE}: video/mp4\r\n").as_bytes())
                         .await?;
-                    buf.write_all(format!("{CONTENT_RANGE}: bytes {start}-{end}/{len}\r\n").as_bytes())
-                        .await?;
+                    buf.write_all(
+                        format!("{CONTENT_RANGE}: bytes {start}-{end}/{len}\r\n").as_bytes(),
+                    )
+                    .await?;
 
                     // write the separator to indicate the start of the range body
                     buf.write_all("\r\n".as_bytes()).await?;
@@ -753,13 +767,13 @@ pub mod video {
                 // all ranges have been written, write the closing boundary
                 buf.write_all(boundary_closer.as_bytes()).await?;
 
-                response.body(buf)
+                resp.body(buf)
             }
         } else {
-            response = response.header(CONTENT_LENGTH, len);
+            resp = resp.header(CONTENT_LENGTH, len);
             let mut buf = Vec::with_capacity(len as usize);
             asset.read_to_end(&mut buf).await?;
-            response.body(buf)
+            resp.body(buf)
         };
 
         http_response.map_err(Into::into)

@@ -503,26 +503,24 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             };
 
             let video_path_clone = video_path.clone();
-            
+
             use_asset_handler(
                 "video",
-                move |request: AssetRequest, request_async_responder: RequestAsyncResponder| {
+                move |request: AssetRequest, responder: RequestAsyncResponder| {
                     let request = request.clone();
                     let video_path = video_path_clone.clone();
                     spawn(async move {
                         let mut file = tokio::fs::File::open(&video_path).await.unwrap();
-                        let response: Response<Cow<'static, [u8]>> =
-                            C::get_stream_response(&mut file, &request)
-                                .await
-                                .unwrap()
-                                .map(Cow::Owned);
 
-                        request_async_responder.respond(response);
+                        match C::get_stream_response(&mut file, &request).await {
+                            Ok(response) => responder.respond(response),
+                            Err(err) => eprintln!("Error: {}", err),
+                        }
                     });
                 },
             );
 
-            let video_path_str = format!("video://{}", video_path.to_string_lossy());
+            let video_path_str = format!("/video/{}", message.blob_name.clone());
             let video_path_for_click = video_path_str.clone();
             let blob_name = message.blob_name.clone();
 

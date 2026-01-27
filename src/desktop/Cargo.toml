@@ -18,6 +18,7 @@ postcard = { workspace = true }
 futures-lite = "2.6.1"
 http-range = "0.1.5"
 rand = "0.9.2"
+http = "1.4.0"
 
 [dev-dependencies]
 tempfile = "3"
