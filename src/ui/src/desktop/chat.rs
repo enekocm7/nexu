@@ -342,19 +342,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             } else {
                 "self-start"
             };
-
-            // We no longer rely on local file path for display, but we might still want to check if it's downloaded
-            // For now, we assume the URL will work if the media server can access it.
-            // But for thumbnail generation we still need local access if we do it here.
-
-            // To properly generate thumbnail we need the local file.
-            // The media server can serve the full image, but for efficiency we might want thumbnails.
-            // However, the current code generates thumbnails on the client side using the file path.
-            // Let's keep the thumbnail generation as is for now, but update the click handler to use URL?
-            // Actually, the requirement is to use the media server.
-            // The media server serves the file.
-
-            // Let's first check if we have the file locally for thumbnail generation
+            
             let local_path = controller.read().get_or_download(
                 &message.blob_hash,
                 &message.sender_id,
