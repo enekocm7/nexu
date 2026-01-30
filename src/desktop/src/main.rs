@@ -1,5 +1,6 @@
 mod client;
 mod controller;
+mod media_server;
 mod message_handler;
 mod utils;
 
@@ -9,7 +10,7 @@ use crate::utils::topics::{load_topics_from_file, save_topics_to_file};
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
-use dioxus::desktop::{Config, WindowBuilder, use_wry_event_handler};
+use dioxus::desktop::{use_wry_event_handler, Config, WindowBuilder};
 use dioxus::prelude::*;
 use p2p::{MessageTypes, Ticket};
 use std::error::Error;
@@ -41,11 +42,16 @@ fn App() -> Element {
     use_effect(move || {
         let client_ref = controller.read().get_desktop_client();
         let progress_sender = controller.read().progress_bar_sender.clone();
+        
         spawn(async move {
             if let Err(e) = client_ref.lock().await.initialize().await {
                 eprintln!("Failed to initialize DesktopClient: {}", e);
                 return;
             }
+            
+            spawn(async move {
+                controller.read().start_media_server().await;
+            });
 
             let peer_id = match client_ref.lock().await.peer_id().await {
                 Ok(id) => id.to_string(),

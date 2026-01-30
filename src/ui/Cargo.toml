@@ -5,8 +5,8 @@ edition = "2024"
 build = "build.rs"
 
 [features]
-desktop-web = []
-mobile = []
+desktop = ["dioxus/desktop"]
+mobile = ["dioxus/mobile"]
 
 [dependencies]
 dioxus = { workspace = true }
@@ -24,3 +24,4 @@ image = { workspace = true, features = ["webp"] }
 anyhow = { workspace = true }
 rfd = { version = "0.17.2", features = ["wayland"] }
 dirs = { workspace = true }
+tokio = "1.49.0"

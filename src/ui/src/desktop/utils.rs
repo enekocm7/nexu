@@ -107,6 +107,15 @@ pub fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
     }
 }
 
+pub fn is_video_file(name: &str) -> bool {
+    let video_extensions = ["mp4", "webm", "mov", "avi", "mkv", "m4v", "ogv"];
+    if let Some(ext) = name.split('.').next_back() {
+        video_extensions.contains(&ext.to_lowercase().as_str())
+    } else {
+        false
+    }
+}
+
 // pub fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
 //     let image = image::load_from_memory(file_bytes)?;
 //     let resized = image.thumbnail(500, 500);

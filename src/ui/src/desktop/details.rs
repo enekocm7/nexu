@@ -429,3 +429,66 @@ pub fn ImageDetails(image: String, name: String, on_close: EventHandler<()>) -> 
         }
     }
 }
+
+#[component]
+pub fn VideoDetails(
+    video_url: String,
+    name: String,
+    local_path: String,
+    on_close: EventHandler<()>,
+) -> Element {
+    let video_rc = Rc::new(video_url);
+    let name_rc = Rc::new(name);
+    let name_clone = name_rc.clone();
+    let local_path_rc = Rc::new(local_path);
+    let local_path_clone = local_path_rc.clone();
+    rsx! {
+        div {
+            class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
+            onclick: move |_| on_close.call(()),
+            button {
+                class: "absolute top-5 right-16 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-white/20 hover:scale-110 hover:shadow-lg active:scale-95",
+                title: "Download",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    let local_path_clone = local_path_clone.clone();
+                    let name_clone = name_clone.clone();
+                    spawn(async move {
+                        let dir = dirs::download_dir()
+                            .unwrap_or_else(|| std::path::PathBuf::from("."));
+                        let file = rfd::AsyncFileDialog::new()
+                            .set_file_name(name_clone.to_string())
+                            .set_directory(dir)
+                            .save_file()
+                            .await;
+                        if let Some(path) = file
+                            && let Err(err) = std::fs::copy(&*local_path_clone, path.path())
+                        {
+                            println!("Error saving file: {}", err);
+                        }
+                    });
+                },
+                img { class: "w-6 h-6 drop-shadow-md", src: DOWNLOAD_ICON }
+            }
+            button {
+                class: "absolute top-5 right-5 w-10 h-10 rounded-full bg-white/10 backdrop-blur-sm text-white text-lg font-bold flex items-center justify-center cursor-pointer transition-all duration-200 hover:bg-danger/80 hover:scale-110 hover:shadow-lg active:scale-95",
+                title: "Close",
+                onclick: move |e| {
+                    e.stop_propagation();
+                    on_close.call(());
+                },
+                img { class: "w-5 h-5", src: CLOSE_ICON }
+            }
+            div {
+                class: "w-max max-w-300 p-6 animate-[slideIn_0.3s_ease]",
+                onclick: move |e| e.stop_propagation(),
+                video {
+                    class: "max-w-full max-h-[90vh] mx-auto rounded-lg",
+                    src: "{video_rc}",
+                    controls: true,
+                    autoplay: true,
+                }
+            }
+        }
+    }
+}

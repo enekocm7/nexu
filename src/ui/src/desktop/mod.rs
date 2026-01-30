@@ -5,7 +5,7 @@ pub mod dialogs;
 pub mod models;
 pub mod utils;
 
-#[cfg(feature = "desktop-web")]
+#[cfg(feature = "desktop")]
 pub mod desktop_web_components {
     use crate::desktop::dialogs::{ProgressBar, TopicDialog};
 
@@ -19,6 +19,7 @@ pub mod desktop_web_components {
 
     use crate::components::toast::ToastProvider;
     use crate::desktop::details::ImageDetails;
+    use crate::desktop::details::VideoDetails;
     use dioxus::prelude::*;
 
     pub static DEFAULT_AVATAR: Asset = asset!("/assets/default_avatar.png");
@@ -43,6 +44,7 @@ pub mod desktop_web_components {
             use_signal::<Option<(String, String, RemovalType)>>(|| None);
         let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
         let mut show_image_details = use_signal::<Option<(String, String)>>(|| None);
+        let mut show_video_details = use_signal::<Option<(String, String, String)>>(|| None);
 
         let profile_data: Profile = {
             let state = app_state();
@@ -189,6 +191,15 @@ pub mod desktop_web_components {
                         }
                     }
 
+                    if let Some((video_url, name, local_path)) = show_video_details() {
+                        VideoDetails {
+                            video_url,
+                            name,
+                            local_path,
+                            on_close: move |_| show_video_details.set(None),
+                        }
+                    }
+
                     if let Some((id, name, removal_type)) = show_leave_confirmation() {
                         {
                             let (title, message, confirm_text) = match removal_type {
@@ -242,6 +253,7 @@ pub mod desktop_web_components {
                         topic_id: selected_topic_id(),
                         controller,
                         show_image_details,
+                        show_video_details,
                     }
                 }
             }

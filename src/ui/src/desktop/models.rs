@@ -1,4 +1,3 @@
-use ConnectionStatus::{Offline, Online};
 use dioxus::html::FileData;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -6,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use ConnectionStatus::{Offline, Online};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -70,6 +70,12 @@ impl Topic {
         self.messages.sort()
     }
 
+    pub fn add_video_message(&mut self, message: BlobMessage) {
+        self.last_message = Some("[Video]".to_string());
+        self.messages.push(Message::Video(message));
+        self.messages.sort()
+    }
+
     pub fn add_member(&mut self, profile_id: &str) {
         self.members.insert(profile_id.to_string());
     }
@@ -103,7 +109,7 @@ pub enum TopicCreationMode {
     Join,
 }
 
-#[cfg(feature = "desktop-web")]
+#[cfg(feature = "desktop")]
 #[derive(Debug, Clone)]
 pub struct AppState {
     topics: HashMap<String, Topic>,
@@ -112,7 +118,7 @@ pub struct AppState {
     profile: Profile,
 }
 
-#[cfg(feature = "desktop-web")]
+#[cfg(feature = "desktop")]
 impl AppState {
     pub fn new(profile_id: &str) -> Self {
         Self {
@@ -293,6 +299,7 @@ pub enum Message {
     Join(JoinMessage),
     Disconnect(DisconnectMessage),
     Image(BlobMessage),
+    Video(BlobMessage),
 }
 
 impl Message {
@@ -303,6 +310,7 @@ impl Message {
             Message::Join(msg) => msg.timestamp,
             Message::Disconnect(msg) => msg.timestamp,
             Message::Image(msg) => msg.timestamp,
+            Message::Video(msg) => msg.timestamp,
         }
     }
 }
@@ -660,9 +668,10 @@ pub trait Controller {
         name: String,
         blob_type: BlobType,
     );
-    fn download_image(&self, image_hash: String, user_id: String);
-    fn get_image_from_storage(&self, image_hash: String, image_name: &str) -> Option<PathBuf>;
+    fn download_blob(&self, hash: String, user_id: String);
+    fn get_from_storage(&self, hash: String, name: &str) -> Option<PathBuf>;
     fn has_blob(&self, image_hash: &str, image_name: &str) -> bool;
     ///Returns an empty vector if the image could not be found or downloaded
-    fn get_or_download_image(&self, image_hash: &str, user_id: &str, image_name: &str) -> anyhow::Result<PathBuf>;
+    fn get_or_download(&self, hash: &str, user_id: &str, name: &str) -> anyhow::Result<PathBuf>;
+    fn get_media_url(&self, hash: &str, name: &str) -> String;
 }
