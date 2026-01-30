@@ -177,6 +177,10 @@ impl ChatClient {
             Ok(false)
         }
     }
+    
+    pub fn get_blob_store_path(&self) -> &PathBuf {
+        &self.temp_store_path
+    }
 
     pub fn peer_id(&self) -> EndpointId {
         self.endpoint.id()

@@ -431,11 +431,17 @@ pub fn ImageDetails(image: String, name: String, on_close: EventHandler<()>) -> 
 }
 
 #[component]
-pub fn VideoDetails(video: String, name: String, on_close: EventHandler<()>) -> Element {
-    let video_rc = Rc::new(video);
-    let video_clone = video_rc.clone();
+pub fn VideoDetails(
+    video_url: String,
+    name: String,
+    local_path: String,
+    on_close: EventHandler<()>,
+) -> Element {
+    let video_rc = Rc::new(video_url);
     let name_rc = Rc::new(name);
     let name_clone = name_rc.clone();
+    let local_path_rc = Rc::new(local_path);
+    let local_path_clone = local_path_rc.clone();
     rsx! {
         div {
             class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
@@ -445,7 +451,7 @@ pub fn VideoDetails(video: String, name: String, on_close: EventHandler<()>) -> 
                 title: "Download",
                 onclick: move |e| {
                     e.stop_propagation();
-                    let video_clone = video_clone.clone();
+                    let local_path_clone = local_path_clone.clone();
                     let name_clone = name_clone.clone();
                     spawn(async move {
                         let dir = dirs::download_dir()
@@ -456,9 +462,8 @@ pub fn VideoDetails(video: String, name: String, on_close: EventHandler<()>) -> 
                             .save_file()
                             .await;
                         if let Some(path) = file
-                            && let Err(err) = std::fs::copy(&*video_clone, path.path())
+                            && let Err(err) = std::fs::copy(&*local_path_clone, path.path())
                         {
-
                             println!("Error saving file: {}", err);
                         }
                     });

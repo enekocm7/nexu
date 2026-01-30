@@ -232,4 +232,13 @@ impl DesktopClient {
         let guard = client.lock().await;
         guard.get_blob_path(hash, extension).await
     }
+    
+    pub async fn get_store_path(&self) -> PathBuf {
+        let client = self
+            .client
+            .get()
+            .expect("Client is not initialized");
+        let guard = client.lock().await;
+        guard.get_blob_store_path().clone()
+    }
 }

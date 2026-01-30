@@ -1,5 +1,3 @@
-use dioxus::desktop::wry::http::Response;
-use dioxus::desktop::AssetRequest;
 use dioxus::html::FileData;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -674,15 +672,6 @@ pub trait Controller {
     fn get_from_storage(&self, hash: String, name: &str) -> Option<PathBuf>;
     fn has_blob(&self, image_hash: &str, image_name: &str) -> bool;
     ///Returns an empty vector if the image could not be found or downloaded
-    fn get_or_download(
-        &self,
-        hash: &str,
-        user_id: &str,
-        name: &str,
-    ) -> anyhow::Result<PathBuf>;
-
-    fn get_stream_response(
-        asset: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncSeek + Send + Sync + Unpin),
-        request: &AssetRequest,
-    ) -> impl Future<Output = anyhow::Result<Response<Vec<u8>>>>;
+    fn get_or_download(&self, hash: &str, user_id: &str, name: &str) -> anyhow::Result<PathBuf>;
+    fn get_media_url(&self, hash: &str, name: &str) -> String;
 }

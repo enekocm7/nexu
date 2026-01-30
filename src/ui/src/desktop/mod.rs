@@ -44,7 +44,7 @@ pub mod desktop_web_components {
             use_signal::<Option<(String, String, RemovalType)>>(|| None);
         let mut selected_column = use_signal::<ColumnState>(|| ColumnState::Contact);
         let mut show_image_details = use_signal::<Option<(String, String)>>(|| None);
-        let mut show_video_details = use_signal::<Option<(String, String)>>(|| None);
+        let mut show_video_details = use_signal::<Option<(String, String, String)>>(|| None);
 
         let profile_data: Profile = {
             let state = app_state();
@@ -191,10 +191,11 @@ pub mod desktop_web_components {
                         }
                     }
 
-                    if let Some((video_path, name)) = show_video_details() {
+                    if let Some((video_url, name, local_path)) = show_video_details() {
                         VideoDetails {
-                            video: video_path,
+                            video_url,
                             name,
+                            local_path,
                             on_close: move |_| show_video_details.set(None),
                         }
                     }

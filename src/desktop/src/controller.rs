@@ -1,4 +1,5 @@
 use crate::client::DesktopClient;
+use crate::media_server::MediaServer;
 use crate::utils;
 use crate::utils::topics::save_topics_to_file;
 use base64::Engine;
@@ -15,9 +16,6 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
-use dioxus::desktop::AssetRequest;
-use dioxus::desktop::wry::http::Response;
-use tokio::io::{AsyncRead, AsyncSeek};
 use tokio::sync::Mutex;
 use ui::desktop::models::{
     AppState, BlobMessage, BlobType, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic,
@@ -58,19 +56,27 @@ pub struct AppController {
     pub progress_bar_sender: Sender<u64>,
     command_sender: Sender<Command>,
     command_receiver: Receiver<Command>,
+    media_server: MediaServer,
 }
 
 impl AppController {
     pub fn new() -> Self {
         let (progress_bar_sender, progress_bar) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
+        let desktop_client = Arc::new(Mutex::new(DesktopClient::new()));
+        let media_server = MediaServer::new(3000);
         Self {
-            desktop_client: Arc::new(Mutex::new(DesktopClient::new())),
+            desktop_client,
             progress_bar,
             progress_bar_sender,
             command_sender,
             command_receiver,
+            media_server,
         }
+    }
+
+    pub async fn start_media_server(&self) {
+        self.media_server.start(self.desktop_client.lock().await.get_store_path().await).await.expect("Failed to start media server");
     }
 
     pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
@@ -1073,12 +1079,7 @@ impl ui::desktop::models::Controller for AppController {
         self.has_blob_impl(image_hash, extension)
     }
 
-    fn get_or_download(
-        &self,
-        hash: &str,
-        user_id: &str,
-        name: &str,
-    ) -> anyhow::Result<PathBuf> {
+    fn get_or_download(&self, hash: &str, user_id: &str, name: &str) -> anyhow::Result<PathBuf> {
         let hash = hash
             .parse::<Hash>()
             .expect("Image hash should be parseable");
@@ -1145,7 +1146,11 @@ impl ui::desktop::models::Controller for AppController {
         })
     }
 
-    fn get_stream_response(asset: &mut (impl AsyncRead + AsyncSeek + Send + Sync + Unpin), request: &AssetRequest) -> impl Future<Output = anyhow::Result<Response<Vec<u8>>>> {
-        utils::video::get_stream_response(asset, request)
+    fn get_media_url(&self, hash: &str, name: &str) -> String {
+        let extension = name.split('.').next_back().unwrap_or("");
+        format!(
+            "http://127.0.0.1:{}/media/{}.{}",
+            self.media_server.port(), hash, extension
+        )
     }
 }

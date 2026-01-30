@@ -4,14 +4,12 @@ use super::utils::{format_message_timestamp, get_sender_display_name, is_video_f
 use crate::components::toast::ToastProvider;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
-use dioxus::desktop::wry::http::Response;
-use dioxus::desktop::{AssetRequest, RequestAsyncResponder, use_asset_handler};
+// use dioxus::desktop::AssetRequest;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use dioxus_primitives::toast::{ToastOptions, use_toast};
 use image::ImageFormat::WebP;
 use image::ImageReader;
-use std::borrow::Cow;
 use std::io::Cursor;
 
 #[component]
@@ -20,7 +18,7 @@ pub fn Chat<C: Controller + 'static>(
     topic_id: Option<String>,
     controller: Signal<C>,
     show_image_details: Signal<Option<(String, String)>>,
-    show_video_details: Signal<Option<(String, String)>>,
+    show_video_details: Signal<Option<(String, String, String)>>,
 ) -> Element {
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
@@ -264,7 +262,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
     message: Message,
     app_state: Signal<AppState>,
     show_image_details: Signal<Option<(String, String)>>,
-    show_video_details: Signal<Option<(String, String)>>,
+    show_video_details: Signal<Option<(String, String, String)>>,
     controller: Signal<C>,
 ) -> Element {
     let state = app_state();
@@ -345,22 +343,32 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 "self-start"
             };
 
-            let img_path = controller.read().get_or_download(
+            // We no longer rely on local file path for display, but we might still want to check if it's downloaded
+            // For now, we assume the URL will work if the media server can access it.
+            // But for thumbnail generation we still need local access if we do it here.
+
+            // To properly generate thumbnail we need the local file.
+            // The media server can serve the full image, but for efficiency we might want thumbnails.
+            // However, the current code generates thumbnails on the client side using the file path.
+            // Let's keep the thumbnail generation as is for now, but update the click handler to use URL?
+            // Actually, the requirement is to use the media server.
+            // The media server serves the file.
+
+            // Let's first check if we have the file locally for thumbnail generation
+            let local_path = controller.read().get_or_download(
                 &message.blob_hash,
                 &message.sender_id,
                 &message.blob_name,
             );
 
-            let img_path = match img_path {
-                Ok(path) => path,
-                Err(_) => {
-                    toast.error(
-                        "Failed to load image blob.".to_string(),
-                        ToastOptions::default(),
-                    );
-                    return rsx! {};
-                }
+            let (thumbnail_src, is_local) = match local_path {
+                Ok(path) => (path.to_string_lossy().to_string(), true),
+                Err(_) => (String::new(), false),
             };
+
+            let img_url = controller
+                .read()
+                .get_media_url(&message.blob_hash, &message.blob_name);
 
             let mut thumbnail_data = use_signal(|| String::from(""));
             let mut is_too_large = use_signal(|| false);
@@ -369,8 +377,17 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 is_too_large.set(true);
             }
 
-            let path = img_path.clone();
-            let external_path = img_path.clone();
+            let path = if is_local {
+                thumbnail_src.clone()
+            } else {
+                String::new()
+            };
+            let external_path = if is_local {
+                thumbnail_src
+            } else {
+                String::new()
+            };
+
             use_effect(move || {
                 if is_too_large() {
                     return;
@@ -450,7 +467,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                             button {
                                 class: "btn-primary py-2 px-4 text-sm",
                                 onclick: move |_| {
-                                    let path = external_path.as_os_str();
+                                    let path = external_path.as_str();
                                     if open::that(path).is_err() {
                                         toast
                                             .error(
@@ -467,7 +484,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                             class: "max-w-96 rounded-xl shadow-md cursor-pointer",
                             src: "{thumbnail_data.read()}",
                             onclick: move |_| {
-                                show_image_details.set(Some((thumbnail_data(), message.blob_name.clone())))
+                                show_image_details.set(Some((img_url.clone(), message.blob_name.clone())))
                             },
                         }
                     }
@@ -484,45 +501,26 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             } else {
                 "self-start"
             };
-
-            let video_path = controller.read().get_or_download(
+            
+            let local_path = controller.read().get_or_download(
                 &message.blob_hash,
                 &message.sender_id,
                 &message.blob_name,
             );
 
-            let video_path = match video_path {
-                Ok(path) => path,
-                Err(_) => {
-                    toast.error(
-                        "Failed to load video blob.".to_string(),
-                        ToastOptions::default(),
-                    );
-                    return rsx! {};
-                }
+            let local_path_str = match local_path {
+                Ok(p) => p.to_string_lossy().to_string(),
+                Err(_) => String::new(),
             };
 
-            let video_path_clone = video_path.clone();
+            let video_url = controller
+                .read()
+                .get_media_url(&message.blob_hash, &message.blob_name);
 
-            use_asset_handler(
-                "video",
-                move |request: AssetRequest, responder: RequestAsyncResponder| {
-                    let request = request.clone();
-                    let video_path = video_path_clone.clone();
-                    spawn(async move {
-                        let mut file = tokio::fs::File::open(&video_path).await.unwrap();
-
-                        match C::get_stream_response(&mut file, &request).await {
-                            Ok(response) => responder.respond(response),
-                            Err(err) => eprintln!("Error: {}", err),
-                        }
-                    });
-                },
-            );
-
-            let video_path_str = format!("/video/{}", message.blob_name.clone());
+            let video_path_str = video_url.clone();
             let video_path_for_click = video_path_str.clone();
             let blob_name = message.blob_name.clone();
+            let local_path_for_click = local_path_str.clone();
 
             rsx! {
                 div { class: "max-w-[50%] flex flex-col gap-1 {alignment}",
@@ -536,7 +534,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                     div {
                         class: "relative cursor-pointer group",
                         onclick: move |_| {
-                            show_video_details.set(Some((video_path_for_click.clone(), blob_name.clone())));
+                            show_video_details.set(Some((video_path_for_click.clone(), blob_name.clone(), local_path_for_click.clone())));
                         },
                         video {
                             class: "max-w-96 rounded-xl shadow-md",
