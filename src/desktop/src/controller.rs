@@ -76,7 +76,10 @@ impl AppController {
     }
 
     pub async fn start_media_server(&self) {
-        self.media_server.start(self.desktop_client.lock().await.get_store_path().await).await.expect("Failed to start media server");
+        self.media_server
+            .start(self.desktop_client.lock().await.get_store_path().await)
+            .await
+            .expect("Failed to start media server");
     }
 
     pub fn get_desktop_client(&self) -> Arc<Mutex<DesktopClient>> {
@@ -443,7 +446,7 @@ impl AppController {
 
             app_state.with_mut(|state| {
                 if let Some(topic) = state.get_topic_mutable(&ticket_id) {
-                    let image_msg = BlobMessage::new(
+                    let msg = BlobMessage::new(
                         peer_id.to_string(),
                         ticket_id.clone(),
                         hash.to_string(),
@@ -453,7 +456,7 @@ impl AppController {
                         true,
                         BlobType::Image,
                     );
-                    topic.add_image_message(image_msg);
+                    topic.add_blob_message(msg);
                 }
             });
 
@@ -564,17 +567,7 @@ impl AppController {
                         true,
                         blob_type,
                     );
-                    match blob_type {
-                        BlobType::Image | BlobType::BigImage => {
-                            topic.add_image_message(msg);
-                        }
-                        BlobType::Video => {
-                            topic.add_video_message(msg);
-                        }
-                        _ => {
-                            topic.add_image_message(msg);
-                        }
-                    }
+                    topic.add_blob_message(msg);
                 }
             });
 
@@ -1150,7 +1143,9 @@ impl ui::desktop::models::Controller for AppController {
         let extension = name.split('.').next_back().unwrap_or("");
         format!(
             "http://127.0.0.1:{}/media/{}.{}",
-            self.media_server.port(), hash, extension
+            self.media_server.port(),
+            hash,
+            extension
         )
     }
 }

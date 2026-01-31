@@ -1,3 +1,4 @@
+use ConnectionStatus::{Offline, Online};
 use dioxus::html::FileData;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -5,7 +6,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use ConnectionStatus::{Offline, Online};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Topic {
@@ -64,15 +64,9 @@ impl Topic {
         self.messages.push(Message::Disconnect(message));
     }
 
-    pub fn add_image_message(&mut self, message: BlobMessage) {
-        self.last_message = Some("[Image]".to_string());
-        self.messages.push(Message::Image(message));
-        self.messages.sort()
-    }
-
-    pub fn add_video_message(&mut self, message: BlobMessage) {
-        self.last_message = Some("[Video]".to_string());
-        self.messages.push(Message::Video(message));
+    pub fn add_blob_message(&mut self, message: BlobMessage) {
+        self.last_message = Some(format!("[{}]", message.blob_name));
+        self.messages.push(Message::Blob(message));
         self.messages.sort()
     }
 
@@ -298,8 +292,7 @@ pub enum Message {
     Leave(LeaveMessage),
     Join(JoinMessage),
     Disconnect(DisconnectMessage),
-    Image(BlobMessage),
-    Video(BlobMessage),
+    Blob(BlobMessage),
 }
 
 impl Message {
@@ -309,8 +302,7 @@ impl Message {
             Message::Leave(msg) => msg.timestamp,
             Message::Join(msg) => msg.timestamp,
             Message::Disconnect(msg) => msg.timestamp,
-            Message::Image(msg) => msg.timestamp,
-            Message::Video(msg) => msg.timestamp,
+            Message::Blob(msg) => msg.timestamp,
         }
     }
 }

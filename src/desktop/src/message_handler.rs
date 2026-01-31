@@ -173,7 +173,7 @@ pub fn handle_blob_message(mut state: Signal<AppState>, topic: &str, msg: p2p::B
                 false,
                 ui_blob_type,
             );
-            topic_obj.add_image_message(message);
+            topic_obj.add_blob_message(message);
         }
     });
 }

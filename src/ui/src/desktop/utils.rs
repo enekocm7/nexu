@@ -115,3 +115,23 @@ pub fn is_video_file(path: &PathBuf) -> bool {
     }
     false
 }
+
+// pub fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
+//     let image = image::load_from_memory(file_bytes)?;
+//     let resized = image.thumbnail(500, 500);
+//     let mut buffer = std::io::Cursor::new(Vec::new());
+//     resized.write_to(&mut buffer, image::ImageFormat::WebP)?;
+//     Ok(buffer.into_inner())
+// }
+
+pub fn format_file_size(size: u64) -> String {
+    if size < 1024 {
+        format!("{} B", size)
+    } else if size < 1024 * 1024 {
+        format!("{:.1} KB", size as f64 / 1024.0)
+    } else if size < 1024 * 1024 * 1024 {
+        format!("{:.1} MB", size as f64 / (1024.0 * 1024.0))
+    } else {
+        format!("{:.1} GB", size as f64 / (1024.0 * 1024.0 * 1024.0))
+    }
+}
