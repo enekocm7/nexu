@@ -25,3 +25,4 @@ anyhow = { workspace = true }
 rfd = { version = "0.17.2", features = ["wayland"] }
 dirs = { workspace = true }
 tokio = "1.49.0"
+infer = "0.19.0"

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::desktop::models::AppState;
 use arboard::Clipboard;
 use chrono::{DateTime, Local, TimeDelta};
@@ -107,19 +109,9 @@ pub fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
     }
 }
 
-pub fn is_video_file(name: &str) -> bool {
-    let video_extensions = ["mp4", "webm", "mov", "avi", "mkv", "m4v", "ogv"];
-    if let Some(ext) = name.split('.').next_back() {
-        video_extensions.contains(&ext.to_lowercase().as_str())
-    } else {
-        false
+pub fn is_video_file(path: &PathBuf) -> bool {
+    if let Some(info) = infer::get_from_path(path).expect("Failed to get file info") {
+        return info.matcher_type() == infer::MatcherType::Video;
     }
+    false
 }
-
-// pub fn process_image(file_bytes: &[u8]) -> anyhow::Result<Vec<u8>> {
-//     let image = image::load_from_memory(file_bytes)?;
-//     let resized = image.thumbnail(500, 500);
-//     let mut buffer = std::io::Cursor::new(Vec::new());
-//     resized.write_to(&mut buffer, image::ImageFormat::WebP)?;
-//     Ok(buffer.into_inner())
-// }

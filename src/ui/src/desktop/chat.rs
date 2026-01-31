@@ -4,7 +4,6 @@ use super::utils::{format_message_timestamp, get_sender_display_name, is_video_f
 use crate::components::toast::ToastProvider;
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
-// use dioxus::desktop::AssetRequest;
 use dioxus::html::FileData;
 use dioxus::prelude::*;
 use dioxus_primitives::toast::{ToastOptions, use_toast};
@@ -132,16 +131,15 @@ pub fn Chat<C: Controller + 'static>(
                 let mut show_attachment = show_attachment;
                 spawn(async move {
                     for file in files {
-                        let name = file.name().to_owned();
-                        let blob_type = if is_video_file(&name) {
+                        let blob_type = if is_video_file(&file.path()) {
                             BlobType::Video
                         } else {
                             BlobType::Image
                         };
                         controller.read().send_blob_to_topic(
                             chat_id.clone(),
-                            file,
-                            name,
+                            file.clone(),
+                            file.name().to_owned(),
                             blob_type,
                         );
                     }
@@ -342,7 +340,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             } else {
                 "self-start"
             };
-            
+
             let local_path = controller.read().get_or_download(
                 &message.blob_hash,
                 &message.sender_id,
@@ -489,7 +487,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
             } else {
                 "self-start"
             };
-            
+
             let local_path = controller.read().get_or_download(
                 &message.blob_hash,
                 &message.sender_id,
@@ -522,12 +520,21 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                     div {
                         class: "relative cursor-pointer group",
                         onclick: move |_| {
-                            show_video_details.set(Some((video_path_for_click.clone(), blob_name.clone(), local_path_for_click.clone())));
+                            show_video_details
+                                .set(
+                                    Some((
+                                        video_path_for_click.clone(),
+                                        blob_name.clone(),
+                                        local_path_for_click.clone(),
+                                    )),
+                                );
                         },
                         video {
                             class: "max-w-96 rounded-xl shadow-md",
                             src: "{video_path_str}",
                             preload: "metadata",
+                            controls: true,
+                            playsinline: true,
                         }
                         div { class: "absolute inset-0 flex items-center justify-center bg-black/30 rounded-xl group-hover:bg-black/40 transition-all duration-200",
                             div { class: "w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-200",
