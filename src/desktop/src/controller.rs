@@ -18,7 +18,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::models::{
-    AppState, BlobMessage, BlobType, ChatMessage, DmChatMessage, Profile, ProfileChat, Topic,
+    AppState, BlobMessage, BlobType, ChatMessage, DmBlobMessage, DmChatMessage, Profile,
+    ProfileChat, Topic,
 };
 
 #[derive(Debug, Clone)]
@@ -43,6 +44,12 @@ pub enum Command {
     SendMessageToUser {
         user_addr: String,
         message: String,
+    },
+    SendBlobToUser {
+        user_addr: String,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
     },
     ModifyTopic(Topic),
     ModifyProfile(Profile),
@@ -158,6 +165,23 @@ impl AppController {
             }
             Command::SendMessageToUser { user_addr, message } => {
                 Self::do_send_message_to_user(user_addr, message, app_state, desktop_client).await;
+            }
+            Command::SendBlobToUser {
+                user_addr,
+                blob_data,
+                name,
+                blob_type,
+            } => {
+                Self::do_send_blob_to_user(
+                    user_addr,
+                    blob_data,
+                    name,
+                    blob_type,
+                    app_state,
+                    desktop_client,
+                    progress_sender,
+                )
+                .await;
             }
             Command::ModifyTopic(topic) => {
                 Self::do_modify_topic(topic, app_state, desktop_client).await;
@@ -742,6 +766,115 @@ impl AppController {
         }
     }
 
+    async fn do_send_blob_to_user(
+        user_addr: String,
+        blob_data: FileData,
+        blob_name: String,
+        blob_type: BlobType,
+        mut app_state: Signal<AppState>,
+        desktop_client: Arc<Mutex<DesktopClient>>,
+        progress_sender: Sender<u64>,
+    ) {
+        let now = Utc::now().timestamp_millis() as u64;
+
+        let result: Result<(), Error> = async {
+            let client_ref = desktop_client.clone();
+            let client = client_ref.lock().await;
+
+            let peer_id = client
+                .peer_id()
+                .await
+                .map_err(|e| Error::PeerId(e.to_string()))?;
+
+            let add_stream = client
+                .save_blob_from_path(blob_data.path())
+                .await
+                .map_err(|e| Error::BlobSave(e.to_string()))?;
+
+            let mut stream = add_stream;
+            let mut hash = None;
+            while let Some(item) = stream.next().await {
+                match item {
+                    p2p::AddProgressItem::CopyProgress(_) => continue,
+                    p2p::AddProgressItem::Size(_) => continue,
+                    p2p::AddProgressItem::CopyDone => continue,
+                    p2p::AddProgressItem::OutboardProgress(progress) => {
+                        progress_sender
+                            .send(progress)
+                            .expect("Message to the channel should not return an error");
+                        continue;
+                    }
+                    p2p::AddProgressItem::Done(temp_tag) => {
+                        hash = Some(temp_tag.hash());
+                        progress_sender
+                            .send(u64::MAX)
+                            .expect("Message to the channel should not return an error");
+                        break;
+                    }
+                    p2p::AddProgressItem::Error(error) => {
+                        return Err(Error::BlobSave(error.to_string()));
+                    }
+                }
+            }
+
+            let hash =
+                hash.ok_or_else(|| Error::BlobSave("Failed to get hash from stream".to_string()))?;
+
+            let p2p_blob_type = match blob_type {
+                BlobType::File => p2p::messages::BlobType::File,
+                BlobType::Image => p2p::messages::BlobType::Image,
+                BlobType::BigImage => p2p::messages::BlobType::BigImage,
+                BlobType::Audio => p2p::messages::BlobType::Audio,
+                BlobType::Video => p2p::messages::BlobType::Video,
+                BlobType::Other => p2p::messages::BlobType::Other,
+            };
+
+            let endpoint_id = EndpointId::from_str(&user_addr)
+                .map_err(|e| Error::InvalidUserId(format!("Invalid user ID: {e}")))?;
+
+            let msg = p2p::messages::DmBlobMessage::new(
+                peer_id,
+                endpoint_id,
+                blob_name.clone(),
+                blob_data.size(),
+                hash,
+                now,
+                p2p_blob_type,
+            );
+
+            client
+                .send_dm(&user_addr, DmMessageTypes::Blob(msg))
+                .await
+                .map_err(|e| Error::MessageSend(e.to_string()))?;
+
+            let user_addr_clone = user_addr.clone();
+
+            app_state.with_mut(|state| {
+                let blob_msg = DmBlobMessage::new(
+                    peer_id.to_string(),
+                    user_addr_clone.clone(),
+                    hash.to_string(),
+                    blob_name.clone(),
+                    blob_data.size(),
+                    now,
+                    true,
+                    blob_type,
+                );
+                state.add_dm_blob_message(&user_addr_clone, blob_msg);
+            });
+
+            utils::contacts::save_contacts(&app_state.read().get_all_contacts_chat())
+                .map_err(|e| Error::ProfileSave(e.to_string()))?;
+
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            eprintln!("Failed to send blob to user {}: {}", user_addr, e);
+        }
+    }
+
     async fn do_modify_topic(
         topic: Topic,
         mut app_state: Signal<AppState>,
@@ -1035,6 +1168,21 @@ impl ui::desktop::models::Controller for AppController {
 
     fn connect_to_user(&self, user_id: String) {
         self.send_command(Command::ConnectToUser(user_id));
+    }
+
+    fn send_blob_to_user(
+        &self,
+        user_addr: String,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
+    ) {
+        self.send_command(Command::SendBlobToUser {
+            user_addr,
+            blob_data,
+            name,
+            blob_type,
+        });
     }
 
     fn send_blob_to_topic(

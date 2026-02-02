@@ -127,6 +127,7 @@ pub fn Chat<C: Controller + 'static>(
 
         let handle_media_submit = {
             let controller = controller;
+            let is_dm = contact.is_some();
             move |(files, mut blob_type): (Vec<FileData>, BlobType)| {
                 let chat_id = chat_id.clone();
                 let mut show_attachment = show_attachment;
@@ -141,12 +142,22 @@ pub fn Chat<C: Controller + 'static>(
                                 BlobType::Image
                             };
                         };
-                        controller.read().send_blob_to_topic(
-                            chat_id.clone(),
-                            file,
-                            name,
-                            blob_type,
-                        );
+
+                        if is_dm {
+                            controller.read().send_blob_to_user(
+                                chat_id.clone(),
+                                file,
+                                name,
+                                blob_type,
+                            );
+                        } else {
+                            controller.read().send_blob_to_topic(
+                                chat_id.clone(),
+                                file,
+                                name,
+                                blob_type,
+                            );
+                        }
                     }
                     show_attachment.set(false)
                 });

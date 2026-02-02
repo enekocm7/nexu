@@ -235,6 +235,7 @@ pub enum DmMessageTypes {
     Chat(DmChatMessage),
     ProfileMetadata(DmProfileMetadataMessage),
     JoinPetition(DmJoinMessage),
+    Blob(DmBlobMessage),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -293,6 +294,39 @@ impl DmJoinMessage {
             petitioner,
             target,
             timestamp,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DmBlobMessage {
+    pub sender: EndpointId,
+    pub receiver: EndpointId,
+    pub name: String,
+    pub size: u64,
+    pub hash: Hash,
+    pub timestamp: u64,
+    pub blob_type: BlobType,
+}
+
+impl DmBlobMessage {
+    pub fn new(
+        sender: EndpointId,
+        receiver: EndpointId,
+        name: String,
+        size: u64,
+        hash: Hash,
+        timestamp: u64,
+        blob_type: BlobType,
+    ) -> Self {
+        DmBlobMessage {
+            sender,
+            receiver,
+            name,
+            size,
+            hash,
+            timestamp,
+            blob_type,
         }
     }
 }

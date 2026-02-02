@@ -17,7 +17,7 @@ pub fn TopicColumn(
     let topic_list: Vec<Topic> = {
         let state = app_state();
         let mut topics = state.get_all_topics().into_iter().collect::<Vec<Topic>>();
-        topics.sort_by(|a, b| b.last_connection.cmp(&a.last_connection));
+        topics.sort_by_key(|b| std::cmp::Reverse(b.last_connection));
         topics
     };
 

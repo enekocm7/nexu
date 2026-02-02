@@ -284,6 +284,12 @@ impl AppState {
             self.contacts.insert(profile_id.to_string(), contact);
         }
     }
+
+    pub fn add_dm_blob_message(&mut self, id: &str, message: DmBlobMessage) {
+        if let Some(contact) = self.contacts.get_mut(id) {
+            contact.add_dm_blob_message(message);
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -436,33 +442,83 @@ impl DmChatMessage {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DmBlobMessage {
+    pub sender_id: String,
+    pub receiver_id: String,
+    pub blob_hash: String,
+    pub blob_name: String,
+    pub blob_size: u64,
+    pub timestamp: u64,
+    pub is_sent: bool,
+    pub blob_type: BlobType,
+}
+
+impl DmBlobMessage {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        sender_id: String,
+        receiver_id: String,
+        blob_hash: String,
+        blob_name: String,
+        blob_size: u64,
+        timestamp: u64,
+        is_sent: bool,
+        blob_type: BlobType,
+    ) -> Self {
+        Self {
+            sender_id,
+            receiver_id,
+            blob_hash,
+            blob_name,
+            blob_size,
+            timestamp,
+            is_sent,
+            blob_type,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum DmMessage {
     Chat(DmChatMessage),
+    Blob(DmBlobMessage),
 }
 
 impl DmMessage {
     pub fn get_timestamp(&self) -> u64 {
         match self {
             DmMessage::Chat(msg) => msg.timestamp,
+            DmMessage::Blob(msg) => msg.timestamp,
         }
     }
 
-    pub fn get_content(&self) -> &str {
+    pub fn get_content(&self) -> String {
         match self {
-            DmMessage::Chat(msg) => &msg.content,
+            DmMessage::Chat(msg) => msg.content.clone(),
+            DmMessage::Blob(msg) => msg.blob_name.clone(),
         }
     }
 }
 
 impl From<DmMessage> for Message {
-    fn from(dm_msg: DmMessage) -> Self {
-        match dm_msg {
-            DmMessage::Chat(dm_chat) => Message::Chat(ChatMessage {
-                sender_id: dm_chat.sender_id,
-                topic_id: dm_chat.receiver_id,
-                content: dm_chat.content,
-                timestamp: dm_chat.timestamp,
-                is_sent: dm_chat.is_sent,
+    fn from(msg: DmMessage) -> Self {
+        match msg {
+            DmMessage::Chat(chat) => Message::Chat(ChatMessage {
+                sender_id: chat.sender_id,
+                topic_id: chat.receiver_id,
+                content: chat.content,
+                timestamp: chat.timestamp,
+                is_sent: chat.is_sent,
+            }),
+            DmMessage::Blob(blob) => Message::Blob(BlobMessage {
+                sender_id: blob.sender_id,
+                topic_id: blob.receiver_id,
+                blob_hash: blob.blob_hash,
+                blob_name: blob.blob_name,
+                blob_size: blob.blob_size,
+                timestamp: blob.timestamp,
+                is_sent: blob.is_sent,
+                blob_type: blob.blob_type,
             }),
         }
     }
@@ -626,8 +682,13 @@ impl ProfileChat {
     }
 
     pub fn add_dm_message(&mut self, message: DmChatMessage) {
-        self.last_changed = chrono::Utc::now().timestamp_millis() as u64;
+        self.last_changed = message.timestamp;
         self.messages.push(DmMessage::Chat(message));
+    }
+
+    pub fn add_dm_blob_message(&mut self, message: DmBlobMessage) {
+        self.last_changed = message.timestamp;
+        self.messages.push(DmMessage::Blob(message));
     }
 }
 
@@ -663,6 +724,13 @@ pub trait Controller {
     fn download_blob(&self, hash: String, user_id: String);
     fn get_from_storage(&self, hash: String, name: &str) -> Option<PathBuf>;
     fn has_blob(&self, image_hash: &str, image_name: &str) -> bool;
+    fn send_blob_to_user(
+        &self,
+        user_addr: String,
+        blob_data: FileData,
+        name: String,
+        blob_type: BlobType,
+    );
     ///Returns an empty vector if the image could not be found or downloaded
     fn get_or_download(&self, hash: &str, user_id: &str, name: &str) -> anyhow::Result<PathBuf>;
     fn get_media_url(&self, hash: &str, name: &str) -> String;

@@ -9,7 +9,7 @@ pub use iroh::{EndpointAddr, EndpointId};
 pub use messages::{
     BlobMessage, ChatMessage, DisconnectMessage, DmChatMessage, DmJoinMessage, DmMessageTypes,
     DmProfileMetadataMessage, GossipMessage, JoinMessage, LeaveMessage, MessageTypes,
-    TopicMessagesMessage, TopicMetadataMessage,
+    TopicMessagesMessage, TopicMetadataMessage, DmBlobMessage
 };
 pub use types::Ticket;
 pub use utils::load_secret_key;

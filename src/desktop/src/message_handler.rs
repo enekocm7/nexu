@@ -6,13 +6,13 @@ use dioxus::prelude::{Signal, WritableExt};
 use dioxus::signals::ReadableExt;
 use p2p::DmChatMessage as P2pDmChatMessage;
 use p2p::{
-    DmJoinMessage, DmMessageTypes, DmProfileMetadataMessage, MessageTypes, Ticket,
-    TopicMetadataMessage,
+    DmBlobMessage as P2pDmBlobMessage, DmJoinMessage, DmMessageTypes, DmProfileMetadataMessage,
+    MessageTypes, Ticket, TopicMetadataMessage,
 };
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ui::desktop::models::{AppState, ChatMessage, DmChatMessage, Message};
+use ui::desktop::models::{AppState, ChatMessage, DmBlobMessage, DmChatMessage, Message};
 
 pub fn handle_chat_message(mut state: Signal<AppState>, topic: &str, msg: p2p::ChatMessage) {
     state.with_mut(|s| {
@@ -402,6 +402,34 @@ pub fn handle_dm_profile_metadata(mut state: Signal<AppState>, msg: DmProfileMet
     });
 }
 
+pub fn handle_dm_blob_message(mut state: Signal<AppState>, msg: P2pDmBlobMessage) {
+    state.with_mut(|s| {
+        let sender_id = msg.sender.to_string();
+        let receiver_id = msg.receiver.to_string();
+
+        let ui_blob_type = match msg.blob_type {
+            p2p::messages::BlobType::Image => ui::desktop::models::BlobType::Image,
+            p2p::messages::BlobType::BigImage => ui::desktop::models::BlobType::BigImage,
+            p2p::messages::BlobType::File => ui::desktop::models::BlobType::File,
+            p2p::messages::BlobType::Audio => ui::desktop::models::BlobType::Audio,
+            p2p::messages::BlobType::Video => ui::desktop::models::BlobType::Video,
+            p2p::messages::BlobType::Other => ui::desktop::models::BlobType::Other,
+        };
+
+        let message = DmBlobMessage::new(
+            sender_id.clone(),
+            receiver_id,
+            msg.hash.to_string(),
+            msg.name,
+            msg.size,
+            msg.timestamp,
+            false,
+            ui_blob_type,
+        );
+        s.add_dm_blob_message(&sender_id, message);
+    });
+}
+
 pub fn handle_dm_join_petition(
     client_ref: Arc<Mutex<DesktopClient>>,
     mut state: Signal<AppState>,
@@ -482,6 +510,9 @@ pub async fn process_dm_message(
         }
         DmMessageTypes::JoinPetition(msg) => {
             handle_dm_join_petition(client_ref.clone(), state, msg);
+        }
+        DmMessageTypes::Blob(msg) => {
+            handle_dm_blob_message(state, msg);
         }
     }
 }
