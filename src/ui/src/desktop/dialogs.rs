@@ -2,7 +2,7 @@ use super::desktop_web_components::CLOSE_ICON;
 use super::models::{Controller, RemovalType};
 use dioxus::prelude::*;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TopicCreationMode {
     Create,
     Join,

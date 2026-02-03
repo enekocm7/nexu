@@ -20,6 +20,8 @@ pub struct Topic {
 }
 
 impl Topic {
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn new(id: String, name: String, avatar_url: Option<String>) -> Self {
         Self {
             id,
@@ -33,6 +35,7 @@ impl Topic {
         }
     }
 
+    #[must_use]
     pub fn new_placeholder(id: String) -> Self {
         Self {
             id: id.clone(),
@@ -49,7 +52,7 @@ impl Topic {
     pub fn add_message(&mut self, message: ChatMessage) {
         self.last_message = Some(message.content.clone());
         self.messages.push(Message::Chat(message));
-        self.messages.sort()
+        self.messages.sort();
     }
 
     pub fn add_leave_message(&mut self, message: LeaveMessage) {
@@ -67,7 +70,7 @@ impl Topic {
     pub fn add_blob_message(&mut self, message: BlobMessage) {
         self.last_message = Some(format!("[{}]", message.blob_name));
         self.messages.push(Message::Blob(message));
-        self.messages.sort()
+        self.messages.sort();
     }
 
     pub fn add_member(&mut self, profile_id: &str) {
@@ -78,10 +81,12 @@ impl Topic {
         self.members.remove(profile_id);
     }
 
+    #[must_use]
     pub fn get_member_ids(&self) -> Vec<&str> {
-        self.members.iter().map(|s| s.as_str()).collect()
+        self.members.iter().map(String::as_str).collect()
     }
-
+    
+    #[must_use]
     pub fn has_member(&self, profile_id: &str) -> bool {
         self.members.contains(profile_id)
     }
@@ -97,7 +102,7 @@ impl PartialEq for Topic {
     }
 }
 
-#[derive(PartialEq, Copy, Clone, Debug)]
+#[derive(PartialEq, Eq, Copy, Clone, Debug)]
 pub enum TopicCreationMode {
     Create,
     Join,
@@ -114,6 +119,7 @@ pub struct AppState {
 
 #[cfg(feature = "desktop")]
 impl AppState {
+    #[must_use]
     pub fn new(profile_id: &str) -> Self {
         Self {
             topics: HashMap::new(),
@@ -139,6 +145,7 @@ impl AppState {
         }
     }
 
+    #[allow(clippy::cast_sign_loss)]
     pub fn set_last_changed_to_now(&mut self, topic_id: &str) -> u64 {
         if let Some(topic) = self.topics.get_mut(topic_id) {
             let now = chrono::Utc::now().timestamp_millis() as u64;
@@ -167,11 +174,9 @@ impl AppState {
         self.current_topic_id = Some(topic_id);
     }
 
+    #[must_use]
     pub fn get_current_topic(&self) -> Option<&Topic> {
-        match &self.current_topic_id {
-            Some(id) => self.topics.get(id),
-            None => None,
-        }
+        self.current_topic_id.as_ref().and_then(|id| self.topics.get(id))
     }
 
     pub fn set_topic_members(&mut self, topic_id: &str, members: Vec<String>) {
@@ -180,6 +185,7 @@ impl AppState {
         }
     }
 
+    #[must_use]
     pub fn get_topic_members(&self, topic_id: &str) -> Option<&HashSet<String>> {
         if let Some(topic) = self.topics.get(topic_id) {
             return Some(&topic.members);
@@ -191,35 +197,38 @@ impl AppState {
         self.topics.get_mut(topic_id)
     }
 
+    #[must_use]
     pub fn get_topic(&self, topic_id: &str) -> Option<&Topic> {
         self.topics.get(topic_id)
     }
 
+    #[must_use]
     pub fn get_all_topics(&self) -> Vec<Topic> {
         self.topics.values().cloned().collect()
     }
 
+    #[must_use]
     pub fn get_profile(&self) -> Profile {
         self.profile.clone()
     }
 
     pub fn set_profile_id(&mut self, id: &str) {
-        self.profile.id = id.to_string()
+        self.profile.id = id.to_string();
     }
 
     pub fn set_profile_name(&mut self, name: &str) {
-        self.profile.name = name.to_string()
+        self.profile.name = name.to_string();
     }
 
-    pub fn set_profile_avatar(&mut self, avatar_url: &Option<String>) {
-        self.profile.avatar = avatar_url.to_owned()
+    pub fn set_profile_avatar(&mut self, avatar_url: Option<&str>) {
+        self.profile.avatar = avatar_url.map(str::to_string);
     }
 
-    pub fn set_profile_last_connection_to_now(&mut self) {
+    pub const fn set_profile_last_connection_to_now(&mut self) {
         self.profile.last_connection = Online;
     }
 
-    pub fn set_profile_last_connection_offline(&mut self, timestamp: u64) {
+    pub const fn set_profile_last_connection_offline(&mut self, timestamp: u64) {
         self.profile.last_connection = Offline(timestamp);
     }
 
@@ -233,14 +242,17 @@ impl AppState {
             .insert(profile_chat.profile.id.clone(), profile_chat);
     }
 
+    #[must_use]
     pub fn get_contact_chat(&self, profile_id: &str) -> Option<&ProfileChat> {
         self.contacts.get(profile_id)
     }
 
+    #[must_use]
     pub fn get_contact(&self, profile_id: &str) -> Option<&Profile> {
         self.contacts.get(profile_id).map(|prof| &prof.profile)
     }
 
+    #[must_use]
     pub fn get_all_contacts(&self) -> Vec<Profile> {
         self.contacts
             .values()
@@ -249,6 +261,7 @@ impl AppState {
             .collect()
     }
 
+    #[must_use]
     pub fn get_all_contacts_chat(&self) -> Vec<ProfileChat> {
         self.contacts.values().cloned().collect()
     }
@@ -302,13 +315,13 @@ pub enum Message {
 }
 
 impl Message {
-    fn get_timestamp(&self) -> u64 {
+    const fn get_timestamp(&self) -> u64 {
         match self {
-            Message::Chat(msg) => msg.timestamp,
-            Message::Leave(msg) => msg.timestamp,
-            Message::Join(msg) => msg.timestamp,
-            Message::Disconnect(msg) => msg.timestamp,
-            Message::Blob(msg) => msg.timestamp,
+            Self::Chat(msg) => msg.timestamp,
+            Self::Leave(msg) => msg.timestamp,
+            Self::Join(msg) => msg.timestamp,
+            Self::Disconnect(msg) => msg.timestamp,
+            Self::Blob(msg) => msg.timestamp,
         }
     }
 }
@@ -341,7 +354,7 @@ impl Ord for Message {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub sender_id: String,
     pub topic_id: String,
@@ -351,7 +364,8 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         sender_id: String,
         topic_id: String,
         content: String,
@@ -368,7 +382,7 @@ impl ChatMessage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlobMessage {
     pub sender_id: String,
     pub topic_id: String,
@@ -381,7 +395,9 @@ pub struct BlobMessage {
 }
 
 impl BlobMessage {
-    pub fn new(
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub const fn new(
         sender_id: String,
         topic_id: String,
         blob_hash: String,
@@ -404,7 +420,7 @@ impl BlobMessage {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BlobType {
     Image,
     BigImage,
@@ -414,7 +430,7 @@ pub enum BlobType {
     Other,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DmChatMessage {
     pub sender_id: String,
     pub receiver_id: String,
@@ -424,7 +440,8 @@ pub struct DmChatMessage {
 }
 
 impl DmChatMessage {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         sender_id: String,
         receiver_id: String,
         content: String,
@@ -441,7 +458,7 @@ impl DmChatMessage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DmBlobMessage {
     pub sender_id: String,
     pub receiver_id: String,
@@ -455,7 +472,8 @@ pub struct DmBlobMessage {
 
 impl DmBlobMessage {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         sender_id: String,
         receiver_id: String,
         blob_hash: String,
@@ -478,24 +496,26 @@ impl DmBlobMessage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DmMessage {
     Chat(DmChatMessage),
     Blob(DmBlobMessage),
 }
 
 impl DmMessage {
-    pub fn get_timestamp(&self) -> u64 {
+    #[must_use]
+    pub const fn get_timestamp(&self) -> u64 {
         match self {
-            DmMessage::Chat(msg) => msg.timestamp,
-            DmMessage::Blob(msg) => msg.timestamp,
+            Self::Chat(msg) => msg.timestamp,
+            Self::Blob(msg) => msg.timestamp,
         }
     }
 
+    #[must_use]
     pub fn get_content(&self) -> String {
         match self {
-            DmMessage::Chat(msg) => msg.content.clone(),
-            DmMessage::Blob(msg) => msg.blob_name.clone(),
+            Self::Chat(msg) => msg.content.clone(),
+            Self::Blob(msg) => msg.blob_name.clone(),
         }
     }
 }
@@ -503,14 +523,14 @@ impl DmMessage {
 impl From<DmMessage> for Message {
     fn from(msg: DmMessage) -> Self {
         match msg {
-            DmMessage::Chat(chat) => Message::Chat(ChatMessage {
+            DmMessage::Chat(chat) => Self::Chat(ChatMessage {
                 sender_id: chat.sender_id,
                 topic_id: chat.receiver_id,
                 content: chat.content,
                 timestamp: chat.timestamp,
                 is_sent: chat.is_sent,
             }),
-            DmMessage::Blob(blob) => Message::Blob(BlobMessage {
+            DmMessage::Blob(blob) => Self::Blob(BlobMessage {
                 sender_id: blob.sender_id,
                 topic_id: blob.receiver_id,
                 blob_hash: blob.blob_hash,
@@ -524,13 +544,13 @@ impl From<DmMessage> for Message {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LeaveMessage {
     pub sender_id: String,
     pub timestamp: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct JoinMessage {
     pub sender_id: String,
     pub me: bool,
@@ -538,7 +558,8 @@ pub struct JoinMessage {
 }
 
 impl JoinMessage {
-    pub fn new(sender_id: String, timestamp: u64) -> Self {
+    #[must_use]
+    pub const fn new(sender_id: String, timestamp: u64) -> Self {
         Self {
             sender_id,
             me: false,
@@ -546,6 +567,7 @@ impl JoinMessage {
         }
     }
 
+    #[must_use]
     pub fn new_me(timestamp: u64) -> Self {
         Self {
             sender_id: "You".to_string(),
@@ -555,7 +577,7 @@ impl JoinMessage {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DisconnectMessage {
     pub sender_id: String,
     pub timestamp: u64,
@@ -576,6 +598,8 @@ pub enum ConnectionStatus {
 }
 
 impl ConnectionStatus {
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn get_u64(&self) -> u64 {
         match self {
             Online => chrono::Utc::now().timestamp_millis() as u64,
@@ -621,13 +645,14 @@ impl Display for ConnectionStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
             Online => "Online".to_string(),
-            Offline(timestamp) => format!("Offline since {}", timestamp),
+            Offline(timestamp) => format!("Offline since {timestamp}"),
         };
-        write!(f, "{}", str)
+        write!(f, "{str}")
     }
 }
 
 impl Profile {
+    #[must_use]
     pub fn new(id: &str, name: &str, avatar: &str) -> Self {
         Self {
             id: id.to_string(),
@@ -637,6 +662,7 @@ impl Profile {
         }
     }
 
+    #[must_use]
     pub fn new_with_id(id: &str) -> Self {
         Self {
             id: id.to_string(),
@@ -667,6 +693,8 @@ pub struct ProfileChat {
 }
 
 impl ProfileChat {
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)]
     pub fn new(profile: Profile) -> Self {
         Self {
             profile,
@@ -675,10 +703,11 @@ impl ProfileChat {
         }
     }
 
+    #[must_use]
     pub fn last_message(&self) -> Option<String> {
         self.messages
             .last()
-            .map(|msg| msg.get_content().to_string())
+            .map(DmMessage::get_content)
     }
 
     pub fn add_dm_message(&mut self, message: DmChatMessage) {
@@ -692,13 +721,13 @@ impl ProfileChat {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColumnState {
     Topic,
     Contact,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RemovalType {
     Topic,
     Contact,
@@ -732,6 +761,10 @@ pub trait Controller {
         blob_type: BlobType,
     );
     ///Returns an empty vector if the image could not be found or downloaded
+    /// 
+    /// # Errors
+    /// 
+    /// Return an error if it fails to get the blob or download
     fn get_or_download(&self, hash: &str, user_id: &str, name: &str) -> anyhow::Result<PathBuf>;
     fn get_media_url(&self, hash: &str, name: &str) -> String;
 }

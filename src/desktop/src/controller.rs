@@ -103,10 +103,11 @@ impl AppController {
 
     fn send_command(&self, command: Command) {
         if let Err(e) = self.command_sender.send(command) {
-            eprintln!("Failed to send command: {}", e);
+            eprintln!("Failed to send command: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
     pub async fn process_command(
         command: Command,
         app_state: Signal<AppState>,
@@ -198,6 +199,7 @@ impl AppController {
         }
     }
 
+    #[allow(clippy::future_not_send)]
     async fn do_create_topic(
         name: String,
         mut app_state: Signal<AppState>,
@@ -211,7 +213,7 @@ impl AppController {
                 .await
                 .map_err(|e| Error::TopicCreation(e.to_string()))?;
 
-            let mut topic = Topic::new(ticket.clone(), name, None);
+            let mut topic = Topic::new(ticket, name, None);
             let profile = app_state.read().get_profile();
             topic.add_member(&profile.id);
             app_state.write().add_topic(&topic);
@@ -224,10 +226,12 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to create topic: {}", e);
+            eprintln!("Failed to create topic: {e}",);
         }
     }
 
+    #[allow(clippy::cast_sign_loss)]
+    #[allow(clippy::future_not_send)]
     async fn do_join_topic(
         topic_id: String,
         mut app_state: Signal<AppState>,
@@ -286,20 +290,21 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to join topic: {}", e);
+            eprintln!("Failed to join topic: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_leave_topic(
         topic_id: String,
         mut app_state: Signal<AppState>,
         desktop_client: Arc<Mutex<DesktopClient>>,
     ) {
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let mut client = client_ref.lock().await;
-
-            let id = client
+            let id = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
@@ -307,7 +312,9 @@ impl AppController {
             let ticket = Ticket::from_str(&topic_id)
                 .map_err(|_| Error::InvalidTicket("Failed to parse topic_id".to_string()))?;
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .send(MessageTypes::LeaveTopic(p2p::LeaveMessage::new(
                     ticket.topic,
                     id,
@@ -316,7 +323,9 @@ impl AppController {
                 .await
                 .map_err(|e| Error::MessageSend(e.to_string()))?;
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .leave_topic(&topic_id)
                 .await
                 .map_err(|e| Error::TopicLeave(e.to_string()))?;
@@ -331,10 +340,12 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to leave topic: {}", e);
+            eprintln!("Failed to leave topic: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_send_message_to_topic(
         ticket_id: String,
         message: String,
@@ -346,27 +357,28 @@ impl AppController {
         let result: Result<(), Error> = async {
             let client_ref = desktop_client.clone();
             let (send_result, peer_id_result) = {
-                let client = client_ref.lock().await;
-                let msg = client
+                let msg = client_ref
+                    .lock()
+                    .await
                     .get_chat_message(&ticket_id, &message)
                     .await
                     .map_err(|e| {
-                        eprintln!("Failed to create chat message: {}", e);
+                        eprintln!("Failed to create chat message: {e}");
                         Error::MessageCreation(e.to_string())
                     })?;
 
-                let send = client.send(MessageTypes::Chat(msg)).await;
-                let peer = client.peer_id().await;
+                let send = client_ref.lock().await.send(MessageTypes::Chat(msg)).await;
+                let peer = client_ref.lock().await.peer_id().await;
                 (send, peer)
             };
 
             send_result.map_err(|e| {
-                eprintln!("Failed to send message: {}", e);
+                eprintln!("Failed to send message: {e}");
                 Error::MessageSend(e.to_string())
             })?;
 
             let peer_id = peer_id_result.map_err(|e| {
-                eprintln!("Failed to get peer_id: {}", e);
+                eprintln!("Failed to get peer_id: {e}");
                 Error::PeerId(e.to_string())
             })?;
 
@@ -393,10 +405,12 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to send message to topic {}: {}", ticket_id, e);
+            eprintln!("Failed to send message to topic {ticket_id}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_send_image_to_topic(
         ticket_id: String,
         image_data: Vec<u8>,
@@ -408,18 +422,19 @@ impl AppController {
         let now = Utc::now().timestamp_millis() as u64;
 
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let client = client_ref.lock().await;
-
             let ticket = Ticket::from_str(&ticket_id)
                 .map_err(|_| Error::InvalidTicket("Failed to parse ticket_id".to_string()))?;
 
-            let peer_id = client
+            let peer_id = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
-            let add_stream = client
+            let add_stream = desktop_client
+                .lock()
+                .await
                 .save_blob(image_data.clone())
                 .await
                 .map_err(|e| Error::BlobSave(e.to_string()))?;
@@ -428,14 +443,13 @@ impl AppController {
             let mut hash = None;
             while let Some(item) = stream.next().await {
                 match item {
-                    p2p::AddProgressItem::CopyProgress(_) => continue,
-                    p2p::AddProgressItem::Size(_) => continue,
-                    p2p::AddProgressItem::CopyDone => continue,
+                    p2p::AddProgressItem::CopyProgress(_)
+                    | p2p::AddProgressItem::Size(_)
+                    | p2p::AddProgressItem::CopyDone => {}
                     p2p::AddProgressItem::OutboardProgress(progress) => {
                         progress_sender
                             .send(progress)
                             .expect("Message to the channel should not return an error");
-                        continue;
                     }
                     p2p::AddProgressItem::Done(temp_tag) => {
                         hash = Some(temp_tag.hash());
@@ -463,10 +477,15 @@ impl AppController {
                 p2p::messages::BlobType::Image,
             );
 
-            client.send(MessageTypes::Blob(msg)).await.map_err(|e| {
-                eprintln!("Failed to send message: {}", e);
-                Error::MessageSend(e.to_string())
-            })?;
+            desktop_client
+                .lock()
+                .await
+                .send(MessageTypes::Blob(msg))
+                .await
+                .map_err(|e| {
+                    eprintln!("Failed to send message: {e}");
+                    Error::MessageSend(e.to_string())
+                })?;
 
             app_state.with_mut(|state| {
                 if let Some(topic) = state.get_topic_mutable(&ticket_id) {
@@ -494,10 +513,12 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to send image to topic {}: {}", ticket_id, e);
+            eprintln!("Failed to send image to topic {ticket_id}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_send_blob_to_topic(
         ticket_id: String,
         blob_data: FileData,
@@ -510,18 +531,19 @@ impl AppController {
         let now = Utc::now().timestamp_millis() as u64;
 
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let client = client_ref.lock().await;
-
             let ticket = Ticket::from_str(&ticket_id)
                 .map_err(|_| Error::InvalidTicket("Failed to parse ticket_id".to_string()))?;
 
-            let peer_id = client
+            let peer_id = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
-            let add_stream = client
+            let add_stream = desktop_client
+                .lock()
+                .await
                 .save_blob_from_path(blob_data.path())
                 .await
                 .map_err(|e| Error::BlobSave(e.to_string()))?;
@@ -530,14 +552,13 @@ impl AppController {
             let mut hash = None;
             while let Some(item) = stream.next().await {
                 match item {
-                    p2p::AddProgressItem::CopyProgress(_) => continue,
-                    p2p::AddProgressItem::Size(_) => continue,
-                    p2p::AddProgressItem::CopyDone => continue,
+                    p2p::AddProgressItem::CopyProgress(_)
+                    | p2p::AddProgressItem::Size(_)
+                    | p2p::AddProgressItem::CopyDone => {}
                     p2p::AddProgressItem::OutboardProgress(progress) => {
                         progress_sender
                             .send(progress)
                             .expect("Message to the channel should not return an error");
-                        continue;
                     }
                     p2p::AddProgressItem::Done(temp_tag) => {
                         hash = Some(temp_tag.hash());
@@ -574,10 +595,15 @@ impl AppController {
                 p2p_blob_type,
             );
 
-            client.send(MessageTypes::Blob(msg)).await.map_err(|e| {
-                eprintln!("Failed to send message: {}", e);
-                Error::MessageSend(e.to_string())
-            })?;
+            desktop_client
+                .lock()
+                .await
+                .send(MessageTypes::Blob(msg))
+                .await
+                .map_err(|e| {
+                    eprintln!("Failed to send message: {e}");
+                    Error::MessageSend(e.to_string())
+                })?;
 
             app_state.with_mut(|state| {
                 if let Some(topic) = state.get_topic_mutable(&ticket_id) {
@@ -600,7 +626,7 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to send blob to topic {}: {}", ticket_id, e);
+            eprintln!("Failed to send blob to topic {ticket_id}: {e}");
         }
     }
 
@@ -640,18 +666,17 @@ impl AppController {
                     DownloadProgressItem::Error(e) => {
                         let _ = progress_sender.send(u64::MAX);
                         return Err(Error::DownloadBlob(format!(
-                            "Error during blob download: {}",
-                            e
+                            "Error during blob download: {e}"
                         )));
                     }
                     DownloadProgressItem::TryProvider { id, request } => {
-                        println!("Trying provider {} for request {:?}", id, request);
+                        println!("Trying provider {id} for request {request:?}");
                     }
                     DownloadProgressItem::ProviderFailed { id, request } => {
-                        eprintln!("Provider {} failed for request {:?}", id, request);
+                        eprintln!("Provider {id} failed for request {request:?}");
                     }
                     DownloadProgressItem::PartComplete { request } => {
-                        println!("Part complete for request {:?}", request);
+                        println!("Part complete for request {request:?}");
                     }
                     DownloadProgressItem::DownloadError => {
                         let _ = progress_sender.send(u64::MAX);
@@ -667,7 +692,7 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to download blob {}: {}", blob_hash, e);
+            eprintln!("Failed to download blob {blob_hash}: {e}");
         }
     }
 
@@ -691,9 +716,8 @@ impl AppController {
     }
 
     pub fn has_blob_impl(&self, hash: &str, extension: impl AsRef<OsStr>) -> bool {
-        let hash = match hash.parse::<Hash>() {
-            Ok(h) => h,
-            Err(_) => return false,
+        let Ok(hash) = hash.parse::<Hash>() else {
+            return false;
         };
 
         let desktop_client = Arc::clone(&self.desktop_client);
@@ -710,6 +734,8 @@ impl AppController {
         })
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_send_message_to_user(
         user_addr: String,
         message: String,
@@ -717,25 +743,30 @@ impl AppController {
         desktop_client: Arc<Mutex<DesktopClient>>,
     ) {
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let mut client = client_ref.lock().await;
-
-            let msg = client
+            let msg = desktop_client
+                .lock()
+                .await
                 .get_dm_chat_message(&user_addr, &message)
                 .await
                 .map_err(|e| Error::MessageCreation(e.to_string()))?;
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .connect_to_user(&user_addr)
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .send_dm(&user_addr, DmMessageTypes::Chat(msg))
                 .await
                 .map_err(|e| Error::MessageSend(e.to_string()))?;
 
-            let peer_id = client
+            let peer_id = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
@@ -762,10 +793,12 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to send message to user {u}: {e}", u = user_addr);
+            eprintln!("Failed to send message to user {user_addr}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_send_blob_to_user(
         user_addr: String,
         blob_data: FileData,
@@ -778,15 +811,16 @@ impl AppController {
         let now = Utc::now().timestamp_millis() as u64;
 
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let client = client_ref.lock().await;
-
-            let peer_id = client
+            let peer_id = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
-            let add_stream = client
+            let add_stream = desktop_client
+                .lock()
+                .await
                 .save_blob_from_path(blob_data.path())
                 .await
                 .map_err(|e| Error::BlobSave(e.to_string()))?;
@@ -795,14 +829,13 @@ impl AppController {
             let mut hash = None;
             while let Some(item) = stream.next().await {
                 match item {
-                    p2p::AddProgressItem::CopyProgress(_) => continue,
-                    p2p::AddProgressItem::Size(_) => continue,
-                    p2p::AddProgressItem::CopyDone => continue,
+                    p2p::AddProgressItem::CopyProgress(_)
+                    | p2p::AddProgressItem::Size(_)
+                    | p2p::AddProgressItem::CopyDone => {}
                     p2p::AddProgressItem::OutboardProgress(progress) => {
                         progress_sender
                             .send(progress)
                             .expect("Message to the channel should not return an error");
-                        continue;
                     }
                     p2p::AddProgressItem::Done(temp_tag) => {
                         hash = Some(temp_tag.hash());
@@ -842,7 +875,9 @@ impl AppController {
                 p2p_blob_type,
             );
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .send_dm(&user_addr, DmMessageTypes::Blob(msg))
                 .await
                 .map_err(|e| Error::MessageSend(e.to_string()))?;
@@ -871,10 +906,11 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to send blob to user {}: {}", user_addr, e);
+            eprintln!("Failed to send blob to user {user_addr}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
     async fn do_modify_topic(
         topic: Topic,
         mut app_state: Signal<AppState>,
@@ -914,7 +950,7 @@ impl AppController {
                 .send(MessageTypes::TopicMetadata(update_message))
                 .await
             {
-                eprintln!("Failed to send update topic message: {}", e);
+                eprintln!("Failed to send update topic message: {e}");
             }
 
             if save_topics_to_file(&app_state.read().get_all_topics()).is_err() {
@@ -928,10 +964,11 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to modify topic: {}", e);
+            eprintln!("Failed to modify topic: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
     async fn do_modify_profile(
         profile: Profile,
         mut app_state: Signal<AppState>,
@@ -940,7 +977,7 @@ impl AppController {
         let result: Result<(), Error> = async {
             app_state.with_mut(|state| {
                 state.set_profile_name(&profile.name);
-                state.set_profile_avatar(&profile.avatar);
+                state.set_profile_avatar(profile.avatar.as_deref());
             });
 
             let message = DmProfileMetadataMessage::new(
@@ -974,25 +1011,28 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to save profile: {}", e);
+            eprintln!("Failed to save profile: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
+    #[allow(clippy::cast_sign_loss)]
     async fn do_connect_to_user(
         user_id: String,
         mut app_state: Signal<AppState>,
         desktop_client: Arc<Mutex<DesktopClient>>,
     ) {
         let result: Result<(), Error> = async {
-            let client_ref = desktop_client.clone();
-            let mut client = client_ref.lock().await;
-
-            client
+            desktop_client
+                .lock()
+                .await
                 .connect_to_user(&user_id)
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
 
-            let self_address = client
+            let self_address = desktop_client
+                .lock()
+                .await
                 .peer_id()
                 .await
                 .map_err(|e| Error::PeerId(e.to_string()))?;
@@ -1011,7 +1051,9 @@ impl AppController {
                 }
             });
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .send_dm(&user_id, DmMessageTypes::JoinPetition(join_msg))
                 .await
                 .map_err(|e| Error::MessageSend(e.to_string()))?;
@@ -1025,7 +1067,9 @@ impl AppController {
                 profile.last_connection.get_u64(),
             );
 
-            client
+            desktop_client
+                .lock()
+                .await
                 .send_dm(&user_id, DmMessageTypes::ProfileMetadata(msg))
                 .await
                 .map_err(|e| Error::MessageSend(e.to_string()))?;
@@ -1038,10 +1082,11 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to connect to user {}: {}", user_id, e);
+            eprintln!("Failed to connect to user {user_id}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
     async fn do_reconnect_to_user(
         chat: ProfileChat,
         mut app_state: Signal<AppState>,
@@ -1065,10 +1110,11 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to reconnect to user {}: {}", chat.profile.id, e);
+            eprintln!("Failed to reconnect to user {}: {e}", chat.profile.id);
         }
     }
 
+    #[allow(clippy::future_not_send)]
     async fn do_remove_contact(profile_id: String, mut app_state: Signal<AppState>) {
         let result: Result<(), Error> = async {
             app_state.write().remove_contact(&profile_id);
@@ -1081,10 +1127,11 @@ impl AppController {
         .await;
 
         if let Err(e) = result {
-            eprintln!("Failed to remove contact {}: {}", profile_id, e);
+            eprintln!("Failed to remove contact {profile_id}: {e}");
         }
     }
 
+    #[allow(clippy::future_not_send)]
     pub async fn reconnect_to_user_async(&self, app_state: Signal<AppState>, chat: ProfileChat) {
         Self::do_reconnect_to_user(chat, app_state, Arc::clone(&self.desktop_client)).await;
     }
@@ -1112,21 +1159,21 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Error::TopicCreation(msg) => write!(f, "Topic creation error: {}", msg),
-            Error::TopicJoin(msg) => write!(f, "Topic join error: {}", msg),
-            Error::TopicLeave(msg) => write!(f, "Topic leave error: {}", msg),
-            Error::TopicModification(msg) => write!(f, "Topic modification error: {}", msg),
-            Error::FileSave(msg) => write!(f, "File save error: {}", msg),
-            Error::InvalidTicket(msg) => write!(f, "Invalid ticket: {}", msg),
-            Error::PeerId(msg) => write!(f, "Peer ID error: {}", msg),
-            Error::InvalidPeerId => write!(f, "Invalid peer ID"),
-            Error::MessageSend(msg) => write!(f, "Message send error: {}", msg),
-            Error::MessageCreation(msg) => write!(f, "Message creation error: {}", msg),
-            Error::ImageSizeExceeded => write!(f, "Image size exceeds 512 KB limit"),
-            Error::ProfileSave(msg) => write!(f, "Profile save error: {}", msg),
-            Error::BlobSave(msg) => write!(f, "Blob save error: {}", msg),
-            Error::DownloadBlob(msg) => write!(f, "Download blob error: {}", msg),
-            Error::InvalidUserId(id) => write!(f, "Invalid user ID: {}", id),
+            Self::TopicCreation(msg) => write!(f, "Topic creation error: {msg}"),
+            Self::TopicJoin(msg) => write!(f, "Topic join error: {msg}"),
+            Self::TopicLeave(msg) => write!(f, "Topic leave error: {msg}"),
+            Self::TopicModification(msg) => write!(f, "Topic modification error: {msg}"),
+            Self::FileSave(msg) => write!(f, "File save error: {msg}"),
+            Self::InvalidTicket(msg) => write!(f, "Invalid ticket: {msg}"),
+            Self::PeerId(msg) => write!(f, "Peer ID error: {msg}"),
+            Self::InvalidPeerId => write!(f, "Invalid peer ID"),
+            Self::MessageSend(msg) => write!(f, "Message send error: {msg}"),
+            Self::MessageCreation(msg) => write!(f, "Message creation error: {msg}"),
+            Self::ImageSizeExceeded => write!(f, "Image size exceeds 512 KB limit"),
+            Self::ProfileSave(msg) => write!(f, "Profile save error: {msg}"),
+            Self::BlobSave(msg) => write!(f, "Blob save error: {msg}"),
+            Self::DownloadBlob(msg) => write!(f, "Download blob error: {msg}"),
+            Self::InvalidUserId(id) => write!(f, "Invalid user ID: {id}"),
         }
     }
 }
@@ -1245,10 +1292,10 @@ impl ui::desktop::models::Controller for AppController {
                     .await
                     .download_blob(&ticket)
                     .await
-                    .map_err(|e| anyhow::anyhow!("Failed to start blob download: {}", e))?;
+                    .map_err(|e| anyhow::anyhow!("Failed to start blob download: {e}"))?;
 
                 let mut stream = progress.stream().await.map_err(|e| {
-                    anyhow::anyhow!("Failed to get download progress stream: {}", e)
+                    anyhow::anyhow!("Failed to get download progress stream: {e}")
                 })?;
 
                 while let Some(item) = stream.next().await {
@@ -1265,13 +1312,13 @@ impl ui::desktop::models::Controller for AppController {
                             return Err(anyhow::anyhow!("Download error occurred"));
                         }
                         DownloadProgressItem::PartComplete { request } => {
-                            println!("Part complete for request {:?}", request);
+                            println!("Part complete for request {request:?}");
                         }
                         DownloadProgressItem::TryProvider { id, request } => {
-                            println!("Trying provider {} for request {:?}", id, request);
+                            println!("Trying provider {id} for request {request:?}");
                         }
                         DownloadProgressItem::ProviderFailed { id, request } => {
-                            eprintln!("Provider {} failed for request {:?}", id, request);
+                            eprintln!("Provider {id} failed for request {request:?}");
                         }
                     }
                 }

@@ -6,37 +6,37 @@ use chrono::{DateTime, Local, TimeDelta};
 use dioxus_primitives::toast::ToastOptions;
 use dioxus_primitives::toast::Toasts;
 
+#[must_use]
 pub fn truncate_id(id: &str) -> String {
     if id.len() > 12 {
         let start = &id[..6];
         let end = &id[id.len() - 6..];
-        format!("{}...{}", start, end)
+        format!("{start}...{end}")
     } else {
         id.to_string()
     }
 }
 
+#[must_use]
 pub fn get_sender_display_name(app_state: &AppState, sender_id: &str) -> String {
     let profile = app_state.get_profile();
     if sender_id == profile.id {
         return profile.name;
     }
-    if let Some(contact) = app_state.get_contact(sender_id) {
-        if contact.name == contact.id {
+    app_state.get_contact(sender_id).map_or_else(|| truncate_id(sender_id), |contact| if contact.name == contact.id {
             truncate_id(sender_id)
         } else {
             contact.name.clone()
-        }
-    } else {
-        truncate_id(sender_id)
-    }
+        })
 }
 
+#[must_use]
+#[allow(clippy::cast_possible_wrap)]
 pub fn format_message_timestamp(timestamp: u64) -> String {
     let timestamp_secs = (timestamp / 1000) as i64;
     let datetime = match DateTime::from_timestamp(timestamp_secs, 0) {
         Some(dt) => dt.with_timezone(&Local),
-        None => return String::from(""),
+        None => return String::new(),
     };
 
     let now = Local::now();
@@ -57,10 +57,11 @@ pub fn format_message_timestamp(timestamp: u64) -> String {
     datetime.format("%m/%d/%y %I:%M %p").to_string()
 }
 
+#[must_use]
 pub fn format_relative_time(timestamp: i64) -> String {
     let last_connection = match DateTime::from_timestamp(timestamp, 0) {
         Some(dt) => dt.with_timezone(&Local),
-        None => return String::from(""),
+        None => return String::new(),
     };
 
     let now = Local::now();
@@ -72,12 +73,12 @@ pub fn format_relative_time(timestamp: i64) -> String {
 
     if duration < TimeDelta::hours(1) {
         let minutes = duration.num_minutes();
-        return format!("{}m ago", minutes);
+        return format!("{minutes}m ago");
     }
 
     if duration < TimeDelta::days(1) {
         let hours = duration.num_hours();
-        return format!("{}h ago", hours);
+        return format!("{hours}h ago");
     }
 
     if duration < TimeDelta::days(2) {
@@ -86,7 +87,7 @@ pub fn format_relative_time(timestamp: i64) -> String {
 
     if duration < TimeDelta::weeks(1) {
         let days = duration.num_days();
-        return format!("{} days ago", days);
+        return format!("{days} days ago");
     }
 
     last_connection.format("%m/%d/%Y").to_string()
@@ -94,7 +95,7 @@ pub fn format_relative_time(timestamp: i64) -> String {
 
 pub fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
     match clipboard.set_text(text) {
-        Ok(_) => {
+        Ok(()) => {
             toast.success(
                 "Topic ID copied to clipboard!".to_owned(),
                 ToastOptions::default(),
@@ -108,7 +109,10 @@ pub fn copy_to_clipboard(mut clipboard: Clipboard, text: &str, toast: Toasts) {
         }
     }
 }
-
+///# Panics 
+/// 
+/// It can panic if `infer::get_from_path` fails
+#[must_use]
 pub fn is_video_file(path: &PathBuf) -> bool {
     if let Some(info) = infer::get_from_path(path).expect("Failed to get file info") {
         return info.matcher_type() == infer::MatcherType::Video;
@@ -124,9 +128,11 @@ pub fn is_video_file(path: &PathBuf) -> bool {
 //     Ok(buffer.into_inner())
 // }
 
+#[must_use]
+#[allow(clippy::cast_precision_loss)]
 pub fn format_file_size(size: u64) -> String {
     if size < 1024 {
-        format!("{} B", size)
+        format!("{size} B")
     } else if size < 1024 * 1024 {
         format!("{:.1} KB", size as f64 / 1024.0)
     } else if size < 1024 * 1024 * 1024 {

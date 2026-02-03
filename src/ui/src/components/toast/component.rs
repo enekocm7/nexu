@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 use dioxus_primitives::toast::{self, ToastProviderProps};
 
+#[allow(clippy::volatile_composites)]
 #[component]
 pub fn ToastProvider(props: ToastProviderProps) -> Element {
     rsx! {

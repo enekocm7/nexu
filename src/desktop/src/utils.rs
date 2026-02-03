@@ -55,7 +55,7 @@ pub mod topics {
                 "sender123".to_string(),
                 id.to_string(),
                 "Hello, World!".to_string(),
-                1234567890,
+                1_234_567_890,
                 true,
             );
             topic.add_message(message);
@@ -81,13 +81,13 @@ pub mod topics {
             let loaded_topics = load_result.unwrap();
             assert_eq!(loaded_topics.len(), 2, "Loaded topics count mismatch");
 
-            let topic1 = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
-            assert_eq!(topic1.id, "topic1");
-            assert_eq!(topic1.name, "Topic One");
+            let topic_1 = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
+            assert_eq!(topic_1.id, "topic1");
+            assert_eq!(topic_1.name, "Topic One");
 
-            let topic2 = loaded_topics.iter().find(|t| t.id == "topic2").unwrap();
-            assert_eq!(topic2.id, "topic2");
-            assert_eq!(topic2.name, "Topic Two");
+            let topic_2 = loaded_topics.iter().find(|t| t.id == "topic2").unwrap();
+            assert_eq!(topic_2.id, "topic2");
+            assert_eq!(topic_2.name, "Topic Two");
         }
 
         #[test]
@@ -101,11 +101,11 @@ pub mod topics {
 
             let loaded_topics = load_topics_from_file_with_path(&test_file_path).unwrap();
 
-            let topic1 = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
-            assert_eq!(topic1.messages.len(), 1, "Message count mismatch");
-            assert_eq!(topic1.last_message, Some("Hello, World!".to_string()));
+            let topic_1 = loaded_topics.iter().find(|t| t.id == "topic1").unwrap();
+            assert_eq!(topic_1.messages.len(), 1, "Message count mismatch");
+            assert_eq!(topic_1.last_message, Some("Hello, World!".to_string()));
 
-            if let ui::desktop::models::Message::Chat(chat_msg) = &topic1.messages[0] {
+            if let ui::desktop::models::Message::Chat(chat_msg) = &topic_1.messages[0] {
                 assert_eq!(chat_msg.content, "Hello, World!");
                 assert_eq!(chat_msg.sender_id, "sender123");
             } else {
@@ -120,13 +120,13 @@ pub mod topics {
 
             let mut topic = create_test_topic("topic1", "Topic One");
             topic.avatar_url = Some("https://example.com/avatar.png".to_string());
-            topic.last_connection = Some(9876543210);
+            topic.last_connection = Some(9_876_543_210);
 
             let message = ChatMessage::new(
                 "sender1".to_string(),
                 "topic1".to_string(),
                 "Test message".to_string(),
-                1234567890,
+                1_234_567_890,
                 true,
             );
             topic.add_message(message);
@@ -143,7 +143,7 @@ pub mod topics {
                 loaded_topic.avatar_url,
                 Some("https://example.com/avatar.png".to_string())
             );
-            assert_eq!(loaded_topic.last_connection, Some(9876543210));
+            assert_eq!(loaded_topic.last_connection, Some(9_876_543_210));
             assert_eq!(loaded_topic.last_message, Some("Test message".to_string()));
             assert_eq!(loaded_topic.messages.len(), 1);
         }
@@ -319,8 +319,8 @@ pub mod contacts {
             Profile {
                 id: id.to_string(),
                 name: name.to_string(),
-                avatar: avatar.map(|s| s.to_string()),
-                last_connection: Offline(1234567890),
+                avatar: avatar.map(str::to_string),
+                last_connection: Offline(1_234_567_890),
             }
         }
 
@@ -334,11 +334,11 @@ pub mod contacts {
                 profile: Profile {
                     id: id.to_string(),
                     name: name.to_string(),
-                    avatar: avatar.map(|s| s.to_string()),
-                    last_connection: Offline(1234567890),
+                    avatar: avatar.map(str::to_string),
+                    last_connection: Offline(1_234_567_890),
                 },
                 messages,
-                last_changed: 1234567890,
+                last_changed: 1_234_567_890,
             }
         }
 
@@ -366,7 +366,7 @@ pub mod contacts {
                 loaded_profile.avatar,
                 Some("https://example.com/avatar.png".to_string())
             );
-            assert_eq!(loaded_profile.last_connection, Offline(1234567890));
+            assert_eq!(loaded_profile.last_connection, Offline(1_234_567_890));
         }
 
         #[test]
@@ -414,28 +414,28 @@ pub mod contacts {
             let loaded_contacts = load_result.unwrap();
             assert_eq!(loaded_contacts.len(), 3, "Loaded contacts count mismatch");
 
-            let contact1 = loaded_contacts
+            let contact_1 = loaded_contacts
                 .iter()
                 .find(|c| c.profile.id == "contact1")
                 .unwrap();
-            assert_eq!(contact1.profile.name, "Alice");
+            assert_eq!(contact_1.profile.name, "Alice");
             assert_eq!(
-                contact1.profile.avatar,
+                contact_1.profile.avatar,
                 Some("https://example.com/alice.png".to_string())
             );
 
-            let contact2 = loaded_contacts
+            let contact_2 = loaded_contacts
                 .iter()
                 .find(|c| c.profile.id == "contact2")
                 .unwrap();
-            assert_eq!(contact2.profile.name, "Bob");
+            assert_eq!(contact_2.profile.name, "Bob");
 
-            let contact3 = loaded_contacts
+            let contact_3 = loaded_contacts
                 .iter()
                 .find(|c| c.profile.id == "contact3")
                 .unwrap();
-            assert_eq!(contact3.profile.name, "Charlie");
-            assert_eq!(contact3.profile.avatar, None);
+            assert_eq!(contact_3.profile.name, "Charlie");
+            assert_eq!(contact_3.profile.avatar, None);
         }
 
         #[test]
@@ -604,7 +604,7 @@ pub mod contacts {
                 id: "user789".to_string(),
                 name: "Test User".to_string(),
                 avatar: Some("https://example.com/test.png".to_string()),
-                last_connection: Offline(1234567890),
+                last_connection: Offline(1_234_567_890),
             };
 
             save_profile_to_path(&profile, &test_file_path).unwrap();
@@ -616,7 +616,7 @@ pub mod contacts {
                 loaded_profile.avatar,
                 Some("https://example.com/test.png".to_string())
             );
-            assert_eq!(loaded_profile.last_connection, Offline(1234567890));
+            assert_eq!(loaded_profile.last_connection, Offline(1_234_567_890));
         }
 
         #[test]

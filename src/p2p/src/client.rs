@@ -1,5 +1,11 @@
+//! # P2P Chat Client
+//!
+//! The `ChatClient` is the core component of the p2p layer. It manages the iroh endpoint,
+//! handles gossip subscriptions for group chats, establishes direct connections for DMs,
+//! and manages blob storage (files/images).
+
 use crate::messages::{DmMessageTypes, GossipMessage, MessageTypes};
-use crate::protocol::{write_frame, DMProtocol, DM_ALPN};
+use crate::protocol::{DM_ALPN, DMProtocol, write_frame};
 use crate::types::Ticket;
 use crate::utils::load_secret_key;
 use flume::Receiver;
@@ -15,7 +21,7 @@ use iroh_blobs::store::fs::FsStore;
 use iroh_blobs::ticket::BlobTicket;
 use iroh_blobs::{BlobsProtocol, Hash};
 use iroh_gossip::api::{Event, GossipReceiver, GossipSender};
-use iroh_gossip::{net::Gossip, proto::TopicId, ALPN};
+use iroh_gossip::{ALPN, net::Gossip, proto::TopicId};
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
@@ -23,24 +29,61 @@ use std::str::FromStr;
 use std::time::Duration;
 use tokio::time::sleep;
 
+/// The main client struct for the P2P chat application.
+///
+/// It wraps an `iroh::Endpoint` and manages:
+/// - Gossip sub-protocols for group chats (`iroh_gossip`).
+/// - Direct Messaging (DM) protocol (`DMProtocol`).
+/// - Blob storage and transfer (`iroh_blobs`).
 pub struct ChatClient {
+    /// The local iroh endpoint.
     endpoint: Endpoint,
+    /// The gossip networking handle.
     gossip: Gossip,
+    /// The router that dispatches incoming connections to protocols.
+    /// Kept alive to ensure protocols remain active.
     _router: Router,
+    /// Map of active gossip senders (one per topic).
     gossip_sender: HashMap<TopicId, GossipSender>,
+    /// Map of active gossip receivers (one per topic), stored here until `listen` is called.
     gossip_receiver: HashMap<TopicId, GossipReceiver>,
+    /// Map of active DM sending streams (one per peer).
     dm_sender: HashMap<EndpointId, SendStream>,
+    /// Background tasks handling incoming gossip messages.
     listen_tasks: HashMap<TopicId, tokio::task::JoinHandle<()>>,
+    /// Receiver for incoming direct messages.
     dm_incoming: Receiver<(EndpointId, DmMessageTypes)>,
+    /// The file system store for blobs.
     store: FsStore,
+    /// Path to the temporary directory for exported blobs.
     temp_store_path: PathBuf,
+    /// Helper for downloading blobs.
     downloader: Downloader,
 }
 
 impl ChatClient {
+    /// Creates a new `ChatClient` instance.
+    ///
+    /// This initializes the iroh endpoint, gossip system, blob store, and DM protocol.
+    ///
+    /// # Arguments
+    ///
+    /// * `path_buf` - The root directory for storing keys and data.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self>` - The initialized client or an error.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The secret key cannot be loaded or generated.
+    /// * The endpoint cannot be bound.
+    /// * The blob store cannot be initialized.
     pub async fn new(path_buf: PathBuf) -> anyhow::Result<Self> {
         let secret = load_secret_key(path_buf.join("key")).await?;
 
+        // Initialize Endpoint with DNS and Pkarr discovery for finding peers.
         let endpoint = Endpoint::empty_builder(RelayMode::Default)
             .secret_key(secret)
             .discovery(PkarrPublisher::n0_dns())
@@ -48,25 +91,29 @@ impl ChatClient {
             .bind()
             .await?;
 
+        // Initialize Gossip protocol.
         let gossip = Gossip::builder()
-            .max_message_size(1_048_576)
+            .max_message_size(1_048_576) // 1MB max message size
             .spawn(endpoint.clone());
 
+        // Initialize DM protocol channels.
         let (dm_tx, dm_rx) = flume::unbounded();
         let dm_protocol = DMProtocol { tx: dm_tx };
 
+        // Initialize Blob store (File System based).
         let store = FsStore::load(path_buf.join("store")).await?;
         let temp_store_path = path_buf.join("temp");
 
         let blobs = BlobsProtocol::new(&store, None);
 
+        // Bind protocols to the router.
         let router = Router::builder(endpoint.clone())
             .accept(ALPN, gossip.clone())
             .accept(DM_ALPN, dm_protocol.clone())
             .accept(iroh_blobs::ALPN, blobs)
             .spawn();
 
-        Ok(ChatClient {
+        Ok(Self {
             endpoint: endpoint.clone(),
             gossip,
             _router: router,
@@ -81,6 +128,25 @@ impl ChatClient {
         })
     }
 
+    /// Starts a background task to listen for messages on a specific gossip topic.
+    ///
+    /// # Arguments
+    ///
+    /// * `topic_id` - The ID of the topic to listen to.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Receiver<MessageTypes>>` - A channel receiver for incoming messages.
+    ///   Returns an error if the client is not subscribed to the topic.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the client has not previously subscribed
+    /// to the specified `topic_id`, meaning no receiver exists for it.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if it fails to send the message to the receiver(it should not fail)
     pub fn listen(&mut self, topic_id: &TopicId) -> anyhow::Result<Receiver<MessageTypes>> {
         let mut receiver = self
             .gossip_receiver
@@ -98,10 +164,10 @@ impl ChatClient {
                             tx.send(message).expect("Failed to send message");
                         }
                     }
-                    Some(Ok(Event::NeighborUp(_))) => continue,
-                    Some(Ok(Event::NeighborDown(_))) => continue,
-                    Some(Ok(Event::Lagged)) => continue,
-                    Some(Err(_)) => continue,
+                    // Ignore connectivity events for now
+                    Some(
+                        Ok(Event::NeighborUp(_) | Event::NeighborDown(_) | Event::Lagged) | Err(_),
+                    ) => {}
                     None => break,
                 }
             }
@@ -112,6 +178,7 @@ impl ChatClient {
         Ok(rx)
     }
 
+    /// Internal helper to subscribe to a gossip topic with a set of bootstrap peers.
     async fn subscribe(
         &mut self,
         topic_id: TopicId,
@@ -128,6 +195,20 @@ impl ChatClient {
         Ok(())
     }
 
+    /// Broadcasts a message to a gossip topic.
+    ///
+    /// The topic is inferred from the message content.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The `MessageTypes` enum to broadcast.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The client is not subscribed to the topic associated with the message.
+    /// * The message serialization fails.
+    /// * The broadcast operation fails.
     pub async fn send(&mut self, message: MessageTypes) -> anyhow::Result<()> {
         let topic_id = match &message {
             MessageTypes::Chat(msg) => msg.topic_id(),
@@ -149,20 +230,46 @@ impl ChatClient {
         Ok(())
     }
 
+    /// Saves a raw byte slice as a blob in the local store.
     pub fn save_blob(&mut self, data: &[u8]) -> AddProgress<'_> {
         self.store.blobs().add_slice(data)
     }
 
+    /// Imports a file from a given path into the local blob store.
     pub fn save_blob_from_path<P: AsRef<Path>>(&mut self, path: P) -> AddProgress<'_> {
         self.store.blobs().add_path(path)
     }
 
+    /// Initiates a download for a blob from a remote peer.
+    ///
+    /// # Arguments
+    ///
+    /// * `blob_ticket` - The ticket containing the hash and peer address.
     pub fn download_blob(&mut self, blob_ticket: &BlobTicket) -> DownloadProgress {
         let downloader = self.downloader.clone();
         downloader.download(blob_ticket.hash(), Some(blob_ticket.addr().id))
     }
 
-    pub async fn get_blob_path(&self, hash: impl Into<Hash>, extension: impl AsRef<OsStr>) -> anyhow::Result<PathBuf> {
+    /// Exports a blob from the internal store to a temporary file path.
+    ///
+    /// # Arguments
+    ///
+    /// * `hash` - The hash of the blob to export.
+    /// * `extension` - The file extension to append to the exported file.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<PathBuf>` - The path to the exported file.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the blob cannot be exported from the store
+    /// (e.g. I/O errors, missing blob).
+    pub async fn get_blob_path(
+        &self,
+        hash: impl Into<Hash>,
+        extension: impl AsRef<OsStr>,
+    ) -> anyhow::Result<PathBuf> {
         let hash: Hash = hash.into();
         let mut path = self.temp_store_path.join(hash.to_string());
         path.add_extension(extension);
@@ -170,30 +277,52 @@ impl ChatClient {
         Ok(path.clone())
     }
 
+    /// Checks if a blob exists and is complete in the local store.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if checking the status of the blob fails.
     pub async fn has_blob(&self, hash: impl Into<Hash>) -> anyhow::Result<bool> {
-        if let BlobStatus::Complete{ .. } = self.store().status(hash).await? {
+        if let BlobStatus::Complete { .. } = self.store().status(hash).await? {
             Ok(true)
         } else {
             Ok(false)
         }
     }
-    
-    pub fn get_blob_store_path(&self) -> &PathBuf {
+
+    /// Returns the path to the temporary directory used for blob exports.
+    #[must_use]
+    pub const fn get_blob_store_path(&self) -> &PathBuf {
         &self.temp_store_path
     }
 
+    /// Returns the local `EndpointId`.
+    #[must_use]
     pub fn peer_id(&self) -> EndpointId {
         self.endpoint.id()
     }
 
-    pub fn endpoint(&self) -> &Endpoint {
+    /// Returns a reference to the local `Endpoint`.
+    #[must_use]
+    pub const fn endpoint(&self) -> &Endpoint {
         &self.endpoint
     }
 
+    /// Returns the local `EndpointAddr` (including relay info).
+    #[must_use]
     pub fn endpoint_addr(&self) -> EndpointAddr {
         self.endpoint.addr()
     }
 
+    /// Creates a new random gossip topic and subscribes to it.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Ticket>` - A ticket that can be shared to invite others.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if subscription to the new topic fails.
     pub async fn create_topic(&mut self) -> anyhow::Result<Ticket> {
         let topic_id = TopicId::from_bytes(rand::random());
 
@@ -207,6 +336,19 @@ impl ChatClient {
         Ok(ticket)
     }
 
+    /// Joins an existing gossip topic using a ticket.
+    ///
+    /// # Arguments
+    ///
+    /// * `ticket` - The invitation ticket.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<TopicId>` - The ID of the joined topic.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if subscription to the topic fails.
     pub async fn join_topic(&mut self, ticket: Ticket) -> anyhow::Result<TopicId> {
         let topic_id = ticket.topic;
         let endpoints = ticket.endpoints;
@@ -216,12 +358,24 @@ impl ChatClient {
         Ok(topic_id)
     }
 
+    /// Joins a topic using a base58 string representation of a ticket.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * The ticket string cannot be parsed.
+    /// * Subscription to the topic fails.
     pub async fn join_topic_from_string(&mut self, ticket_str: &str) -> anyhow::Result<TopicId> {
         let ticket = FromStr::from_str(ticket_str)?;
         self.join_topic(ticket).await
     }
 
-    pub async fn leave_topic(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
+    /// Leaves a gossip topic, stopping listeners and removing internal state.
+    ///
+    /// # Errors
+    ///
+    /// This function currently always returns `Ok`, but returns `Result` for future compatibility.
+    pub fn leave_topic(&mut self, topic_id: &TopicId) -> anyhow::Result<()> {
         self.gossip_sender.remove(topic_id);
         self.gossip_receiver.remove(topic_id);
         if let Some(handle) = self.listen_tasks.remove(topic_id) {
@@ -230,6 +384,15 @@ impl ChatClient {
         Ok(())
     }
 
+    /// Establishes a direct connection (DM) to a peer.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The address of the peer to connect to.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the connection attempt fails.
     pub async fn connect_peer(&mut self, addr: impl Into<EndpointAddr>) -> anyhow::Result<()> {
         let addr: EndpointAddr = addr.into();
 
@@ -237,15 +400,30 @@ impl ChatClient {
             return Ok(());
         }
 
-        let conn = self.endpoint.connect(addr.to_owned(), DM_ALPN).await?;
+        let conn = self.endpoint.connect(addr, DM_ALPN).await?;
 
         let (send, _recv) = conn.open_bi().await?;
 
-        self.dm_sender.insert(addr.id, send);
+        self.dm_sender.insert(conn.remote_id(), send);
 
         Ok(())
     }
 
+    /// Sends a Direct Message (DM) to a specific peer.
+    ///
+    /// Note: `connect_peer` must be called first to establish the channel.
+    ///
+    /// # Arguments
+    ///
+    /// * `addr` - The destination address.
+    /// * `message` - The DM message content.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if:
+    /// * There is no established DM channel (sender) for the address.
+    /// * Serialization of the message fails.
+    /// * Writing the frame to the stream fails.
     pub async fn send_dm(
         &mut self,
         addr: impl Into<EndpointAddr>,
@@ -264,11 +442,15 @@ impl ChatClient {
         Ok(())
     }
 
+    /// Returns a receiver channel for incoming Direct Messages.
+    #[must_use]
     pub fn incoming_dms(&self) -> Receiver<(EndpointId, DmMessageTypes)> {
         self.dm_incoming.clone()
     }
 
-    pub fn store(&self) -> &FsStore {
+    /// Returns a reference to the underlying `FsStore` for direct blob operations.
+    #[must_use]
+    pub const fn store(&self) -> &FsStore {
         &self.store
     }
 }
@@ -278,7 +460,7 @@ mod tests {
     use super::*;
     use crate::ChatMessage;
     use serial_test::serial;
-    use tokio::time::{sleep, Duration};
+    use tokio::time::{Duration, sleep};
 
     #[tokio::test]
     #[serial]
@@ -337,7 +519,7 @@ mod tests {
         let client2_id = client2.peer_id();
 
         let message1 = "Hello from client1";
-        let timestamp1 = 1625247600000;
+        let timestamp1 = 1_625_247_600_000;
         client1
             .send(MessageTypes::Chat(ChatMessage::new(
                 client1_id,
@@ -351,7 +533,7 @@ mod tests {
         sleep(Duration::from_secs(1)).await;
 
         let message2 = "Hello from client2";
-        let timestamp2 = 1625247600001;
+        let timestamp2 = 1_625_247_600_001;
         client2
             .send(MessageTypes::Chat(ChatMessage::new(
                 client2_id,
@@ -366,7 +548,7 @@ mod tests {
         let mut messages_received_by_client2 = Vec::new();
 
         tokio::select! {
-            _ = async {
+            () = async {
                 let collection_duration = Duration::from_secs(5);
                 let start = tokio::time::Instant::now();
 
@@ -382,7 +564,7 @@ mod tests {
                                 messages_received_by_client2.push(chat_message);
                             }
                         }
-                        _ = sleep(Duration::from_millis(100)) => {
+                        () = sleep(Duration::from_millis(100)) => {
                             if start.elapsed() >= collection_duration {
                                 break;
                             }
@@ -390,7 +572,7 @@ mod tests {
                     }
                 }
             } => {}
-            _ = sleep(Duration::from_secs(20)) => {
+            () = sleep(Duration::from_secs(20)) => {
                 panic!("Test timed out");
             }
         }
@@ -460,7 +642,7 @@ mod tests {
         let client3_id = client3.peer_id();
 
         let message1 = "Hello from client1";
-        let timestamp1 = 1625247600000;
+        let timestamp1 = 1_625_247_600_000;
         client1
             .send(MessageTypes::Chat(ChatMessage::new(
                 client1_id,
@@ -472,7 +654,7 @@ mod tests {
             .expect("Failed to send message from client1");
 
         let message2 = "Hello from client2";
-        let timestamp2 = 1625247600001;
+        let timestamp2 = 1_625_247_600_001;
         client2
             .send(MessageTypes::Chat(ChatMessage::new(
                 client2_id,
@@ -484,7 +666,7 @@ mod tests {
             .expect("Failed to send message from client2");
 
         let message3 = "Hello from client3";
-        let timestamp3 = 1625247600002;
+        let timestamp3 = 1_625_247_600_002;
         client3
             .send(MessageTypes::Chat(ChatMessage::new(
                 client3_id,
@@ -500,7 +682,7 @@ mod tests {
         let mut messages_received_by_client3 = Vec::new();
 
         tokio::select! {
-            _ = async {
+            () = async {
                 let collection_duration = Duration::from_secs(5);
                 let start = tokio::time::Instant::now();
 
@@ -521,7 +703,7 @@ mod tests {
                                 messages_received_by_client3.push(chat_message);
                             }
                         }
-                        _ = sleep(Duration::from_millis(100)) => {
+                        () = sleep(Duration::from_millis(100)) => {
                             if start.elapsed() >= collection_duration {
                                 break;
                             }
@@ -529,7 +711,7 @@ mod tests {
                     }
                 }
             } => {}
-            _ = sleep(Duration::from_secs(20)) => {
+            () = sleep(Duration::from_secs(20)) => {
                 panic!("Test timed out");
             }
         }
@@ -602,7 +784,7 @@ mod tests {
                 id: client1_id,
                 username: "user1".to_string(),
                 avatar_url: None,
-                last_connection: 12345,
+                last_connection: 12_345,
             });
 
         client1
@@ -766,12 +948,12 @@ mod tests {
             .await
             .expect("Failed to connect");
 
-        for i in 0..5 {
+        for i in 0..5u64 {
             let msg = DmMessageTypes::ProfileMetadata(crate::messages::DmProfileMetadataMessage {
                 id: client1_id,
-                username: format!("user1_message_{}", i),
+                username: format!("user1_message_{i}"),
                 avatar_url: None,
-                last_connection: i as u64,
+                last_connection: i,
             });
             client1
                 .send_dm(client2_id, msg)
@@ -790,8 +972,8 @@ mod tests {
             assert_eq!(sender, client1_id);
             match received_msg {
                 DmMessageTypes::ProfileMetadata(meta) => {
-                    assert_eq!(meta.username, format!("user1_message_{}", i));
-                    assert_eq!(meta.last_connection, i as u64);
+                    assert_eq!(meta.username, format!("user1_message_{i}"));
+                    assert_eq!(meta.last_connection, i);
                 }
                 _ => panic!("Expected ProfileMetadata"),
             }
@@ -825,7 +1007,7 @@ mod tests {
             sender: client1_id,
             receiver: client2_id,
             content: "Hello DM".to_string(),
-            timestamp: 123456789,
+            timestamp: 123_456_789,
         });
 
         client1
@@ -847,7 +1029,7 @@ mod tests {
             DmMessageTypes::Chat(chat_msg) => {
                 assert_eq!(chat_msg.sender, client1_id);
                 assert_eq!(chat_msg.content, "Hello DM");
-                assert_eq!(chat_msg.timestamp, 123456789);
+                assert_eq!(chat_msg.timestamp, 123_456_789);
             }
             _ => panic!("Expected Chat message"),
         }
@@ -882,7 +1064,7 @@ mod tests {
             .await
             .expect("Failed to create chat client");
 
-        let test_data: Vec<u8> = (0..1024 * 1024).map(|i| (i % 256) as u8).collect();
+        let test_data: Vec<u8> = (0..1024 * 1024).map(|i| u8::try_from(i % 256).unwrap()).collect();
 
         let progress = client.save_blob(&test_data).await;
         let result = progress.expect("Failed to save blob");
@@ -962,7 +1144,7 @@ mod tests {
 
         sleep(Duration::from_secs(1)).await;
 
-        let test_data: Vec<u8> = (0..100 * 1024).map(|i| (i % 256) as u8).collect();
+        let test_data: Vec<u8> = (0..100 * 1024).map(|i| u8::try_from(i % 256).unwrap()).collect();
         let progress = client1.save_blob(&test_data).await;
         let result = progress.expect("Failed to save blob");
 

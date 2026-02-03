@@ -85,6 +85,7 @@ impl DesktopClient {
         Ok(())
     }
 
+    #[allow(clippy::cast_sign_loss)]
     pub async fn get_chat_message(
         &self,
         ticket_str: &str,
@@ -97,13 +98,13 @@ impl DesktopClient {
 
         let ticket = Ticket::from_str(ticket_str)?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
-        let client_guard = client.lock().await;
-        let sender = client_guard.peer_id();
+        let sender = client.lock().await.peer_id();
 
         let message = p2p::ChatMessage::new(sender, message.to_string(), timestamp, ticket.topic);
         Ok(message)
     }
 
+    #[allow(clippy::cast_sign_loss)]
     pub async fn get_dm_chat_message(
         &self,
         id: &str,
@@ -114,8 +115,7 @@ impl DesktopClient {
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
-        let client_guard = client.lock().await;
-        let sender = client_guard.peer_id();
+        let sender = client.lock().await.peer_id();
         let endpoint_id = id.parse::<EndpointId>()?;
         let timestamp = chrono::Utc::now().timestamp_millis() as u64;
 
@@ -132,14 +132,14 @@ impl DesktopClient {
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
 
         let ticket = Ticket::from_str(ticket_str)?;
-        client.lock().await.leave_topic(&ticket.topic).await?;
+        client.lock().await.leave_topic(&ticket.topic)?;
 
         self.message_receivers.remove(ticket_str);
 
         Ok(())
     }
 
-    pub fn get_message_receiver(&mut self) -> &mut HashMap<String, Receiver<MessageTypes>> {
+    pub const fn get_message_receiver(&mut self) -> &mut HashMap<String, Receiver<MessageTypes>> {
         &mut self.message_receivers
     }
 
@@ -154,7 +154,7 @@ impl DesktopClient {
         Ok(guard.incoming_dms())
     }
 
-    pub async fn connect_to_user(&mut self, id: &str) -> anyhow::Result<()> {
+    pub async fn connect_to_user(&self, id: &str) -> anyhow::Result<()> {
         let client = self
             .client
             .get()
@@ -188,9 +188,7 @@ impl DesktopClient {
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let mut guard = client.lock().await;
-        let progress = guard.save_blob(blob.as_slice());
-        let stream = progress.stream().await;
+        let stream = client.lock().await.save_blob(blob.as_slice()).stream().await;
         Ok(Box::pin(stream))
     }
 
@@ -202,9 +200,7 @@ impl DesktopClient {
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let mut guard = client.lock().await;
-        let progress = guard.save_blob_from_path(&blob_path);
-        let stream = progress.stream().await;
+        let stream = client.lock().await.save_blob_from_path(&blob_path).stream().await;
         Ok(Box::pin(stream))
     }
 
@@ -216,8 +212,8 @@ impl DesktopClient {
             .client
             .get()
             .ok_or_else(|| anyhow!("Client is not initialized"))?;
-        let mut guard = client.lock().await;
-        Ok(guard.download_blob(blob_ticket))
+        
+        Ok(client.lock().await.download_blob(blob_ticket))
     }
 
     pub async fn get_blob_path(
@@ -232,7 +228,7 @@ impl DesktopClient {
         let guard = client.lock().await;
         guard.get_blob_path(hash, extension).await
     }
-    
+
     pub async fn get_store_path(&self) -> PathBuf {
         let client = self
             .client

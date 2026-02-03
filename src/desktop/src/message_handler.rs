@@ -14,7 +14,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use ui::desktop::models::{AppState, ChatMessage, DmBlobMessage, DmChatMessage, Message};
 
-pub fn handle_chat_message(mut state: Signal<AppState>, topic: &str, msg: p2p::ChatMessage) {
+pub fn handle_chat_message(mut state: Signal<AppState>, topic: &str, msg: &p2p::ChatMessage) {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
             let message = ChatMessage::new(
@@ -64,10 +64,11 @@ pub fn handle_topic_metadata(
     }
 }
 
+#[allow(clippy::cast_sign_loss)]
 pub fn handle_join_topic(
     mut state: Signal<AppState>,
     topic: &str,
-    join_message: p2p::JoinMessage,
+    join_message: &p2p::JoinMessage,
 ) -> (
     Option<TopicMetadataMessage>,
     Option<p2p::TopicMessagesMessage>,
@@ -97,13 +98,13 @@ pub fn handle_join_topic(
             })
             .collect();
 
-        if !chat_messages.is_empty() {
+        if chat_messages.is_empty() {
+            None
+        } else {
             Some(p2p::TopicMessagesMessage::new(
                 join_message.topic,
                 chat_messages,
             ))
-        } else {
-            None
         }
     });
 
@@ -122,7 +123,8 @@ pub fn handle_join_topic(
     (metadata_to_send, messages_to_send)
 }
 
-pub fn handle_leave_topic(mut state: Signal<AppState>, topic: &str, leave_msg: p2p::LeaveMessage) {
+#[allow(clippy::cast_sign_loss)]
+pub fn handle_leave_topic(mut state: Signal<AppState>, topic: &str, leave_msg: &p2p::LeaveMessage) {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
             let sender_id = leave_msg.endpoint.to_string();
@@ -136,10 +138,11 @@ pub fn handle_leave_topic(mut state: Signal<AppState>, topic: &str, leave_msg: p
     });
 }
 
+#[allow(clippy::cast_sign_loss)]
 pub fn handle_disconnect_topic(
     mut state: Signal<AppState>,
     topic: &str,
-    disconnect_msg: p2p::DisconnectMessage,
+    disconnect_msg: &p2p::DisconnectMessage,
 ) {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
@@ -181,7 +184,7 @@ pub fn handle_blob_message(mut state: Signal<AppState>, topic: &str, msg: p2p::B
 pub fn handle_topic_messages(
     mut state: Signal<AppState>,
     topic: &str,
-    topic_messages_msg: p2p::TopicMessagesMessage,
+    topic_messages_msg: &p2p::TopicMessagesMessage,
 ) -> Option<Vec<p2p::ChatMessage>> {
     state.with_mut(|s| {
         if let Some(topic_obj) = s.get_topic_mutable(topic) {
@@ -229,17 +232,18 @@ pub fn handle_topic_messages(
         let missing: Vec<p2p::ChatMessage> = existing_messages
             .iter()
             .filter(|msg| !received_messages.contains(msg))
-            .map(|msg| msg.to_p2p_message())
+            .map(ChatMessage::to_p2p_message)
             .collect();
 
-        if !missing.is_empty() {
-            Some(missing)
-        } else {
+        if missing.is_empty() {
             None
+        } else {
+            Some(missing)
         }
     })
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn process_message(
     client_ref: &Arc<Mutex<DesktopClient>>,
     state: Signal<AppState>,
@@ -248,7 +252,7 @@ pub async fn process_message(
 ) {
     match message {
         MessageTypes::Chat(msg) => {
-            handle_chat_message(state, &topic, msg);
+            handle_chat_message(state, &topic, &msg);
         }
         MessageTypes::TopicMetadata(metadata) => {
             if let Some(metadata_to_send) = handle_topic_metadata(state, &topic, metadata)
@@ -258,12 +262,12 @@ pub async fn process_message(
                     .send(MessageTypes::TopicMetadata(metadata_to_send))
                     .await
             {
-                eprintln!("Failed to send TopicMetadataMessage: {}", e);
+                eprintln!("Failed to send TopicMetadataMessage: {e}");
             }
         }
         MessageTypes::JoinTopic(join_message) => {
             let (metadata_to_send, messages_to_send) =
-                handle_join_topic(state, &topic, join_message);
+                handle_join_topic(state, &topic, &join_message);
 
             if let Some(metadata) = metadata_to_send
                 && let Err(e) = client_ref
@@ -272,7 +276,7 @@ pub async fn process_message(
                     .send(MessageTypes::TopicMetadata(metadata))
                     .await
             {
-                eprintln!("Failed to send TopicMetadataMessage: {}", e);
+                eprintln!("Failed to send TopicMetadataMessage: {e}");
             }
 
             if let Some(messages) = messages_to_send
@@ -282,17 +286,18 @@ pub async fn process_message(
                     .send(MessageTypes::TopicMessages(messages))
                     .await
             {
-                eprintln!("Failed to send TopicMessagesMessage: {}", e);
+                eprintln!("Failed to send TopicMessagesMessage: {e}");
             }
         }
         MessageTypes::LeaveTopic(leave_msg) => {
-            handle_leave_topic(state, &topic, leave_msg);
+            handle_leave_topic(state, &topic, &leave_msg);
         }
         MessageTypes::DisconnectTopic(disconnect_msg) => {
-            handle_disconnect_topic(state, &topic, disconnect_msg);
+            handle_disconnect_topic(state, &topic, &disconnect_msg);
         }
         MessageTypes::TopicMessages(topic_messages_msg) => {
-            if let Some(missing_messages) = handle_topic_messages(state, &topic, topic_messages_msg)
+            if let Some(missing_messages) =
+                handle_topic_messages(state, &topic, &topic_messages_msg)
                 && let Ok(ticket) = Ticket::from_str(&topic)
             {
                 let sync_message = p2p::TopicMessagesMessage::new(ticket.topic, missing_messages);
@@ -303,7 +308,7 @@ pub async fn process_message(
                     .send(MessageTypes::TopicMessages(sync_message))
                     .await
                 {
-                    eprintln!("Failed to send missing messages: {}", e);
+                    eprintln!("Failed to send missing messages: {e}");
                 }
             }
         }
@@ -316,16 +321,16 @@ pub async fn process_message(
 pub async fn collect_messages(
     client_ref: &Arc<Mutex<DesktopClient>>,
 ) -> Vec<(String, MessageTypes)> {
-    let mut client = client_ref.lock().await;
     let mut msgs = Vec::new();
-    for (topic, receiver) in client.get_message_receiver() {
+    for (topic, receiver) in client_ref.lock().await.get_message_receiver() {
         while let Ok(message) = receiver.try_recv() {
-            msgs.push((topic.to_string(), message));
+            msgs.push((topic.clone(), message));
         }
     }
     msgs
 }
 
+#[allow(clippy::future_not_send)]
 pub async fn process_all_messages(client_ref: &Arc<Mutex<DesktopClient>>, state: Signal<AppState>) {
     let messages = collect_messages(client_ref).await;
 
@@ -336,11 +341,11 @@ pub async fn process_all_messages(client_ref: &Arc<Mutex<DesktopClient>>, state:
     let dm_messages = collect_dm_messages(client_ref).await;
 
     for (_sender, message) in dm_messages {
-        process_dm_message(client_ref.clone(), state, message).await;
+        process_dm_message(client_ref.clone(), state, message);
     }
 
     if let Err(e) = save_topics_to_file(&state().get_all_topics()) {
-        eprintln!("Failed to save topics to file: {}", e);
+        eprintln!("Failed to save topics to file: {e}");
     }
 }
 
@@ -351,7 +356,7 @@ pub trait P2PMessageConvert {
 
 impl P2PMessageConvert for ChatMessage {
     fn from_p2p_message(msg: &p2p::ChatMessage) -> Self {
-        ChatMessage::new(
+        Self::new(
             msg.sender.to_string(),
             msg.topic_id.to_string(),
             msg.content.clone(),
@@ -371,7 +376,7 @@ impl P2PMessageConvert for ChatMessage {
     }
 }
 
-pub fn handle_dm_chat_message(mut state: Signal<AppState>, msg: P2pDmChatMessage) {
+pub fn handle_dm_chat_message(mut state: Signal<AppState>, msg: &P2pDmChatMessage) {
     state.with_mut(|s| {
         let sender_id = msg.sender.to_string();
         let receiver_id = msg.receiver.to_string();
@@ -433,7 +438,7 @@ pub fn handle_dm_blob_message(mut state: Signal<AppState>, msg: P2pDmBlobMessage
 pub fn handle_dm_join_petition(
     client_ref: Arc<Mutex<DesktopClient>>,
     mut state: Signal<AppState>,
-    msg: DmJoinMessage,
+    msg: &DmJoinMessage,
 ) {
     let petitioner_id = msg.petitioner.to_string();
 
@@ -456,10 +461,10 @@ pub fn handle_dm_join_petition(
     );
 
     spawn(async move {
-        let mut client = client_ref.lock().await;
+        let client = client_ref.lock().await;
 
         if let Err(e) = client.connect_to_user(&petitioner_id).await {
-            eprintln!("Failed to connect to petitioner: {}", e);
+            eprintln!("Failed to connect to petitioner: {e}");
             return;
         }
 
@@ -470,12 +475,12 @@ pub fn handle_dm_join_petition(
             )
             .await
         {
-            eprintln!("Failed to send profile metadata: {}", e);
+            eprintln!("Failed to send profile metadata: {e}");
         }
     });
 
     if let Err(e) = crate::utils::contacts::save_contacts(&state().get_all_contacts_chat()) {
-        eprintln!("Failed to save contacts: {}", e);
+        eprintln!("Failed to save contacts: {e}");
     }
 }
 
@@ -496,20 +501,20 @@ pub async fn collect_dm_messages(
     msgs
 }
 
-pub async fn process_dm_message(
+pub fn process_dm_message(
     client_ref: Arc<Mutex<DesktopClient>>,
     state: Signal<AppState>,
     message: DmMessageTypes,
 ) {
     match message {
         DmMessageTypes::Chat(msg) => {
-            handle_dm_chat_message(state, msg);
+            handle_dm_chat_message(state, &msg);
         }
         DmMessageTypes::ProfileMetadata(msg) => {
             handle_dm_profile_metadata(state, msg);
         }
         DmMessageTypes::JoinPetition(msg) => {
-            handle_dm_join_petition(client_ref.clone(), state, msg);
+            handle_dm_join_petition(client_ref, state, &msg);
         }
         DmMessageTypes::Blob(msg) => {
             handle_dm_blob_message(state, msg);

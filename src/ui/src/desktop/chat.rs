@@ -23,30 +23,16 @@ pub fn Chat<C: Controller + 'static>(
     let state = app_state();
     let mut show_attachment = use_signal(|| false);
 
-    let topic = if let Some(id) = &topic_id {
-        state.get_topic(id)
-    } else {
-        None
-    };
+    let topic = topic_id.as_ref().and_then(|id| state.get_topic(id));
 
-    let contact = if let Some(id) = &topic_id {
-        state.get_contact_chat(id)
-    } else {
-        None
-    };
+    let contact = topic_id.as_ref().and_then(|id| state.get_contact_chat(id));
 
-    let (messages, title_text, avatar_url, chat_id) = if let Some(topic) = topic {
-        (
-            topic.messages.clone(),
-            topic.name.clone(),
-            topic
-                .avatar_url
-                .clone()
-                .unwrap_or(DEFAULT_AVATAR.to_string()),
-            topic.id.clone(),
-        )
-    } else if let Some(contact) = contact {
-        (
+    let (messages, title_text, avatar_url, chat_id) = topic.map_or_else(|| contact.map_or_else(|| (
+            Vec::<Message>::new(),
+            String::new(),
+            String::new(),
+            String::new(),
+        ), |contact| (
             contact
                 .messages
                 .iter()
@@ -58,19 +44,26 @@ pub fn Chat<C: Controller + 'static>(
                 .profile
                 .avatar
                 .clone()
-                .unwrap_or(DEFAULT_AVATAR.to_string()),
+                .unwrap_or_else(|| DEFAULT_AVATAR.to_string()),
             contact.profile.id.clone(),
-        )
+        )), |topic| (
+            topic.messages.clone(),
+            topic.name.clone(),
+            topic
+                .avatar_url
+                .clone()
+                .unwrap_or_else(|| DEFAULT_AVATAR.to_string()),
+            topic.id.clone(),
+        ));
+    if chat_id.is_empty() {
+        rsx! {
+            div { class: "flex-1 flex items-center justify-center bg-bg-input text-text-secondary",
+                h2 { class: "text-[clamp(1.2rem,3vw,1.8rem)] font-medium m-0",
+                    "Select a chat to start messaging"
+                }
+            }
+        }
     } else {
-        (
-            Vec::<Message>::new(),
-            String::new(),
-            String::new(),
-            String::new(),
-        )
-    };
-
-    if !chat_id.is_empty() {
         let mut message_input = use_signal(String::new);
 
         let mut tracked_id = use_signal(|| chat_id.clone());
@@ -85,14 +78,7 @@ pub fn Chat<C: Controller + 'static>(
             let state = app_state();
             let current_id = tracked_id.read();
 
-            let count = if let Some(t) = state.get_topic(&current_id) {
-                t.messages.len()
-            } else if let Some(c) = state.get_contact_chat(&current_id) {
-                c.messages.len()
-            } else {
-                0
-            };
-
+            let count = state.get_topic(&current_id).map_or_else(|| state.get_contact_chat(&current_id).map_or(0, |c| c.messages.len()), |t| t.messages.len());
             if count != *last_msg_count.read() {
                 last_msg_count.set(count);
                 document::eval(
@@ -112,7 +98,7 @@ pub fn Chat<C: Controller + 'static>(
             let id = chat_id.clone();
             let is_dm = contact.is_some();
             let controller = controller;
-            move |_| {
+            move |()| {
                 let content = message_input().trim().to_string();
                 if !content.is_empty() {
                     if is_dm {
@@ -133,7 +119,7 @@ pub fn Chat<C: Controller + 'static>(
                 let mut show_attachment = show_attachment;
                 spawn(async move {
                     for file in files {
-                        let name = file.name().to_owned();
+                        let name = file.name().clone();
 
                         if blob_type == BlobType::Image {
                             blob_type = if is_video_file(&file.path()) {
@@ -141,7 +127,7 @@ pub fn Chat<C: Controller + 'static>(
                             } else {
                                 BlobType::Image
                             };
-                        };
+                        }
 
                         if is_dm {
                             controller.read().send_blob_to_user(
@@ -159,7 +145,7 @@ pub fn Chat<C: Controller + 'static>(
                             );
                         }
                     }
-                    show_attachment.set(false)
+                    show_attachment.set(false);
                 });
             }
         };
@@ -192,7 +178,7 @@ pub fn Chat<C: Controller + 'static>(
                 if show_attachment() {
                     AttachComponent {
                         on_select_media: handle_media_submit,
-                        on_close: move |_| show_attachment.set(false),
+                        on_close: move |()| show_attachment.set(false),
                     }
                 }
                 div { class: "bg-bg-dark py-3.75 px-5 flex gap-3 items-center",
@@ -224,14 +210,6 @@ pub fn Chat<C: Controller + 'static>(
                         },
                         "Send"
                     }
-                }
-            }
-        }
-    } else {
-        rsx! {
-            div { class: "flex-1 flex items-center justify-center bg-bg-input text-text-secondary",
-                h2 { class: "text-[clamp(1.2rem,3vw,1.8rem)] font-medium m-0",
-                    "Select a chat to start messaging"
                 }
             }
         }
@@ -378,15 +356,12 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                 &message.blob_name,
             );
 
-            let blob_path = match blob_path {
-                Ok(path) => path,
-                Err(_) => {
-                    toast.error(
-                        "Failed to load media blob.".to_string(),
-                        ToastOptions::default(),
-                    );
-                    return rsx! {};
-                }
+            let Ok(blob_path) = blob_path else {
+                toast.error(
+                    "Failed to load media blob.".to_string(),
+                    ToastOptions::default(),
+                );
+                return rsx! {};
             };
 
             let blob_url = controller
@@ -404,7 +379,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                     }
                     match message.blob_type {
                         BlobType::Image | BlobType::BigImage => {
-                            let mut thumbnail_data = use_signal(|| String::from(""));
+                            let mut thumbnail_data = use_signal(String::new);
 
                             use_effect(move || {
                                 let path = blob_path.clone();
@@ -414,7 +389,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                         Err(e) => {
                                             toast
                                                 .error(
-                                                    format!("Failed to open image: {}", e),
+                                                    format!("Failed to open image: {e}"),
                                                     ToastOptions::default(),
                                                 );
                                             return;
@@ -425,7 +400,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                         Err(e) => {
                                             toast
                                                 .error(
-                                                    format!("Failed to detect image format: {}", e),
+                                                    format!("Failed to detect image format: {e}"),
                                                     ToastOptions::default(),
                                                 );
                                             return;
@@ -436,7 +411,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                         Err(e) => {
                                             toast
                                                 .error(
-                                                    format!("Failed to decode image: {}", e),
+                                                    format!("Failed to decode image: {e}"),
                                                     ToastOptions::default(),
                                                 );
                                             return;
@@ -447,13 +422,13 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                     if let Err(e) = thumbnail.write_to(&mut buf, WebP) {
                                         toast
                                             .error(
-                                                format!("Failed to create thumbnail: {}", e),
+                                                format!("Failed to create thumbnail: {e}"),
                                                 ToastOptions::default(),
                                             );
                                         return;
                                     }
                                     let b64 = BASE64_STANDARD.encode(buf.get_ref());
-                                    thumbnail_data.set(format!("data:image/webp;base64,{}", b64));
+                                    thumbnail_data.set(format!("data:image/webp;base64,{b64}"));
                                 });
                             });
                             rsx! {
@@ -461,7 +436,7 @@ pub fn ChatMessageComponent<C: Controller + 'static>(
                                     class: "max-w-96 rounded-xl shadow-md cursor-pointer",
                                     src: "{thumbnail_data.read()}",
                                     onclick: move |_| {
-                                        show_image_details.set(Some((thumbnail_data(), message.blob_name.clone())))
+                                        show_image_details.set(Some((thumbnail_data(), message.blob_name.clone())));
                                     },
                                 }
                             }

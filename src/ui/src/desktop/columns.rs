@@ -232,37 +232,37 @@ pub fn ColumnItem(
         DEFAULT_AVATAR.to_string()
     };
 
-    let time_display = if let Some(timestamp) = last_connection {
-        format_relative_time(timestamp as i64)
-    } else {
-        String::from("")
-    };
+    let time_display = last_connection.map_or_else(String::new, |timestamp| {
+        format_relative_time(i64::try_from(timestamp).unwrap())
+    });
 
-    let name_display = if let Some(query) = highlight.as_ref().filter(|q| !q.is_empty()) {
-        let name_lower = name.to_lowercase();
-        let query_lower = query.to_lowercase();
-        if let Some(idx) = name_lower.find(&query_lower) {
-            if name.len() == name_lower.len() {
-                let end = idx + query_lower.len();
-                let pre = &name[..idx];
-                let mat = &name[idx..end];
-                let post = &name[end..];
-                rsx! {
-                    span {
-                        "{pre}"
-                        span { class: "text-accent", "{mat}" }
-                        "{post}"
+    let name_display = highlight.as_ref().filter(|q| !q.is_empty()).map_or_else(
+        || rsx! { "{name}" },
+        |query| {
+            let name_lower = name.to_lowercase();
+            let query_lower = query.to_lowercase();
+            name_lower.find(&query_lower).map_or_else(
+                || rsx! { "{name}" },
+                |idx| {
+                    if name.len() == name_lower.len() {
+                        let end = idx + query_lower.len();
+                        let pre = &name[..idx];
+                        let mat = &name[idx..end];
+                        let post = &name[end..];
+                        rsx! {
+                            span {
+                                "{pre}"
+                                span { class: "text-accent", "{mat}" }
+                                "{post}"
+                            }
+                        }
+                    } else {
+                        rsx! { "{name}" }
                     }
-                }
-            } else {
-                rsx! { "{name}" }
-            }
-        } else {
-            rsx! { "{name}" }
-        }
-    } else {
-        rsx! { "{name}" }
-    };
+                },
+            )
+        },
+    );
 
     rsx! {
         div {

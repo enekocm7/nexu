@@ -2,6 +2,7 @@
 pub mod mobile_components {
     use dioxus::prelude::*;
 
+    #[allow(clippy::volatile_composites)]
     #[component]
     pub fn Mobile() -> Element {
         rsx! {

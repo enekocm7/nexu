@@ -5,34 +5,53 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
+/// Enum representing the different types of messages that can be sent over the gossip network.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum MessageTypes {
+    /// A regular chat message sent to a topic.
     Chat(ChatMessage),
+    /// A notification that a peer has joined a topic.
     JoinTopic(JoinMessage),
+    /// A notification that a peer has left a topic.
     LeaveTopic(LeaveMessage),
+    /// A notification that a peer has disconnected from a topic.
     DisconnectTopic(DisconnectMessage),
+    /// Metadata about a topic (name, avatar, members).
     TopicMetadata(TopicMetadataMessage),
+    /// A batch of messages for a topic, useful for syncing history.
     TopicMessages(TopicMessagesMessage),
+    /// A notification about a blob (file/image) shared in the topic.
     Blob(BlobMessage),
 }
 
+/// A trait for messages that are associated with a specific gossip topic.
 pub trait GossipMessage: Serialize {
+    /// Returns the topic ID associated with this message.
     fn topic_id(&self) -> &TopicId;
 }
 
+/// Represents a file or binary object shared in a chat.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlobMessage {
+    /// The topic where this blob was shared.
     pub topic: TopicId,
+    /// The ID of the sender.
     pub sender: EndpointId,
+    /// The name of the file/blob.
     pub name: String,
+    /// The size of the blob in bytes.
     pub size: u64,
+    /// The hash of the blob, used to retrieve it from the iroh-blobs store.
     pub hash: Hash,
+    /// The timestamp when the blob was shared.
     pub timestamp: u64,
+    /// The type of blob (Image, File, etc.).
     pub blob_type: BlobType,
 }
 
 impl BlobMessage {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         topic: TopicId,
         sender: EndpointId,
         name: String,
@@ -41,7 +60,7 @@ impl BlobMessage {
         timestamp: u64,
         blob_type: BlobType,
     ) -> Self {
-        BlobMessage {
+        Self {
             topic,
             sender,
             name,
@@ -53,7 +72,8 @@ impl BlobMessage {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+/// Categorizes the type of content in a [`BlobMessage`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BlobType {
     Image,
     BigImage,
@@ -69,6 +89,8 @@ impl GossipMessage for BlobMessage {
     }
 }
 
+/// Represents a collection of chat messages for a specific topic.
+/// Often used for syncing history or sending batched updates.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TopicMessagesMessage {
     pub topic: TopicId,
@@ -76,12 +98,14 @@ pub struct TopicMessagesMessage {
 }
 
 impl TopicMessagesMessage {
-    pub fn new(topic: TopicId, messages: Vec<ChatMessage>) -> Self {
-        TopicMessagesMessage { topic, messages }
+    #[must_use]
+    pub const fn new(topic: TopicId, messages: Vec<ChatMessage>) -> Self {
+        Self { topic, messages }
     }
 
-    pub fn new_empty(topic: TopicId) -> Self {
-        TopicMessagesMessage {
+    #[must_use]
+    pub const fn new_empty(topic: TopicId) -> Self {
+        Self {
             topic,
             messages: Vec::new(),
         }
@@ -94,6 +118,7 @@ impl GossipMessage for TopicMessagesMessage {
     }
 }
 
+/// A message indicating a peer has disconnected unexpectedly or explicitly from a topic context.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DisconnectMessage {
     pub topic: TopicId,
@@ -102,8 +127,9 @@ pub struct DisconnectMessage {
 }
 
 impl DisconnectMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
-        DisconnectMessage {
+    #[must_use]
+    pub const fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        Self {
             topic,
             endpoint,
             timestamp,
@@ -117,6 +143,7 @@ impl GossipMessage for DisconnectMessage {
     }
 }
 
+/// A message indicating a peer has intentionally left a topic.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LeaveMessage {
     pub topic: TopicId,
@@ -125,8 +152,9 @@ pub struct LeaveMessage {
 }
 
 impl LeaveMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
-        LeaveMessage {
+    #[must_use]
+    pub const fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        Self {
             topic,
             endpoint,
             timestamp,
@@ -140,6 +168,7 @@ impl GossipMessage for LeaveMessage {
     }
 }
 
+/// A message indicating a peer has joined a topic.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JoinMessage {
     pub topic: TopicId,
@@ -148,8 +177,9 @@ pub struct JoinMessage {
 }
 
 impl JoinMessage {
-    pub fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
-        JoinMessage {
+    #[must_use]
+    pub const fn new(topic: TopicId, endpoint: EndpointId, timestamp: u64) -> Self {
+        Self {
             topic,
             endpoint,
             timestamp,
@@ -163,16 +193,19 @@ impl GossipMessage for JoinMessage {
     }
 }
 
+/// Contains metadata describing a topic, such as its display name and members.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TopicMetadataMessage {
     pub topic: TopicId,
     pub name: String,
     pub avatar_url: Option<String>,
     pub timestamp: u64,
+    /// A list of member identifiers (as strings) currently in the topic.
     pub members: Vec<String>,
 }
 
 impl TopicMetadataMessage {
+    #[must_use]
     pub fn new(
         topic: TopicId,
         name: &str,
@@ -180,7 +213,7 @@ impl TopicMetadataMessage {
         timestamp: u64,
         members: Vec<String>,
     ) -> Self {
-        TopicMetadataMessage {
+        Self {
             topic,
             name: name.to_string(),
             avatar_url,
@@ -196,6 +229,7 @@ impl GossipMessage for TopicMetadataMessage {
     }
 }
 
+/// A standard text-based chat message sent to a topic.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub sender: EndpointId,
@@ -205,12 +239,18 @@ pub struct ChatMessage {
 }
 
 impl ChatMessage {
-    pub fn new(sender: EndpointId, content: String, timestamp: u64, topic_id: TopicId) -> Self {
-        ChatMessage {
+    #[must_use]
+    pub const fn new(
+        sender: EndpointId,
+        content: String,
+        timestamp: u64,
+        topic_id: TopicId,
+    ) -> Self {
+        Self {
             sender,
+            topic_id,
             content,
             timestamp,
-            topic_id,
         }
     }
 }
@@ -230,6 +270,8 @@ impl Display for ChatMessage {
         )
     }
 }
+
+/// Enum representing types of messages sent via Direct Message (DM).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DmMessageTypes {
     Chat(DmChatMessage),
@@ -238,6 +280,7 @@ pub enum DmMessageTypes {
     Blob(DmBlobMessage),
 }
 
+/// Carries profile information for a user in a direct message context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmProfileMetadataMessage {
     pub id: EndpointId,
@@ -247,13 +290,14 @@ pub struct DmProfileMetadataMessage {
 }
 
 impl DmProfileMetadataMessage {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         id: EndpointId,
         username: String,
         avatar_url: Option<String>,
         last_connection: u64,
     ) -> Self {
-        DmProfileMetadataMessage {
+        Self {
             id,
             username,
             avatar_url,
@@ -262,6 +306,7 @@ impl DmProfileMetadataMessage {
     }
 }
 
+/// A direct chat message between two peers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmChatMessage {
     pub sender: EndpointId,
@@ -271,8 +316,9 @@ pub struct DmChatMessage {
 }
 
 impl DmChatMessage {
-    pub fn new(sender: EndpointId, receiver: EndpointId, content: String, timestamp: u64) -> Self {
-        DmChatMessage {
+    #[must_use]
+    pub const fn new(sender: EndpointId, receiver: EndpointId, content: String, timestamp: u64) -> Self {
+        Self {
             sender,
             receiver,
             content,
@@ -281,6 +327,7 @@ impl DmChatMessage {
     }
 }
 
+/// A request from one peer to another to join a resource or group.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DmJoinMessage {
     pub petitioner: EndpointId,
@@ -289,8 +336,9 @@ pub struct DmJoinMessage {
 }
 
 impl DmJoinMessage {
-    pub fn new(petitioner: EndpointId, target: EndpointId, timestamp: u64) -> Self {
-        DmJoinMessage {
+    #[must_use]
+    pub const fn new(petitioner: EndpointId, target: EndpointId, timestamp: u64) -> Self {
+        Self {
             petitioner,
             target,
             timestamp,
@@ -298,6 +346,7 @@ impl DmJoinMessage {
     }
 }
 
+/// A file or binary object shared directly between two peers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DmBlobMessage {
     pub sender: EndpointId,
@@ -310,7 +359,8 @@ pub struct DmBlobMessage {
 }
 
 impl DmBlobMessage {
-    pub fn new(
+    #[must_use]
+    pub const fn new(
         sender: EndpointId,
         receiver: EndpointId,
         name: String,
@@ -319,7 +369,7 @@ impl DmBlobMessage {
         timestamp: u64,
         blob_type: BlobType,
     ) -> Self {
-        DmBlobMessage {
+        Self {
             sender,
             receiver,
             name,
@@ -349,7 +399,7 @@ mod tests {
         let original_message = ChatMessage::new(
             endpoint.id(),
             "Hello, world!".to_string(),
-            1625247600000,
+            1_625_247_600_000,
             TopicId::from_bytes(rand::random()),
         );
 

@@ -65,7 +65,7 @@ pub fn TopicDetails<C: Controller + 'static>(
                         }
 
                         let base64 = BASE64_STANDARD.encode(&bytes);
-                        let url = format!("data:image/jpeg;base64,{}", base64);
+                        let url = format!("data:image/jpeg;base64,{base64}");
 
                         let mut updated_topic = topic_clone.clone();
                         updated_topic.avatar_url = Some(url);
@@ -79,7 +79,7 @@ pub fn TopicDetails<C: Controller + 'static>(
                     }
                     Err(e) => {
                         toast.error(
-                            format!("Failed to read file: {}", e),
+                            format!("Failed to read file: {e}"),
                             ToastOptions::default(),
                         );
                     }
@@ -174,7 +174,7 @@ pub fn TopicDetails<C: Controller + 'static>(
                                     let last_seen = match member.last_connection {
                                         ConnectionStatus::Online => member.last_connection.to_string(),
                                         ConnectionStatus::Offline(time) => {
-                                            format_relative_time((time / 1000) as i64)
+                                            format_relative_time(i64::try_from(time / 1000).unwrap())
                                         }
                                     };
                                     let member_clone = member.clone();
@@ -232,7 +232,7 @@ pub fn ProfileDetails<C: Controller + 'static>(
     let handle_save = move |_event: Event<MouseData>| {
         let mut updated_profile = profile_clone.clone();
         updated_profile.name = edited_name().trim().to_string();
-        updated_profile.avatar = edited_avatar().clone();
+        updated_profile.avatar = edited_avatar();
         let controller = controller;
         controller.read().modify_profile(updated_profile);
         toast.success(
@@ -259,7 +259,7 @@ pub fn ProfileDetails<C: Controller + 'static>(
                         }
 
                         let base64 = BASE64_STANDARD.encode(&bytes);
-                        let url = format!("data:image/jpeg;base64,{}", base64);
+                        let url = format!("data:image/jpeg;base64,{base64}");
 
                         edited_avatar.set(Some(url));
 
@@ -270,7 +270,7 @@ pub fn ProfileDetails<C: Controller + 'static>(
                     }
                     Err(e) => {
                         toast.error(
-                            format!("Failed to read file: {}", e),
+                            format!("Failed to read file: {e}"),
                             ToastOptions::default(),
                         );
                     }
@@ -284,14 +284,14 @@ pub fn ProfileDetails<C: Controller + 'static>(
     let avatar_url = if let Some(url) = edited_avatar()
         && !url.is_empty()
     {
-        url.clone()
+        url
     } else {
         DEFAULT_AVATAR.to_string()
     };
 
     let last_connection_text = match profile.last_connection {
         ConnectionStatus::Online => profile.last_connection.to_string(),
-        ConnectionStatus::Offline(time) => format_relative_time((time / 1000) as i64),
+        ConnectionStatus::Offline(time) => format_relative_time(i64::try_from(time / 1000).unwrap()),
     };
 
     rsx! {
@@ -375,7 +375,7 @@ pub fn ImageDetails(image: String, name: String, on_close: EventHandler<()>) -> 
     let image_rc = Rc::new(image);
     let image_clone = image_rc.clone();
     let name_rc = Rc::new(name);
-    let name_clone = name_rc.clone();
+    let name_clone = name_rc;
     rsx! {
         div {
             class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
@@ -397,13 +397,13 @@ pub fn ImageDetails(image: String, name: String, on_close: EventHandler<()>) -> 
                             .await;
                         let bytes = image_clone
                             .to_string()
-                            .split(",")
+                            .split(',')
                             .nth(1)
                             .and_then(|b64| BASE64_STANDARD.decode(b64).ok())
                             .unwrap_or_default();
                         if let Some(path) = file && let Err(err) = std::fs::write(path.path(), bytes)
                         {
-                            println!("Error saving file: {}", err);
+                            println!("Error saving file: {err}");
                         }
                     });
                 },
@@ -439,9 +439,9 @@ pub fn VideoDetails(
 ) -> Element {
     let video_rc = Rc::new(video_url);
     let name_rc = Rc::new(name);
-    let name_clone = name_rc.clone();
+    let name_clone = name_rc;
     let local_path_rc = Rc::new(local_path);
-    let local_path_clone = local_path_rc.clone();
+    let local_path_clone = local_path_rc;
     rsx! {
         div {
             class: "fixed inset-0 bg-black/70 flex justify-center items-center z-2000 animate-[fadeIn_0.2s_ease]",
@@ -464,7 +464,7 @@ pub fn VideoDetails(
                         if let Some(path) = file
                             && let Err(err) = std::fs::copy(&*local_path_clone, path.path())
                         {
-                            println!("Error saving file: {}", err);
+                            println!("Error saving file: {err}");
                         }
                     });
                 },

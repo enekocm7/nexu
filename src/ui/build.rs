@@ -37,7 +37,7 @@ fn install_dependencies() -> &'static str {
         .is_ok()
     {
         return bunx;
-    };
+    }
 
     if std::process::Command::new(yarn)
         .arg("install")
@@ -45,7 +45,7 @@ fn install_dependencies() -> &'static str {
         .is_ok()
     {
         return yarn;
-    };
+    }
 
     match std::process::Command::new(npm).arg("install").spawn() {
         Ok(_) => npx,

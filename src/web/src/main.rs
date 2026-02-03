@@ -1,10 +1,12 @@
+#![allow(clippy::volatile_composites)]
+
 use dioxus::prelude::*;
 use ui::mobile::mobile_components::Mobile;
 
 const FAVICON: Asset = asset!("/assets/favicon.ico");
 
 fn main() {
-    launch(App)
+    launch(App);
 }
 
 fn get_device_type() -> DeviceType {

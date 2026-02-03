@@ -3,6 +3,7 @@ use dioxus_primitives::context_menu::{
     self, ContextMenuContentProps, ContextMenuItemProps, ContextMenuProps, ContextMenuTriggerProps,
 };
 
+#[allow(clippy::volatile_composites)]
 #[component]
 pub fn ContextMenu(props: ContextMenuProps) -> Element {
     rsx! {

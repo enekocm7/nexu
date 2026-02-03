@@ -6,6 +6,7 @@ pub mod models;
 pub mod utils;
 
 #[cfg(feature = "desktop")]
+#[allow(clippy::volatile_composites)]
 pub mod desktop_web_components {
     use crate::desktop::dialogs::{ProgressBar, TopicDialog};
 
@@ -162,7 +163,7 @@ pub mod desktop_web_components {
                     if let Some(topic) = show_topic_details() {
                         ToastProvider {
                             TopicDetails {
-                                topic: topic.clone(),
+                                topic,
                                 toggle: show_topic_details,
                                 controller,
                                 view_profile: show_profile_details,
@@ -187,7 +188,7 @@ pub mod desktop_web_components {
                         ImageDetails {
                             image: image_url,
                             name,
-                            on_close: move |_| show_image_details.set(None),
+                            on_close: move |()| show_image_details.set(None),
                         }
                     }
 
@@ -196,7 +197,7 @@ pub mod desktop_web_components {
                             video_url,
                             name,
                             local_path,
-                            on_close: move |_| show_video_details.set(None),
+                            on_close: move |()| show_video_details.set(None),
                         }
                     }
 
@@ -208,8 +209,7 @@ pub mod desktop_web_components {
                                     (
                                         "Leave Topic".to_string(),
                                         format!(
-                                            "Are you sure you want to leave \"{}\"? You will no longer receive messages from this topic.",
-                                            name,
+                                            "Are you sure you want to leave \"{name}\"? You will no longer receive messages from this topic."
                                         ),
                                         "Leave".to_string(),
                                     )
@@ -218,8 +218,7 @@ pub mod desktop_web_components {
                                     (
                                         "Remove Contact".to_string(),
                                         format!(
-                                            "Are you sure you want to remove \"{}\" from your contacts?",
-                                            name,
+                                            "Are you sure you want to remove \"{name}\" from your contacts?"
                                         ),
                                         "Remove".to_string(),
                                     )
@@ -233,7 +232,7 @@ pub mod desktop_web_components {
                                     cancel_text: "Cancel".to_string(),
                                     is_danger: true,
                                     toggle: show_leave_confirmation,
-                                    on_confirm: move |_| {
+                                    on_confirm: move |()| {
                                         match removal_type {
                                             RemovalType::Topic => controller.read().leave_topic(id.clone()),
                                             RemovalType::Contact => controller.read().remove_contact(id.clone()),

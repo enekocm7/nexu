@@ -10,7 +10,7 @@ use crate::utils::topics::{load_topics_from_file, save_topics_to_file};
 use chrono::Utc;
 use dioxus::desktop::tao::dpi::LogicalSize;
 use dioxus::desktop::tao::window::Icon;
-use dioxus::desktop::{use_wry_event_handler, Config, WindowBuilder};
+use dioxus::desktop::{Config, WindowBuilder, use_wry_event_handler};
 use dioxus::prelude::*;
 use p2p::{MessageTypes, Ticket};
 use std::error::Error;
@@ -42,13 +42,13 @@ fn App() -> Element {
     use_effect(move || {
         let client_ref = controller.read().get_desktop_client();
         let progress_sender = controller.read().progress_bar_sender.clone();
-        
+
         spawn(async move {
             if let Err(e) = client_ref.lock().await.initialize().await {
-                eprintln!("Failed to initialize DesktopClient: {}", e);
+                eprintln!("Failed to initialize DesktopClient: {e}");
                 return;
             }
-            
+
             spawn(async move {
                 controller.read().start_media_server().await;
             });
@@ -56,14 +56,14 @@ fn App() -> Element {
             let peer_id = match client_ref.lock().await.peer_id().await {
                 Ok(id) => id.to_string(),
                 Err(e) => {
-                    eprintln!("Failed to get peer_id: {}", e);
+                    eprintln!("Failed to get peer_id: {e}");
                     return;
                 }
             };
 
             if let Ok(mut profile) = load_profile() {
                 if peer_id != profile.id {
-                    profile.id = peer_id.clone();
+                    profile.id.clone_from(&peer_id);
                     utils::contacts::save_profile(&profile).unwrap_or_else(|e| {
                         eprintln!("Failed to update profile ID: {e}");
                     });
@@ -71,7 +71,7 @@ fn App() -> Element {
                 let mut state = app_state;
                 state.write().set_profile_id(&peer_id);
                 state.write().set_profile_name(&profile.name);
-                state.write().set_profile_avatar(&profile.avatar);
+                state.write().set_profile_avatar(profile.avatar.as_deref());
                 state.write().set_profile_last_connection_to_now();
             } else {
                 let mut state = app_state;
@@ -126,6 +126,7 @@ fn App() -> Element {
         });
     });
 
+    #[allow(clippy::cast_sign_loss)]
     use_wry_event_handler(move |event, _| {
         if let dioxus::desktop::tao::event::Event::WindowEvent { event, .. } = event
             && event == &dioxus::desktop::tao::event::WindowEvent::CloseRequested
@@ -138,7 +139,7 @@ fn App() -> Element {
 
                     let all_topics = app_state().get_all_topics();
 
-                    for topic in all_topics.iter() {
+                    for topic in &all_topics {
                         let ticket = Ticket::from_str(&topic.id).expect("Failed to parse topic_id");
 
                         let message = MessageTypes::DisconnectTopic(p2p::DisconnectMessage::new(
@@ -147,7 +148,7 @@ fn App() -> Element {
                             Utc::now().timestamp_millis() as u64,
                         ));
                         if let Err(e) = client.send(message).await {
-                            eprintln!("Failed to send DisconnectTopic message: {}", e);
+                            eprintln!("Failed to send DisconnectTopic message: {e}");
                         }
                     }
                 });
@@ -169,6 +170,8 @@ fn load_icon() -> Option<Icon> {
     Icon::from_rgba(rgba.into_raw(), width, height).ok()
 }
 
+#[allow(clippy::future_not_send)]
+#[allow(clippy::cast_sign_loss)]
 async fn join_topic_internal(
     desktop_client: &Arc<Mutex<DesktopClient>>,
     mut app_state: Signal<AppState>,

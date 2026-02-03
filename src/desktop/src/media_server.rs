@@ -8,8 +8,8 @@ pub struct MediaServer {
 }
 
 impl MediaServer {
-    pub fn new(port: u16) -> Self {
-        MediaServer { port }
+    pub const fn new(port: u16) -> Self {
+        Self { port }
     }
 
     pub async fn start(&self, media_path: PathBuf) -> anyhow::Result<()> {
@@ -20,18 +20,18 @@ impl MediaServer {
         let addr = format!("127.0.0.1:{}", self.port);
         let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-        println!("Media server started on http://{}", addr);
+        println!("Media server started on http://{addr}");
 
         tokio::spawn(async move {
             if let Err(e) = axum::serve(listener, app).await {
-                eprintln!("Server error: {}", e);
+                eprintln!("Server error: {e}");
             }
         });
 
         Ok(())
     }
 
-    pub fn port(&self) -> u16 {
+    pub const fn port(&self) -> u16 {
         self.port
     }
 }
